@@ -1,0 +1,27 @@
+{{- define "shared-lib.servicemonitor" }}
+{{- if .Values.metrics }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "helm.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+spec:
+  endpoints:
+    - port: {{ .Values.metrics.port | default "http"}}
+      scheme: http
+      path: {{ .Values.metrics.path | default "/metrics"}}
+      relabelings:
+        - action: replace
+          replacement: {{ include "helm.fullname" . }}
+          targetLabel: app
+        - action: replace
+          sourceLabels:
+            - __meta_kubernetes_endpoint_address_target_name
+          targetLabel: pod
+  selector:
+    matchLabels:
+      {{- include "helm.selectorLabels" . | nindent 6 }}
+{{- end }}
+{{- end }}

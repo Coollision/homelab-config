@@ -1,0 +1,12 @@
+deployment:
+  image:
+    repository: mendhak/http-https-echo
+
+  ports:
+    http: 8080
+    https: 8443
+
+ingress_internal:
+  host: echo.<secret:kv/data/domains~local>
+  path: /
+  port: http

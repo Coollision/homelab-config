@@ -1,0 +1,20 @@
+{{- define "shared-lib.ingress_internal" -}}
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ include "helm.fullname" . }}-ingress-internal
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+spec:
+  entryPoints: 
+    - web
+  routes:
+  - kind: Rule
+    match: Host(`{{ .Values.ingress_internal.host }}`)
+    services:
+    - kind: Service
+      name: {{ include "helm.fullname" . }}-service
+      namespace: {{ .Release.Namespace }}
+      port: {{ index .Values.deployment.ports .Values.ingress_internal.port }}
+{{- end }}
