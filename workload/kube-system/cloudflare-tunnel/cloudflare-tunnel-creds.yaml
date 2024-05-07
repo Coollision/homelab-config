@@ -4,7 +4,7 @@ metadata:
   name: tunnel-credentials
   namespace: kube-system
 data:
-  credentials.json: <secret:kv/data/cloudflare-tunnel~credentials.json | base64>
+  credentials.json: <secret:kv/data/cloudflare/tunnel~credentials.json | base64>
 type: Opaque
 ---
 apiVersion: v1
@@ -13,5 +13,5 @@ metadata:
   name: tunnel-pem
   namespace: kube-system
 data:
-  cert.pem: <secret:kv/data/cloudflare-tunnel~cert.pem | base64>
+  cert.pem: <secret:kv/data/cloudflare/tunnel~cert.pem | base64>
 type: Opaque
