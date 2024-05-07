@@ -4,6 +4,7 @@ metadata:
   name: node-feature-discovery
   namespace: argocd
 spec:
+  project: system
   source:
     chart: node-feature-discovery
     repoURL: https://kubernetes-sigs.github.io/node-feature-discovery/charts
@@ -32,3 +33,10 @@ spec:
   destination:
     server: "https://kubernetes.default.svc"
     namespace: node-feature-discovery
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - CreateNamespace=true
+      - PruneLast=true
