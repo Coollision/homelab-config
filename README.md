@@ -8,7 +8,7 @@ Setup of my homelab
 
 #### we depend on vault so make sure that is installed first
 
-run `helm install vault workload/secrets/vault -n secrets --create-namespace`
+run `helm install vault system/secrets/vault -n secrets --create-namespace`
 
 make sure its unsealed and ready to go (see the vault readme for more info)
 
