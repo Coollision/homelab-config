@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudflare-api-token-secret
+  namespace: cert-manager
+type: Opaque
+data:
+  api-token: <secret:kv/data/cloudflare/api~token | base64>
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: cloudflare-issuer
+  namespace: cert-manager
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@<secret:kv/data/domains~domain>
+    privateKeySecretRef:
+      name: letsencrypt-key
+    solvers:
+      - dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: cloudflare-api-token-secret
+              key: api-token
+        selector:
+          dnsZones:
+            - <secret:kv/data/domains~domain>
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-cert-<secret:kv/data/domains~domain-dash>
+  namespace: default
+spec:
+  secretName: wildcard-cert-<secret:kv/data/domains~domain-dash>-key
+  issuerRef:
+    kind: ClusterIssuer
+    name: cloudflare-issuer
+  dnsNames:
+    - <secret:kv/data/domains~domain>
+    - "*.<secret:kv/data/domains~domain>"
