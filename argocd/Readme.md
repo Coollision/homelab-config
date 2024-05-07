@@ -4,9 +4,9 @@
 
 ## argo access
 
-when first installing argo you need to get the initial password and set it to something you like you can use this script to do that:
+when first installing argo you need to get the initial password and set it to something you like
 
-
+you can use this script to do that:
 
 ```bash
 domain=example.com

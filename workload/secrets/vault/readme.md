@@ -1,4 +1,10 @@
-## exec in vault pod
+# Vault the place to store secrets
+
+## initial setup
+
+if you have not setup vault before you can use the following commands to get it up and running
+
+```bash
 
 <!-- TODO: Cleanup this readme -->
 ```bash
