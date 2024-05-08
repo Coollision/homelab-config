@@ -1,0 +1,10 @@
+kube-fledged:
+  args:
+    controllerImageCacheRefreshFrequency: 0s
+    controllerCRISocketPath: /run/k3s/containerd/containerd.sock
+    controllerImagePullPolicy: Always
+    # increase the controllerImagePullDeadlineDuration to 10m to allow for slower image pulls
+    controllerImagePullDeadlineDuration: 10m
+
+    # enable to debug controller 
+    # controllerJobRetentionPolicy: retain
