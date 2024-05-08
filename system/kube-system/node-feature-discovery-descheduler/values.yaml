@@ -1,0 +1,65 @@
+node-feature-discovery:
+  fullnameOverride: node-feature-discovery
+  worker:
+    config:
+      core:
+        labelSources: 
+          - "custom"
+
+      sources:
+        custom:
+          - name: "zigbee-coordinator-test"
+            labels: 
+              feature.node.kubernetes.io/iot-zigbee-coordinator: "true"
+            matchFeatures:
+              - feature: usb.device
+                matchExpressions:
+                  vendor: { op: In, value: ["10c4"] }
+                  device: { op: In, value: ["ea60"] }
+                  serial: { op: In, value: ["54d39955bc39ec118f02e3680aac08d5"] }
+
+descheduler:
+  fullnameOverride: descheduler
+  kind: Deployment
+  deschedulingInterval: 1m
+  cmdOptions:
+    v: 3
+  deschedulerPolicy:
+    evictLocalStoragePods: true
+    strategies:
+      RemoveDuplicates:
+        enabled: true
+      RemovePodsViolatingNodeTaints:
+        enabled: true
+      RemovePodsViolatingNodeAffinity:
+        enabled: true
+        params:
+          nodeAffinityType:
+            - requiredDuringSchedulingIgnoredDuringExecution
+      RemovePodsViolatingTopologySpreadConstraint:
+        enabled: true
+        params:
+          includeSoftConstraints: true
+      RemovePodsViolatingInterPodAntiAffinity:
+        enabled: true
+        params:
+          nodeFit: true
+      LowNodeUtilization:
+        enabled: false
+      RemoveFailedPods:
+        enabled: true
+        params:
+          failedPods:
+            includingInitContainers: true
+            excludeOwnerKinds: ["Job"]
+            minPodLifetimeSeconds: 3600
+      RemovePodsHavingTooManyRestarts:
+        enabled: true
+        params:
+          podsHavingTooManyRestarts:
+            podRestartThreshold: 100
+            includingInitContainers: true
+  service:
+    enabled: true
+  serviceMonitor:
+    enabled: true
