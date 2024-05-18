@@ -8,3 +8,11 @@ kube-fledged:
 
     # enable to debug controller 
     # controllerJobRetentionPolicy: retain
+
+  # disable the webhook server and validating webhook
+  # cause its ginving a tls error
+  webhookServer:
+    enable: false
+  validatingWebhook:
+    # Specifies whether a validating webhook configuration should be created
+    create: false
