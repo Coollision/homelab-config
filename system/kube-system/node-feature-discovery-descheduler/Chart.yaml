@@ -31,5 +31,5 @@ dependencies:
   
   - name: descheduler
     alias: descheduler
-    version: v0.29.0
+    version: 0.30.0
     repository: https://kubernetes-sigs.github.io/descheduler/
