@@ -6,6 +6,8 @@ kind: IngressRoute
 metadata:
   name: {{ include "grafana.fullname" $grafStack }}
   namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "k3s-monitoring.labels" . | nindent 4 }}
 spec:
   entryPoints: 
     - web
