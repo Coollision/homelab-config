@@ -1,0 +1,207 @@
+traefik:
+    useIngressRoutes: true
+speedtestExporter:
+    enabled: true
+    scrapeInterval: 5m
+armexporter:
+    enabled: true
+promstack:
+    kubeControllerManager:
+        endpoints: 
+          - <secret:kv/data/config/master~ip-0>
+          - <secret:kv/data/config/master~ip-1>
+        enabled: true
+        service:
+            enabled: true
+            port: 10257
+            targetPort: 10257
+        serviceMonitor:
+            enabled: true
+            https: true
+            insecureSkipVerify: true
+    kubeScheduler:
+        endpoints: 
+          - <secret:kv/data/config/master~ip-0>
+          - <secret:kv/data/config/master~ip-1>
+        enabled: true
+        service:
+            enabled: true
+            port: 10259
+            targetPort: 10259
+        serviceMonitor:
+            enabled: true
+            https: true
+            insecureSkipVerify: true
+    kubeProxy:
+        endpoints: 
+          - <secret:kv/data/config/master~ip-0>
+          - <secret:kv/data/config/master~ip-1>
+        enabled: true
+        service:
+            enabled: true
+            port: 10249
+            targetPort: 10249
+    alertmanager:
+        alertmanagerSpec:
+            externalUrl: http://alertmanager.<secret:kv/data/domains~local>/
+            storage:
+                volumeClaimTemplate:
+                    metadata:
+                        annotations:
+                            nfs.io/storage-path: alertmanager
+                    spec:
+                        storageClassName: nfs-client
+                        resources:
+                            requests:
+                                storage: 10Gi
+            resources:
+                limits:
+                    cpu: 60m
+                    memory: 30Mi
+                requests:
+                    cpu: 50m
+                    memory: 20Mi
+    prometheus:
+        prometheusSpec:
+            externalUrl: http://prometheus.<secret:kv/data/domains~local>/
+            retention: 40d
+            resources:
+                limits:
+                    cpu: 2
+                    memory: 2.5Gi
+                requests:
+                    cpu: 1
+                    memory: 2Gi
+            storageSpec:
+                volumeClaimTemplate:
+                    metadata:
+                        annotations:
+                            nfs.io/storage-path: prometheus
+                    spec:
+                        storageClassName: nfs-client
+                        resources:
+                            requests:
+                                storage: 30Gi
+            ruleSelectorNilUsesHelmValues: false
+            serviceMonitorSelectorNilUsesHelmValues: false
+            additionalScrapeConfigs:
+                - job_name: kubernetes-pod-endpoints
+                  kubernetes_sd_configs:
+                      - role: pod
+                  relabel_configs:
+                      - action: keep
+                        regex: true
+                        source_labels:
+                            - __meta_kubernetes_pod_annotation_prometheus_io_scrape
+                      - action: keep
+                        regex: true
+                        source_labels:
+                            - __meta_kubernetes_pod_annotationpresent_prometheus_io_port
+                      - action: drop
+                        regex: (kube-system|prom)
+                        source_labels:
+                            - __meta_kubernetes_namespace
+                      - action: replace
+                        regex: (https?)
+                        source_labels:
+                            - __meta_kubernetes_pod_annotation_prometheus_io_scheme
+                        target_label: __scheme__
+                      - action: replace
+                        regex: (.+)
+                        source_labels:
+                            - __meta_kubernetes_pod_annotation_prometheus_io_path
+                        target_label: __metrics_path__
+                      - action: replace
+                        regex: ([^:]+)(?::\d+)?;(\d+)
+                        replacement: $1:$2
+                        source_labels:
+                            - __address__
+                            - __meta_kubernetes_pod_annotation_prometheus_io_port
+                        target_label: __address__
+                      - action: labelmap
+                        regex: __meta_kubernetes_pod_label_(.+)
+                      - action: replace
+                        source_labels:
+                            - __meta_kubernetes_namespace
+                        target_label: kubernetes_namespace
+                      - action: replace
+                        source_labels:
+                            - __meta_kubernetes_service_name
+                        target_label: kubernetes_name
+                - job_name: kubernetes-service-endpoints
+                  kubernetes_sd_configs:
+                      - role: service
+                  relabel_configs:
+                      - action: keep
+                        regex: true
+                        source_labels:
+                            - __meta_kubernetes_service_annotation_prometheus_io_scrape
+                      - action: drop
+                        regex: (kube-system|prom)
+                        source_labels:
+                            - __meta_kubernetes_namespace
+                      - action: keep
+                        regex: .*metrics
+                        source_labels:
+                            - __meta_kubernetes_service_port_name
+                      - action: replace
+                        regex: (https?)
+                        source_labels:
+                            - __meta_kubernetes_service_annotation_prometheus_io_scheme
+                        target_label: __scheme__
+                      - action: replace
+                        regex: (.+)
+                        source_labels:
+                            - __meta_kubernetes_service_annotation_prometheus_io_path
+                        target_label: __metrics_path__
+                      - action: replace
+                        regex: ([^:]+)(?::\d+)?;(\d+)
+                        replacement: $1:$2
+                        source_labels:
+                            - __address__
+                            - __meta_kubernetes_service_annotation_prometheus_io_port
+                        target_label: __address__
+                      - action: labelmap
+                        regex: __meta_kubernetes_service_label_(.+)
+                      - action: replace
+                        source_labels:
+                            - __meta_kubernetes_namespace
+                        target_label: kubernetes_namespace
+                      - action: replace
+                        source_labels:
+                            - __meta_kubernetes_service_name
+                        target_label: kubernetes_name
+    grafana:
+        externalUrl: http://grafana.<secret:kv/data/domains~local>/
+        adminPassword: <secret:kv/data/monitoring/grafana~adminPassword>
+        sidecar:
+            dashboards:
+                provider:
+                    allowUiUpdates: true
+        persistence:
+            enabled: true
+            storageClassName: nfs-client
+            annotations:
+                nfs.io/storage-path: grafana
+            accessModes:
+                - ReadWriteOnce
+            size: 10Gi
+    prometheus-node-exporter:
+        prometheus:
+            monitor:
+                relabelings:
+                    - action: replace
+                      regex: (.*)
+                      replacement: $1
+                      sourceLabels:
+                          - __meta_kubernetes_pod_node_name
+                      targetLabel: instance
+        nameOverride: node-exporter
+    nameOverride: promstack
+    cleanPrometheusOperatorObjectNames: true
+    defaultRules:
+        rules:
+            etcd: false
+    kubeEtcd:
+        enabled: false
+useTraefikIngressRoutes: true
