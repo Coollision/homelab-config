@@ -43,6 +43,7 @@ descheduler:
                 - requiredDuringSchedulingIgnoredDuringExecution
           - name: RemovePodsViolatingInterPodAntiAffinity
           - name: RemovePodsViolatingTopologySpreadConstraint
+          - name: RemovePodsViolatingNodeTaints
           - name: LowNodeUtilization
             args:
               thresholds:
@@ -57,7 +58,6 @@ descheduler:
           balance:
             enabled:
               - RemoveDuplicates
-              - RemovePodsViolatingNodeAffinity
               - RemovePodsViolatingTopologySpreadConstraint
               - LowNodeUtilization
           deschedule:
