@@ -1,0 +1,72 @@
+traefik:
+  fullnameOverride: traefik-external
+  commonLabels: 
+    app: traefik-external
+  ports:
+    web:
+      redirectTo:
+        port: websecure
+        priority: 10
+    websecure:
+      tls:
+        enabled: true
+
+  ingressRoute:
+    dashboard:
+      enabled: true
+      matchRule: Host(`traefik-external.<secret:kv/data/domains~local>`) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))
+      entryPoints:
+        - web
+
+  logs:
+    general:
+      level: DEBUG
+      
+  podAnnotations:
+    prometheus.io/port: "8082"
+    prometheus.io/scrape: "true"
+  
+  rbac:
+    enabled: true
+
+  service:
+    spec:
+      externalTrafficPolicy: Local
+      loadBalancerIP: <secret:kv/data/kube-system/traefik~external-ip>
+      
+  ssl:
+    insecureSkipVerify: true
+
+  providers:
+    kubernetesCRD:
+      enabled: true
+      ingressClass: traefik-external
+      allowExternalNameServices: true
+    kubernetesIngress:
+      enabled: true
+      allowExternalNameServices: true
+      publishedService:
+        enabled: false
+
+  priorityClassName: "system-cluster-critical"
+  tolerations:
+    - key: "CriticalAddonsOnly"
+      operator: "Exists"
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
+    - key: "node-role.kubernetes.io/master"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+  additionalArguments:
+    - '--entryPoints.web.forwardedHeaders.trustedIPs=<secret:kv/data/kube-system/traefik~trusted-ips>'
+    - '--entryPoints.websecure.forwardedHeaders.trustedIPs=<secret:kv/data/kube-system/traefik~trusted-ips>'
+    - --providers.kubernetesingress.ingressclass=traefik-external
+    - '--log.level=DEBUG'
+
+  deployment:
+    replicas: 2
+
+    metrics:
+      prometheus: {}
