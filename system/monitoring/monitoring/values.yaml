@@ -1,5 +1,4 @@
-traefik:
-    useIngressRoutes: true
+useTraefikIngressRoutes: true
 speedtestExporter:
     enabled: true
     scrapeInterval: 5m
@@ -204,4 +203,3 @@ promstack:
             etcd: false
     kubeEtcd:
         enabled: false
-useTraefikIngressRoutes: true
