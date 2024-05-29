@@ -1,0 +1,15 @@
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  entryPoints:
+    - web
+  routes:
+    - kind: Rule
+      match: Host(`traefik.<secret:kv/data/domains~local>`) && (PathPrefix(`/dashboard/`) || PathPrefix(`/api`))
+      priority: 0
+      services:
+        - name: api@internal
+          kind: TraefikService
