@@ -1,0 +1,17 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: nfs-client-name-path
+  labels:
+    app: nfs-subdir-external-provisioner
+allowVolumeExpansion: true
+mountOptions:
+  - hard
+  - nfsvers=4.1
+parameters:
+  archiveOnDelete: "false"
+  onDelete: retain
+  pathPattern: ${.PVC.namespace}/${.PVC.name}
+provisioner: cluster.local/nfs-subdir-nfs-subdir-external-provisioner
+reclaimPolicy: Delete
+volumeBindingMode: Immediate

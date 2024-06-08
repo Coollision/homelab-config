@@ -1,0 +1,14 @@
+ nfs-subdir-external-provisioner:
+  replicaCount: 2
+  nfs:
+    server: <secret:kv/data/storage/nfs~server-ip>
+    path: <secret:kv/data/storage/nfs~server-path>
+    mountOptions: 
+      - hard
+      - nfsvers=4.1
+
+    storageClass:
+      pathPattern: "${.PVC.namespace}/${.PVC.annotations.nfs.io/storage-path}"
+      archiveOnDelete: false
+      onDelete: retain
+      name: nfs-client
