@@ -6,9 +6,9 @@
     mountOptions: 
       - hard
       - nfsvers=4.1
-
-    storageClass:
-      pathPattern: "${.PVC.namespace}/${.PVC.annotations.nfs.io/storage-path}"
-      archiveOnDelete: false
-      onDelete: retain
-      name: nfs-client
+      
+  storageClass:
+    pathPattern: "${.PVC.namespace}/${.PVC.annotations.nfs.io/storage-path}"
+    archiveOnDelete: false
+    onDelete: retain
+    name: nfs-client
