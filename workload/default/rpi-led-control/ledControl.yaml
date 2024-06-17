@@ -1,0 +1,91 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: led-control-off
+  labels:
+    k8s-app: led-control-off
+spec:
+  schedule: "0 23 * * *"
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 100
+      parallelism: 3 # number of nodes
+      completions: 3 # times to run
+      template:
+        metadata:
+          labels:
+            k8s-app: led-control-off
+        spec:
+          affinity: # make sure it gets scheduled on each node once
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchExpressions:
+                      - key: k8s-app
+                        operator: In
+                        values:
+                          - led-control-off
+                  topologyKey: kubernetes.io/hostname
+          restartPolicy: Never
+          containers:
+          - name: led-control-off
+            env:
+            - name: ACT
+              value: "none"
+            - name: PWR
+              value: "none"
+            image: alpine
+            command: ['sh', '-c', 'echo $ACT | tee /leds/ACT/trigger && echo $PWR | tee /leds/PWR/trigger']
+            volumeMounts:
+            - mountPath: /leds
+              name: led-control-dir
+          volumes:
+          - name: led-control-dir
+            hostPath:
+              path: /sys/devices/platform/leds/leds
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: led-control-on
+  labels:
+    k8s-app: led-control-on
+spec:
+  schedule: "0 7 * * *"
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 100
+      parallelism: 3 # number of nodes
+      completions: 3 # times to run
+      template:
+        metadata:
+          labels:
+            k8s-app: led-control-on
+        spec:
+          affinity: # make sure it gets scheduled on each node once
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchExpressions:
+                      - key: k8s-app
+                        operator: In
+                        values:
+                          - led-control-on
+                  topologyKey: kubernetes.io/hostname
+          restartPolicy: Never
+          containers:
+          - name: led-control-on
+            env:
+            - name: ACT
+              value: "mmc0"
+            - name: PWR
+              value: "default-on"
+            image: alpine
+            command: ['sh', '-c', 'maecho $ACT | tee /leds/ACT/trigger && echo $PWR | tee /leds/PWR/trigger']
+            volumeMounts:
+            - mountPath: /leds
+              name: led-control-dir
+          volumes:
+          - name: led-control-dir
+            hostPath:
+              path: /sys/devices/platform/leds/leds
