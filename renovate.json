@@ -2,6 +2,16 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
   "kubernetes": {
-    "fileMatch": ["\\.yaml$"]
-  }
+    "fileMatch": ["\\.yaml$"],
+    "ignorePaths": ["lib/**"]
+  },
+  "timezone": "Europe/Brussels",
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true
+    }
+  ],
+  "schedule": ["* 17 * * *"],
+  "automergeSchedule": ["every day at 17:30"]
 }
