@@ -9,9 +9,11 @@
   "packageRules": [
     {
       "matchUpdateTypes": ["minor", "patch"],
-      "automerge": true
+      "automerge": true,
+      "automergeType": "branch",
+      "automergeSchedule": ["every day at 17:30"],
+      "ignoreTests": true
     }
   ],
-  "schedule": ["* 17 * * *"],
-  "automergeSchedule": ["every day at 17:30"]
+  "schedule": ["* 17 * * *"]
 }
