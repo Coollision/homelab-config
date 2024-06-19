@@ -1,4 +1,5 @@
 {{- define "shared-lib.deployment" }}
+{{- $root := . -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -25,17 +26,28 @@ spec:
     spec:
       containers:
         - name: {{ .Chart.Name }}
-          image: {{ .Values.deployment.image.repository }}:{{ .Values.deployment.image.tag | default "latest" }}
+          image: {{ include "shared-lib.image" .Values.deployment.image }}
           imagePullPolicy: Always
           {{- if .Values.config }}
           env:
             {{- range $key, $value := .Values.config }}
             - name: {{ $key }}
+              {{- if kindIs "string" $value }}
               value: {{ $value | quote }}
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $value.secretKeyRef.name }}
+                  key: {{ $value.secretKeyRef.key }}
+              {{- end }}
             {{- end }}
           {{- end }}
+          {{- if .Values.resources }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          {{- else }}
+          resources: {}
+          {{- end }}
           ports:
             {{- if .Values.deployment.ports }}
             {{- range $key, $value := .Values.deployment.ports }}
@@ -44,4 +56,27 @@ spec:
               protocol: TCP
             {{- end }}
             {{- end }}
+          {{- if .Values.storage }}
+          volumeMounts:
+            {{- range .Values.storage }}
+            - name: {{ printf "%s-%s" (include "helm.fullname" $root ) ( default  "" .nameSuffix )| trunc 63 | trimSuffix "-" }} 
+              mountPath: {{ .mountPath }}
+            {{- end }}
+          {{- end }}
+      {{- if .Values.storage }}
+      volumes:
+        {{- range .Values.storage }}
+        - name: {{ printf "%s-%s" (include "helm.fullname" $root ) ( default  "" .nameSuffix )| trunc 63 | trimSuffix "-" }}
+          persistentVolumeClaim:
+            claimName: {{ printf "%s-%s" (include "helm.fullname" $root ) ( default  "" .nameSuffix )| trunc 63 | trimSuffix "-" }}
+        {{- end }}
+      {{- end }}
 {{- end }}
+
+{{- define "shared-lib.image" -}}
+{{- if contains ":" .repository -}}
+{{- printf "%s" .repository -}}
+{{- else -}}
+{{- printf "%s:%s" .repository ( default "latest" .tag ) -}}
+{{- end -}}
+{{- end -}}

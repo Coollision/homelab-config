@@ -1,0 +1,9 @@
+{{ $wpv := deepCopy .}}
+{{ $_ := unset $wpv ".Values"}}
+{{ $_ := set $wpv  "Values" .Values.wordpress }}
+{{ include "shared-lib.all" $wpv }}
+
+{{ $mysqlv := deepCopy .}}
+{{ $_ := unset $mysqlv ".Values"}}
+{{ $_ := set $mysqlv  "Values" .Values.mysql }}
+{{ include "shared-lib.all" $mysqlv }}
