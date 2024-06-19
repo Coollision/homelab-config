@@ -1,0 +1,71 @@
+wordpress:
+  fullnameOverride: vloerwerken-schollaert-wp
+  deployment:
+    image:
+      repository: wordpress
+      tag: 6.5.4
+    ports:
+      wordpress: 80
+  config:
+    WORDPRESS_DB_HOST: vloerwerken-schollaert-mysql-service
+    WORDPRESS_DB_NAME:
+      secretKeyRef:
+        name: vloerwerken-schollaert-mysql-wp
+        key: db_name
+    WORDPRESS_DB_USER: 
+      secretKeyRef:
+        name: vloerwerken-schollaert-mysql-wp
+        key: db_user
+    WORDPRESS_DB_PASSWORD: 
+      secretKeyRef:
+        name: vloerwerken-schollaert-mysql-wp
+        key: db_user_pass
+  ingress_internal:
+    host: vloerwerken-schollaert.<secret:kv/data/domains~local>
+    port: wordpress
+  storage:
+    - mountPath: /var/www/html
+      storagePath: vloerwerken-schollaert/data
+      size: 5Gi
+      type: nfs-client
+  secrets:
+    - name: vloerwerken-schollaert-mysql-wp
+      secret_kv:
+        db_name: <secret:kv/data/wordpress/vloerwerken-schollaert~db_name>
+        db_user: <secret:kv/data/wordpress/vloerwerken-schollaert~db_user>
+        db_user_pass: <secret:kv/data/wordpress/vloerwerken-schollaert~db_user_pass>
+
+mysql:
+  fullnameOverride: vloerwerken-schollaert-mysql
+  deployment:
+    image:
+      repository: yobasystems/alpine-mariadb
+      tag: 10.11.2
+    ports:
+      mysql: 3306
+  config:
+    MYSQL_ROOT_PASSWORD:
+      secretKeyRef:
+        name: vloerwerken-schollaert-mysql
+        key: db_root_pass
+    MYSQL_DATABASE:
+      secretKeyRef:
+        name: vloerwerken-schollaert-mysql-wp
+        key: db_name
+    MYSQL_USER: 
+      secretKeyRef:
+        name: vloerwerken-schollaert-mysql-wp
+        key: db_user
+    MYSQL_PASSWORD: 
+      secretKeyRef:
+        name: vloerwerken-schollaert-mysql-wp
+        key: db_user_pass
+  storage:
+    - mountPath: /var/lib/mysql
+      storagePath: vloerwerken-schollaert/sql
+      size: 2Gi
+      type: nfs-client
+  secrets:
+    - name: vloerwerken-schollaert-mysql
+      secret_kv:
+        db_root_pass: <secret:kv/data/wordpress/vloerwerken-schollaert~db_root_pass>
