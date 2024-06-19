@@ -1,0 +1,15 @@
+fullnameOverride: cloudbeaver
+deployment:
+  image:
+    repository: dbeaver/cloudbeaver
+    tag: 23.2.1
+  ports:
+    ingress: 8978
+ingress_internal:
+  host: cloudbeaver.<secret:kv/data/domains~local>
+  port: ingress
+storage:
+  - mountPath: /cloudbeaver/workspace
+    size: 5Gi
+    type: nfs-client
+
