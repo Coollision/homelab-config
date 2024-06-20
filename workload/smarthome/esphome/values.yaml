@@ -1,0 +1,22 @@
+fullnameOverride: esphome
+deployment:
+  image:
+    repository: ghcr.io/esphome/esphome
+    tag: 2024.6.0
+  ports:
+    web: 6052
+    webing: 6123
+    webding: 5353
+config:
+  TZ: Europe/Brussels
+  ESPHOME_DASHBOARD_USE_PING: "true"
+  ESPHOME_DASHBOARD_RELATIVE_URL: "/"
+ingress_internal_secure:
+  host: esphome.<secret:kv/data/domains~domain>
+  port: web
+storage:
+  - mountPath: /config
+    storagePath: esphome
+    size: 30Gi
+    type: nfs-client
+
