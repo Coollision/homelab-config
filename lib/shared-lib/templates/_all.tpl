@@ -19,6 +19,10 @@ Main entrypoint for the shared library chart. It will render all underlying temp
 {{ include "shared-lib.ingress_internal" . }}
 ---
 {{- end }}
+{{- if .Values.ingress_internal_secure }}
+{{ include "shared-lib.ingress_internal_secure" . }}
+---
+{{- end }}
 {{- if .Values.servicemonitor -}}
 {{ include "shared-lib.servicemonitor" . }}
 ---
