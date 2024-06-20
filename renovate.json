@@ -8,13 +8,11 @@
   "timezone": "Europe/Brussels",
   "packageRules": [
     {
-      "ignorePaths": ["system/monitoring/home-metrics/**"],
-      "matchUpdateTypes": ["minor", "patch"],
+      "matchUpdateTypes": ["patch"],
       "automerge": true,
       "automergeType": "branch",
-      "automergeSchedule": ["every day at 17:30"],
+      "automergeSchedule": ["* 22 * * *"],
       "ignoreTests": true
     }
-  ],
-  "schedule": ["* 17 * * *"]
+  ]
 }
