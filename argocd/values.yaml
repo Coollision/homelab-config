@@ -48,7 +48,7 @@ argocd:
       extraContainers:
         - name: avp
           command: [/var/run/argocd/argocd-cmp-server]
-          image: ghcr.io/crumbhole/lovely-vault-ver:4b6c220737eefd29033d6d961aec65b64d461142
+          image: ghcr.io/crumbhole/lovely-vault-ver:1.0.2
           envFrom:
             - secretRef:
                 name: argocd-vault-replacer-credentials
