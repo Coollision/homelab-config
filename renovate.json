@@ -1,18 +1,25 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended"],
+  "extends": [
+    "config:recommended",
+    ":timezone(Europe/Brussels)",
+    ":prHourlyLimitNone",
+    ":rebaseStalePrs"
+  ],
   "kubernetes": {
     "fileMatch": ["\\.yaml$"],
     "ignorePaths": ["lib/**"]
   },
-  "timezone": "Europe/Brussels",
   "packageRules": [
     {
       "matchUpdateTypes": ["patch"],
       "automerge": true,
       "automergeType": "branch",
-      "automergeSchedule": ["* 22 * * *"],
+      "automergeSchedule": "after 1am and before 3am",
       "ignoreTests": true
     }
+  ],
+  "schedule": [
+    "after 7pm and before 11pm"
   ]
 }
