@@ -2,7 +2,7 @@ fullnameOverride: cloudbeaver
 deployment:
   image:
     repository: dbeaver/cloudbeaver
-    tag: 24.1.1
+    tag: 24.1.2
   ports:
     ingress: 8978
 ingress_internal:
