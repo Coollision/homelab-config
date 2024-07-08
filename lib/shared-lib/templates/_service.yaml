@@ -8,7 +8,7 @@ metadata:
     {{- include "helm.labels" . | nindent 4 }}
 spec:
   ports:
-    {{- range $key, $value := .Values.deployment.ports }}
+    {{- range $key, $value := (include "shared-lib.getPorts" . | fromYaml) }}
     - name: {{ $key }}
       port: {{ $value }}
       protocol: TCP
