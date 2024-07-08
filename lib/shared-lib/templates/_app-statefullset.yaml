@@ -1,0 +1,63 @@
+{{- define "shared-lib.statefullset" }}
+{{- $root := . -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "helm.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "helm.fullname" . }}
+  replicas: {{ .Values.replicaCount | default "1" }}
+  selector:
+    matchLabels:
+      {{- include "helm.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "helm.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "shared-lib.securityContext" . | nindent 6 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ include "shared-lib.image" .Values.statefullset.image }}
+          {{- include "shared-lib.env" . | nindent 10 -}}
+          {{- if .Values.resources }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 -}}
+          {{- else }}
+          resources: {}
+          {{- end }}
+          ports:
+            {{- if .Values.statefullset.ports }}
+            {{- range $key, $value := .Values.statefullset.ports }}
+            - name: {{ $key }}
+              containerPort: {{ $value }}
+              protocol: TCP
+            {{- end }}
+            {{- end }}
+          {{- if .Values.storage }}
+          volumeMounts:
+            {{- range .Values.storage }}
+            - name: {{ printf "%s-%s" (include "helm.fullname" $root ) ( default  "" .nameSuffix )| trunc 63 | trimSuffix "-" }} 
+              mountPath: {{ .mountPath }}
+            {{- end }}
+          {{- end }}
+          {{ include "shared-lib.probes" . | nindent 10 }}
+      {{- if .Values.storage }}
+      volumes:
+        {{- range .Values.storage }}
+        - name: {{ printf "%s-%s" (include "helm.fullname" $root ) ( default  "" .nameSuffix )| trunc 63 | trimSuffix "-" }}
+          persistentVolumeClaim:
+            claimName: {{ printf "%s-%s" (include "helm.fullname" $root ) ( default  "" .nameSuffix )| trunc 63 | trimSuffix "-" }}
+        {{- end }}
+      {{- end }}
+{{- end }}

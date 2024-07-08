@@ -24,27 +24,14 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
+      {{- include "shared-lib.securityContext" . | nindent 6 }}
       containers:
         - name: {{ .Chart.Name }}
           image: {{ include "shared-lib.image" .Values.deployment.image }}
-          imagePullPolicy: Always
-          {{- if .Values.config }}
-          env:
-            {{- range $key, $value := .Values.config }}
-            - name: {{ $key }}
-              {{- if kindIs "string" $value }}
-              value: {{ $value | quote }}
-              {{- else }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ $value.secretKeyRef.name }}
-                  key: {{ $value.secretKeyRef.key }}
-              {{- end }}
-            {{- end }}
-          {{- end }}
+          {{- include "shared-lib.env" . | nindent 10 -}}
           {{- if .Values.resources }}
           resources:
-            {{- toYaml .Values.resources | nindent 12 }}
+            {{- toYaml .Values.resources | nindent 12 -}}
           {{- else }}
           resources: {}
           {{- end }}
@@ -63,6 +50,7 @@ spec:
               mountPath: {{ .mountPath }}
             {{- end }}
           {{- end }}
+          {{ include "shared-lib.probes" . | nindent 10 }}
       {{- if .Values.storage }}
       volumes:
         {{- range .Values.storage }}
@@ -72,11 +60,3 @@ spec:
         {{- end }}
       {{- end }}
 {{- end }}
-
-{{- define "shared-lib.image" -}}
-{{- if contains ":" .repository -}}
-{{- printf "%s" .repository -}}
-{{- else -}}
-{{- printf "%s:%s" .repository ( default "latest" .tag ) -}}
-{{- end -}}
-{{- end -}}

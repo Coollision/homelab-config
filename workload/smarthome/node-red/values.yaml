@@ -1,0 +1,27 @@
+fullnameOverride: node-red
+statefullset:
+  image:
+    repository: nodered/node-red
+    tag: 4.0.1
+  ports:
+    web: 1880
+config:
+  TZ: Europe/Brussels
+ingress_internal:
+  host: nodered.<secret:kv/data/domains~local>
+  port: web
+storage:
+  - mountPath: /data
+    storagePath: node-red/config
+    size: 10Gi
+    type: nfs-client
+securityContext:
+  runAsUser: 1
+  fsGroup: 1000
+probes:
+  liveness:
+    httpGet:
+      path: /
+      port: web
+    initialDelaySeconds: 30
+    periodSeconds: 10
