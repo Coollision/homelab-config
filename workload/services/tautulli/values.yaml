@@ -1,0 +1,28 @@
+fullnameOverride: tautulli
+statefullset:
+  image:
+    repository: linuxserver/tautulli
+    tag: 2.14.3
+  ports:
+    web: 8181
+config:
+  TZ: Europe/Brussels
+  PUID: 1000
+  PGID: 1000
+ingress_internal:
+  host: tautulli.<secret:kv/data/domains~local>
+  port: web
+storage:
+  - mountPath: /config
+    storagePath: tautulli/config
+    size: 10Gi
+    type: nfs-client
+securityContext:
+  fsGroup: 1000
+probes:
+  liveness:
+    httpGet:
+      path: /
+      port: web
+    initialDelaySeconds: 30
+    periodSeconds: 10 
