@@ -8,7 +8,7 @@ node-feature-discovery:
 
       sources:
         custom:
-          - name: "zigbee-coordinator-test"
+          - name: "zigbee-coordinator"
             labels: 
               feature.node.kubernetes.io/iot-zigbee-coordinator: "true"
             matchFeatures:

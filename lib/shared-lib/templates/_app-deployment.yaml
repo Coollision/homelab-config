@@ -24,10 +24,12 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
-      {{- include "shared-lib.securityContext" . | nindent 6 }}
+      {{- include "shared-lib.securityContext" . | nindent 6 -}}
+      {{- include "shared-lib.hostNetwork" . | nindent 6 -}}
+      {{- include "shared-lib.dnsPolicy" . | nindent 6 }}
       containers:
         - name: {{ .Chart.Name }}
-          image: {{ include "shared-lib.image" .Values.deployment.image }}
+          image: {{ include "shared-lib.image" . }}
           {{- include "shared-lib.env" . | nindent 10 -}}
           {{- if .Values.resources }}
           resources:

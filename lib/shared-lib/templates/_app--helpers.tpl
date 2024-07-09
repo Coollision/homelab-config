@@ -1,9 +1,11 @@
 {{- define "shared-lib.image" -}}
-{{- if contains ":" .repository -}}
-{{- printf "%s" .repository -}}
-{{- else -}}
-{{- printf "%s:%s" .repository ( default "latest" .tag ) -}}
-{{- end -}}
+  {{- $config := .Values.deployment | default .Values.statefullset -}}
+  {{- $i := $config.image -}}
+  {{- if contains ":" $i.repository -}}
+    {{- printf "%s" $i.repository -}}
+  {{- else -}}
+    {{- printf "%s:%s" $i.repository (default "latest" $i.tag) -}}
+  {{- end -}}
 {{- end -}}
 
 {{- define "shared-lib.env" -}}
@@ -31,6 +33,7 @@ env:
 {{- end -}}
 {{- end }}
 
+
 {{- define "shared-lib.securityContext" -}}
 {{- if .Values.securityContext -}}
 securityContext:
@@ -49,4 +52,16 @@ readinessProbe:
   {{- toYaml .Values.probes.readiness | nindent 2 -}}
 {{- end -}}
 {{- end }}
+{{- end -}}
+
+{{- define "shared-lib.hostNetwork" -}}
+{{- if .Values.hostNetwork -}}
+hostNetwork: true
+{{- end -}}
+{{- end -}}
+
+{{- define "shared-lib.dnsPolicy" -}}
+{{- if .Values.dnsPolicy -}}
+dnsPolicy: {{ .Values.dnsPolicy }}
+{{- end -}}
 {{- end -}}
