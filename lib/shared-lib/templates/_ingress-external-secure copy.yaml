@@ -1,0 +1,23 @@
+{{- define "shared-lib.ingress_external_secure" -}}
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ include "helm.fullname" . }}-ingress-external-secure
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+  annotations:
+    kubernetes.io/ingress.class: traefik-external
+spec:
+  entryPoints: 
+    - websecure
+  routes:
+  - kind: Rule
+    match: Host(`{{ .Values.ingress_external_secure.host }}`)
+    services:
+    - kind: Service
+      name: {{ include "helm.fullname" . }}-service
+      namespace: {{ .Release.Namespace }}
+      port: {{ index (include "shared-lib.getPorts" . | fromYaml) .Values.ingress_external_secure.port }}
+  tls: {}
+{{- end }}

@@ -1,0 +1,41 @@
+fullnameOverride: homeassistant
+statefullset:
+  image:
+    repository: ghcr.io/home-assistant/home-assistant
+    tag: 2024.7.1
+  ports:
+    web: 8123
+config:
+  TZ: Europe/Brussels
+
+ingress_internal:
+  host: homeassistant.<secret:kv/data/domains~local>
+  port: web
+
+ingress_internal_secure:
+  host: homeassistant.<secret:kv/data/domains~domain>
+  port: web
+
+ingress_external_secure:
+  host: homeassistant.<secret:kv/data/domains~domain>
+  port: web
+
+storage:
+  - mountPath: /config
+    storagePath: homeassistant/config
+    size: 30Gi
+    type: nfs-client
+
+hostNetwork: true
+dnsPolicy: ClusterFirstWithHostNet
+imagePreSync: true
+serviceIp: <secret:kv/data/smarthome/homeassistant~ip>
+
+
+probes:
+  liveness:
+    httpGet:
+      path: /
+      port: web
+    initialDelaySeconds: 30
+    periodSeconds: 10 

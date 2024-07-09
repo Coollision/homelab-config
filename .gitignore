@@ -2,3 +2,5 @@
 **/Chart.lock
 **/charts/**
 workload/secrets/vault/test.yaml
+
+**test.yaml

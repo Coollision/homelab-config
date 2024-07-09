@@ -1,0 +1,89 @@
+{{- define "shared-lib.imagePreSync" }}
+apiVersion: kubefledged.io/v1alpha2
+kind: ImageCache
+metadata:
+  name: {{ include "helm.fullname" . }}-image-cache
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: kubefledged
+    kubefledged: imagecache
+    {{- include "helm.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-100"
+spec:
+  # The "cacheSpec" field allows a user to define a list of images and onto which worker nodes those images should be cached (i.e. pre-pulled).
+  cacheSpec:
+  # Specifies a list of images (nginx:1.21.1 and tomcat:10.0.8) with no node selector, hence these images will be cached in all the nodes in the cluster
+  - images:
+    - {{ include "shared-lib.image" . }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: image-cache-wait-sa
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: "-99"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: image-cache-wait-role
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: "-99"
+rules:
+- apiGroups: ["kubefledged.io"]
+  resources: ["imagecaches"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: image-cache-wait-rolebinding
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: "-99"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: image-cache-wait-role
+subjects:
+- kind: ServiceAccount
+  name: image-cache-wait-sa
+  namespace: {{ .Release.Namespace }}
+---
+# job to wait for the image cache to be ready with command until kubectl -n smarthome get imagecaches.kubefledged.io homeassistant-cache -o json | jq -e '.status.status == "Succeeded"' > /dev/null; do
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "helm.fullname" . }}-image-cache-wait
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: kubefledged
+    kubefledged: imagecache
+    {{- include "helm.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-99"
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  ttlSecondsAfterFinished: 100
+  template:
+    spec:
+      serviceAccountName: image-cache-wait-sa
+      containers:
+      - name: image-cache-wait
+        image: alpine
+        command: ["sh", "-c", "apk add --no-cache kubectl jq && until kubectl -n {{ .Release.Namespace }} get imagecaches.kubefledged.io {{ include "helm.fullname" . }}-image-cache -o json | jq -e '.status.status != \"Processing\"' > /dev/null; do echo 'waiting for image cache to be ready'; sleep 10; done"]
+      restartPolicy: Never
+{{- end }}

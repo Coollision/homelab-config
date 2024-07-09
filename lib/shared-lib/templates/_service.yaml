@@ -16,4 +16,8 @@ spec:
     {{- end }}
   selector:
     {{- include "helm.selectorLabels" . | nindent 4 }}
+  {{- if .Values.serviceIp }}
+  type: LoadBalancer
+  loadBalancerIP: {{ .Values.serviceIp }}
+  {{- end -}}
 {{- end }}
