@@ -13,7 +13,7 @@
 env:
   {{- range $key, $value := .Values.config }}
   - name: {{ $key }}
-    {{- if kindIs "string" $value }}
+    {{- if not (kindIs "map" $value) }}
     value: {{ $value | quote }}
     {{- else }}
     valueFrom:
