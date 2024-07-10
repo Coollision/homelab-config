@@ -1,0 +1,28 @@
+fullnameOverride: jackett
+deployment:
+  image:
+    repository: linuxserver/jackett
+    tag: 0.22.306
+  ports:
+    web: 9117
+config:
+  TZ: Europe/Brussels
+  PUID: 1000
+  PGID: 1000
+ingress_internal:
+  host: jackett.<secret:kv/data/domains~local>
+  port: web
+storage:
+  - mountPath: /config
+    storagePath: jackett/config
+    size: 10Gi
+    type: nfs-client
+securityContext:
+  fsGroup: 1000
+probes:
+  liveness:
+    httpGet:
+      path: /
+      port: web
+    initialDelaySeconds: 30
+    periodSeconds: 10 
