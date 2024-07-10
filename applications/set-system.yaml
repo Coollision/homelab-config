@@ -36,6 +36,7 @@ spec:
           - CreateNamespace=true
           - PruneLast=true
           - RespectIgnoreDifferences=true
+      revisionHistoryLimit: 2
       ignoreDifferences:
         - group: admissionregistration.k8s.io
           kind: MutatingWebhookConfiguration
