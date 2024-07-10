@@ -28,23 +28,22 @@ descheduler:
     profiles:
       - name: default
         pluginConfig:
-          - name: DefaultEvictor
+          - name: "DefaultEvictor"
             args:
-              ignorePvcPods: true
               evictLocalStoragePods: true
-          - name: RemoveDuplicates
-          - name: RemovePodsHavingTooManyRestarts
+          - name: "RemoveDuplicates"
+          - name: "RemovePodsHavingTooManyRestarts"
             args:
               podRestartThreshold: 15
               includingInitContainers: true
-          - name: RemovePodsViolatingNodeAffinity
+          - name: "RemovePodsViolatingNodeAffinity"
             args:
               nodeAffinityType:
-                - requiredDuringSchedulingIgnoredDuringExecution
-          - name: RemovePodsViolatingInterPodAntiAffinity
-          - name: RemovePodsViolatingTopologySpreadConstraint
-          - name: RemovePodsViolatingNodeTaints
-          - name: LowNodeUtilization
+              - "requiredDuringSchedulingIgnoredDuringExecution"
+          - name: "RemovePodsViolatingInterPodAntiAffinity"
+          - name: "RemovePodsViolatingTopologySpreadConstraint"
+          - name: "RemovePodsViolatingNodeTaints"
+          - name: "LowNodeUtilization"
             args:
               thresholds:
                 cpu: 20
@@ -57,15 +56,15 @@ descheduler:
         plugins:
           balance:
             enabled:
-              - RemoveDuplicates
-              - RemovePodsViolatingTopologySpreadConstraint
-              - LowNodeUtilization
+              - "RemoveDuplicates"
+              - "RemovePodsViolatingTopologySpreadConstraint"
+              - "LowNodeUtilization"
           deschedule:
             enabled:
-              - RemovePodsHavingTooManyRestarts
-              - RemovePodsViolatingNodeTaints
-              - RemovePodsViolatingNodeAffinity
-              - RemovePodsViolatingInterPodAntiAffinity
+              - "RemovePodsHavingTooManyRestarts"
+              - "RemovePodsViolatingNodeTaints"
+              - "RemovePodsViolatingNodeAffinity"
+              - "RemovePodsViolatingInterPodAntiAffinity"
 
   service:
     enabled: true
