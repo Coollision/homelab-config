@@ -21,8 +21,7 @@ securityContext:
   fsGroup: 1000
 probes:
   liveness:
-    httpGet:
-      path: /
+    tcpSocket:
       port: web
     initialDelaySeconds: 30
     periodSeconds: 10 
