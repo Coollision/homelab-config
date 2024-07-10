@@ -1,0 +1,20 @@
+fullnameOverride: flaresolverr
+deployment:
+  image:
+    repository: ghcr.io/flaresolverr/flaresolverr
+    tag: v3.3.20
+  ports:
+    web: 8191
+config:
+  TZ: Europe/Brussels
+  PUID: 1000
+  PGID: 1000
+
+securityContext:
+  fsGroup: 1000
+probes:
+  liveness:
+    tcpSocket:
+      port: web
+    initialDelaySeconds: 30
+    periodSeconds: 10 
