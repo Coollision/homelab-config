@@ -15,11 +15,11 @@
       "matchUpdateTypes": ["patch"],
       "automerge": true,
       "automergeType": "branch",
-      "automergeSchedule": "after 1am and before 3am",
+      "automergeSchedule": "* 1-4 * * *",
       "ignoreTests": true
     }
   ],
   "schedule": [
-    "after 7pm and before 11pm"
+    "* 19-22 * * *"
   ]
 }
