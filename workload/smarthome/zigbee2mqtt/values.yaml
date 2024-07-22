@@ -1,0 +1,23 @@
+fullnameOverride: zigbee2mqtt
+deployment:
+  image:
+    repository: koenkk/zigbee2mqtt
+    tag: 1.39.0
+  ports:
+    web: 8080
+config:
+  TZ: Europe/Brussels
+  ZIGBEE2MQTT_DATA: /data
+  
+ingress_internal_secure:
+  host: zigbee2mqtt.<secret:kv/data/domains~domain>
+  port: web
+ingress_internal:
+  host: zigbee2mqtt.<secret:kv/data/domains~local>
+  port: web
+storage:
+  - mountPath: /data
+    storagePath: zigbee2mqtt/data
+    size: 10Gi
+    type: nfs-client
+
