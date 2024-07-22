@@ -1,0 +1,28 @@
+{{- define "shared-lib.container" -}}
+{{- $root := . -}}
+name: {{ .Chart.Name }}
+image: {{ include "shared-lib.image" . }}
+{{- include "shared-lib.env" . -}}
+{{- if .Values.resources }}
+resources:
+  {{- toYaml .Values.resources | nindent 2 -}}
+{{- else }}
+resources: {}
+{{- end }}
+ports:
+  {{- if (include "shared-lib.getPorts" . | fromYaml) }}
+  {{- range $key, $value := (include "shared-lib.getPorts" . | fromYaml) }}
+  - name: {{ $key }}
+    containerPort: {{ $value }}
+    protocol: TCP
+  {{- end }}
+  {{- end }}
+{{- if .Values.storage }}
+volumeMounts:
+  {{- range .Values.storage }}
+  - name: {{ printf "%s-%s" (include "helm.fullname" $root ) ( default  "" .nameSuffix )| trunc 63 | trimSuffix "-" }} 
+    mountPath: {{ .mountPath }}
+  {{- end }}
+{{- end }}
+{{ include "shared-lib.probes" .  -}}
+{{- end -}}
