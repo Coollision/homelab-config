@@ -1,4 +1,6 @@
 traefik:
+  core:
+    defaultRuleSyntax: v2
   fullnameOverride: traefik-external
   commonLabels: 
     app: traefik-external

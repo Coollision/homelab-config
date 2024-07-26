@@ -1,4 +1,7 @@
 traefik:
+  core:
+    defaultRuleSyntax: v2
+
   fullnameOverride: traefik
 
   commonLabels:
