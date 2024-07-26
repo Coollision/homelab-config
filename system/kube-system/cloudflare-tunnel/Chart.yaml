@@ -9,6 +9,6 @@ maintainers:
 dependencies:
   - name: traefik
     alias: traefik
-    version: 30.0.0
+    version: 27.0.2
     repository: https://traefik.github.io/charts
 
