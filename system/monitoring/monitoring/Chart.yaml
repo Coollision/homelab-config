@@ -10,5 +10,5 @@ maintainers:
 dependencies:
   - name: kube-prometheus-stack
     alias: promstack
-    version: 61.3.2
+    version: 61.4.0
     repository: https://prometheus-community.github.io/helm-charts
