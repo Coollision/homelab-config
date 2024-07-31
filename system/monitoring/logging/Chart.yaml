@@ -8,11 +8,13 @@ maintainers:
   - name: coollision
     email: Coollision@users.noreply.github.com
 dependencies:
+  # - name: loki-stack
+  #   alias: stack
+  #   version: v2.10.2
+  #   repository: https://grafana.github.io/helm-charts
   - name: loki
-    alias: loki
     version: 6.7.3
     repository: https://grafana.github.io/helm-charts
   - name: promtail
-    alias: promtail
     version: 6.16.4
     repository: https://grafana.github.io/helm-charts
