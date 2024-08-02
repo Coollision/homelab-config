@@ -2,7 +2,7 @@ fullnameOverride: homeassistant
 statefullset:
   image:
     repository: ghcr.io/home-assistant/home-assistant
-    tag: 2024.7.3
+    tag: 2024.7.4
   ports:
     web: 8123
 config:
