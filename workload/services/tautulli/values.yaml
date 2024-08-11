@@ -2,7 +2,7 @@ fullnameOverride: tautulli
 statefullset:
   image:
     repository: linuxserver/tautulli
-    tag: version-v2.14.3
+    tag: version-v2.14.4
   ports:
     web: 8181
 config:
