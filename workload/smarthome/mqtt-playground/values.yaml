@@ -5,8 +5,8 @@ deployment:
     tag: latest
 config:
   LOGLEVEL: INFO
-  MQTT_BROKERADDRESS: <secret:kv/data/smarthome/mqtt-go-playground~brokerAddress>
-  MQTT_BROKERID: <secret:kv/data/smarthome/mqtt-go-playground~brokerId>
-  MQTT_BROKERUSER: <secret:kv/data/smarthome/mqtt-go-playground~brokerUser>
+  MQTT_BROKERADDRESS: <secret:kv/data/smarthome/mqtt-go-playground~BrokerAddress>
+  MQTT_BROKERID: <secret:kv/data/smarthome/mqtt-go-playground~BrokerId>
+  MQTT_BROKERUSER: <secret:kv/data/smarthome/mqtt-go-playground~BrokerUser>
   MQTT_BROKERPASSWORD: <secret:kv/data/smarthome/mqtt-go-playground~BrokerPassword>
 
