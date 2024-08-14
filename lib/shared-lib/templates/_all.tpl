@@ -19,7 +19,9 @@ Main entrypoint for the shared library chart. It will render all underlying temp
 {{- "need to have a deployment or statefullset" | fail -}}
 {{- end}}
 ---
+{{- if not .Values.disableService }}
 {{ include "shared-lib.service" . }}
+{{- end }}
 ---
 {{- if .Values.ingress_internal }}
 {{ include "shared-lib.ingress_internal" . }}
