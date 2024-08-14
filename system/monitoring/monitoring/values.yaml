@@ -189,9 +189,13 @@ promstack:
             - name: Loki
               type: loki
               access: proxy
-              url: http://loki:3100
+              url: http://logging-loki-gateway:80
               editable: false
-              isDefault: true
+              isDefault: false
+              jsonData:
+                httpHeaderName1: X-Scope-OrgID
+              secureJsonData:
+                httpHeaderValue1: 1
     prometheus-node-exporter:
         prometheus:
             monitor:
