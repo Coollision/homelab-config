@@ -9,7 +9,6 @@ resources:
 {{- else }}
 resources: {}
 {{- end }}
-{{- if .Values.ports }}
 ports:
   {{- if (include "shared-lib.getPorts" . | fromYaml) }}
   {{- range $key, $value := (include "shared-lib.getPorts" . | fromYaml) }}
@@ -17,7 +16,6 @@ ports:
     containerPort: {{ $value }}
     protocol: TCP
   {{- end }}
-  {{- end -}}
   {{- end }}
 {{- if .Values.storage }}
 volumeMounts:
