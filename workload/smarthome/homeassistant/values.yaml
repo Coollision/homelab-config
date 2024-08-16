@@ -14,13 +14,11 @@ homeassistantdb:
     MYSQL_DATABASE: <secret:kv/data/smarthome/homeassistant-db~name>
     MYSQL_USER: <secret:kv/data/smarthome/homeassistant-db~user>
     MYSQL_PASSWORD: <secret:kv/data/smarthome/homeassistant-db~password>
-  
   storage:
     - mountPath: /var/lib/mysql
       storagePath: homeassistant-db/data
       size: 30Gi
       type: nfs-client
-
   probes:
     livenessProbe:
       exec:
@@ -40,7 +38,6 @@ homeassistantdb:
       periodSeconds: 10
       timeoutSeconds: 5
       failureThreshold: 3
-  
   resources: 
     requests:
       memory: "500Mi"
@@ -59,31 +56,24 @@ homeassistant:
       web: 8123
   config:
     TZ: Europe/Brussels
-
   ingress_internal:
     host: homeassistant.<secret:kv/data/domains~local>
     port: web
-
   ingress_internal_secure:
     host: homeassistant.<secret:kv/data/domains~domain>
     port: web
-
   ingress_external_secure:
     host: homeassistant.<secret:kv/data/domains~domain>
     port: web
-
   storage:
     - mountPath: /config
       storagePath: homeassistant/config
       size: 30Gi
       type: nfs-client
-
   hostNetwork: true
   dnsPolicy: ClusterFirstWithHostNet
   imagePreSync: true
   serviceIp: <secret:kv/data/smarthome/homeassistant~ip>
-
-
   probes:
     liveness:
       httpGet:
