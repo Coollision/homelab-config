@@ -15,11 +15,11 @@ homeassistantdb:
     MYSQL_USER: <secret:kv/data/smarthome/homeassistant-db~user>
     MYSQL_PASSWORD: <secret:kv/data/smarthome/homeassistant-db~password>
   
-  storagePath:
+  storage:
     - mountPath: /var/lib/mysql
+      storagePath: homeassistant-db/data
       size: 30Gi
       type: nfs-client
-      storagePath: homeassistant-db/mysql
 
   probes:
     livenessProbe:
