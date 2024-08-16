@@ -8,6 +8,8 @@ metadata:
     {{- include "helm.labels" . | nindent 4 }}
   annotations:
     kubernetes.io/ingress.class: traefik-external
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/sync-wave: {{ .Values.syncWave | default 0 | quote }}
 spec:
   entryPoints: 
     - websecure
