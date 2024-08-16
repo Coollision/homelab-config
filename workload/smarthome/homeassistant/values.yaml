@@ -1,41 +1,93 @@
-fullnameOverride: homeassistant
-statefullset:
-  image:
-    repository: ghcr.io/home-assistant/home-assistant
-    tag: 2024.8.1
-  ports:
-    web: 8123
-config:
-  TZ: Europe/Brussels
+homeassistantdb:
+  syncWave: -10
+  fullnameOverride: homeassistant-db
+  statefullset:
+    image:
+      repository: mariadb
+      tag: 11.5.2
+    ports:
+      mysql: 3306
+  config:
+    ServerName: mariadb
+    MYSQL_ROOT_PASSWORD: <secret:kv/data/smarthome/homeassistant-db~root-password>
+    MYSQL_AUTO_UPGRADE: Enabled
+    MYSQL_DATABASE: <secret:kv/data/smarthome/homeassistant-db~name>
+    MYSQL_USER: <secret:kv/data/smarthome/homeassistant-db~user>
+    MYSQL_PASSWORD: <secret:kv/data/smarthome/homeassistant-db~password>
+  
+  storagePath:
+    - mountPath: /var/lib/mysql
+      size: 30Gi
+      type: nfs-client
+      storagePath: homeassistant-db/mysql
 
-ingress_internal:
-  host: homeassistant.<secret:kv/data/domains~local>
-  port: web
+  probes:
+    livenessProbe:
+      exec:
+        command:
+        - mysqladmin
+        - ping
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readinessProbe:
+      exec:
+        command:
+        - mysqladmin
+        - ping
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+  
+  resources: 
+    requests:
+      memory: "500Mi"
+      cpu: "500m"
+    limits:
+      memory: "700Mi"
+      cpu: "1000m"
 
-ingress_internal_secure:
-  host: homeassistant.<secret:kv/data/domains~domain>
-  port: web
+homeassistant:
+  fullnameOverride: homeassistant
+  statefullset:
+    image:
+      repository: ghcr.io/home-assistant/home-assistant
+      tag: 2024.8.1
+    ports:
+      web: 8123
+  config:
+    TZ: Europe/Brussels
 
-ingress_external_secure:
-  host: homeassistant.<secret:kv/data/domains~domain>
-  port: web
+  ingress_internal:
+    host: homeassistant.<secret:kv/data/domains~local>
+    port: web
 
-storage:
-  - mountPath: /config
-    storagePath: homeassistant/config
-    size: 30Gi
-    type: nfs-client
+  ingress_internal_secure:
+    host: homeassistant.<secret:kv/data/domains~domain>
+    port: web
 
-hostNetwork: true
-dnsPolicy: ClusterFirstWithHostNet
-imagePreSync: true
-serviceIp: <secret:kv/data/smarthome/homeassistant~ip>
+  ingress_external_secure:
+    host: homeassistant.<secret:kv/data/domains~domain>
+    port: web
+
+  storage:
+    - mountPath: /config
+      storagePath: homeassistant/config
+      size: 30Gi
+      type: nfs-client
+
+  hostNetwork: true
+  dnsPolicy: ClusterFirstWithHostNet
+  imagePreSync: true
+  serviceIp: <secret:kv/data/smarthome/homeassistant~ip>
 
 
-probes:
-  liveness:
-    httpGet:
-      path: /
-      port: web
-    initialDelaySeconds: 30
-    periodSeconds: 10 
+  probes:
+    liveness:
+      httpGet:
+        path: /
+        port: web
+      initialDelaySeconds: 30
+      periodSeconds: 10 

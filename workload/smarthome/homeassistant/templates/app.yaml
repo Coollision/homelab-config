@@ -1,1 +1,9 @@
-{{ include "shared-lib.all" . }}
+{{ $homeassistantdbv := deepCopy . }}
+{{ $_ := unset $homeassistantdbv ".Values"}}
+{{ $_ := set $homeassistantdbv  "Values" .Values.homeassistantdb }}
+{{ include "shared-lib.all" $homeassistantdbv }}
+
+{{ $homeassistantv := deepCopy . }}
+{{ $_ := unset $homeassistantv ".Values"}}
+{{ $_ := set $homeassistantv  "Values" .Values.homeassistant }}
+{{ include "shared-lib.all" $homeassistantv }}
