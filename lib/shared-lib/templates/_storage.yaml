@@ -20,7 +20,7 @@ metadata:
   annotations:
     nfs.io/storage-path: {{ .storage.storagePath }}
     argocd.argoproj.io/hook: Sync
-    argocd.argoproj.io/sync-wave: {{ .root.syncWave | default 0 | quote }}
+    argocd.argoproj.io/sync-wave: {{ .root.Values.syncWave | default 0 | quote }}
   labels:
     {{- include "helm.labels" .root | nindent 4 }}
 spec:
@@ -42,7 +42,7 @@ metadata:
     {{- include "helm.labels" .root | nindent 4 }}
   annotations:
     argocd.argoproj.io/hook: Sync
-    argocd.argoproj.io/sync-wave: {{ .root.syncWave | default 0 | quote }}
+    argocd.argoproj.io/sync-wave: {{ .root.Values.syncWave | default 0 | quote }}
 spec:
   storageClassName: nfs-client-name-path
   accessModes:
