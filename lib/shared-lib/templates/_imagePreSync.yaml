@@ -21,7 +21,6 @@ metadata:
   name: image-cache-wait-sa
   namespace: {{ .Release.Namespace }}
   annotations:
-    argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: HookSucceeded
     argocd.argoproj.io/sync-wave: {{ sub -1 (.Values.syncWave | default 0) | quote }}
 ---
@@ -31,7 +30,6 @@ metadata:
   namespace: {{ .Release.Namespace }}
   name: image-cache-wait-role
   annotations:
-    argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: HookSucceeded
     argocd.argoproj.io/sync-wave: {{ sub -1 (.Values.syncWave | default 0) | quote }}
 rules:
@@ -48,7 +46,6 @@ metadata:
   name: image-cache-wait-rolebinding
   namespace: {{ .Release.Namespace }}
   annotations:
-    argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: HookSucceeded
     argocd.argoproj.io/sync-wave: {{ sub -1 (.Values.syncWave | default 0) | quote }}
 roleRef:
@@ -72,7 +69,6 @@ metadata:
     {{- include "helm.labels" . | nindent 4 }}
   annotations:
     argocd.argoproj.io/sync-wave: {{ sub -1 (.Values.syncWave | default 0) | quote }}
-    argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: HookSucceeded
 spec:
   ttlSecondsAfterFinished: 100

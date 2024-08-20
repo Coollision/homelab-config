@@ -7,8 +7,9 @@ metadata:
   labels:
     {{- include "helm.labels" . | nindent 4 }}
   annotations:
-    argocd.argoproj.io/hook: Sync
+    {{ if .Values.syncWave }}
     argocd.argoproj.io/sync-wave: {{ .Values.syncWave | default 0 | quote }}
+    {{- end }}
 spec:
   entryPoints: 
     - websecure
