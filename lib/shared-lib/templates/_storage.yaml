@@ -19,8 +19,9 @@ metadata:
   name: {{ printf "%s-%s" (include "helm.fullname" .root ) ( default  "" .storage.nameSuffix )| trunc 63 | trimSuffix "-" }} 
   annotations:
     nfs.io/storage-path: {{ .storage.storagePath }}
-    argocd.argoproj.io/hook: Sync
+    {{ if .root.Values.syncWave }}
     argocd.argoproj.io/sync-wave: {{ .root.Values.syncWave | default 0 | quote }}
+    {{- end }}
   labels:
     {{- include "helm.labels" .root | nindent 4 }}
 spec:
@@ -41,8 +42,9 @@ metadata:
   labels:
     {{- include "helm.labels" .root | nindent 4 }}
   annotations:
-    argocd.argoproj.io/hook: Sync
+    {{ if .root.Values.syncWave }}
     argocd.argoproj.io/sync-wave: {{ .root.Values.syncWave | default 0 | quote }}
+    {{- end }}
 spec:
   storageClassName: nfs-client-name-path
   accessModes:
