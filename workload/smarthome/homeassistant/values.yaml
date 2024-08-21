@@ -45,6 +45,8 @@ homeassistantdb:
     limits:
       memory: "700Mi"
       cpu: "1000m"
+  labels:
+    app.kubernetes.io/component: homeassistant-db
 
 homeassistant:
   fullnameOverride: homeassistant
@@ -81,3 +83,5 @@ homeassistant:
         port: web
       initialDelaySeconds: 30
       periodSeconds: 10 
+  labels:
+    app.kubernetes.io/component: homeassistant
