@@ -21,8 +21,9 @@ metadata:
   name: image-cache-wait-sa
   namespace: {{ .Release.Namespace }}
   annotations:
-    argocd.argoproj.io/hook-delete-policy: HookSucceeded
     argocd.argoproj.io/sync-wave: {{ sub -1 (.Values.syncWave | default 0) | quote }}
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/hook: Sync
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -30,8 +31,9 @@ metadata:
   namespace: {{ .Release.Namespace }}
   name: image-cache-wait-role
   annotations:
-    argocd.argoproj.io/hook-delete-policy: HookSucceeded
     argocd.argoproj.io/sync-wave: {{ sub -1 (.Values.syncWave | default 0) | quote }}
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/hook: Sync
 rules:
 - apiGroups: ["kubefledged.io"]
   resources: ["imagecaches"]
@@ -46,8 +48,9 @@ metadata:
   name: image-cache-wait-rolebinding
   namespace: {{ .Release.Namespace }}
   annotations:
-    argocd.argoproj.io/hook-delete-policy: HookSucceeded
     argocd.argoproj.io/sync-wave: {{ sub -1 (.Values.syncWave | default 0) | quote }}
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/hook: Sync
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -70,6 +73,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: {{ sub -1 (.Values.syncWave | default 0) | quote }}
     argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/hook: Sync
 spec:
   ttlSecondsAfterFinished: 100
   template:
