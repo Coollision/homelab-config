@@ -19,7 +19,6 @@ spec:
     size: "20Gi"
     storageClass: "nfs-client-name-path"
 
-
   allowedSourceRanges:
     # IP ranges to access your cluster go here
   

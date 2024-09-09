@@ -4,3 +4,8 @@ postgres-operator:
 postgres-operator-ui:
   enabled: true
   fullnameOverride: postgres-operator-ui
+  envs:
+    targetNamespace: "*"
+    teams:
+      - acid
+      - home
