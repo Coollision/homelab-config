@@ -4,16 +4,14 @@ apiVersion: "acid.zalan.do/v1"
 metadata:
   name: "the-cluster"
   labels:
-    team: acid
+    team: home
 
 spec:
-  teamId: "acid"
+  teamId: "home"
   postgresql:
     version: "16"
   numberOfInstances: 2
   enableMasterLoadBalancer: true
-  enableConnectionPooler: true
-  enableMasterPoolerLoadBalancer: true
   maintenanceWindows:
   volume:
     size: "20Gi"

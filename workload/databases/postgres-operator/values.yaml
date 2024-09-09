@@ -2,7 +2,7 @@ postgres-operator:
   fullnameOverride: postgres-operator
 
 postgres-operator-ui:
-  enabled: true
+  enabled: false
   fullnameOverride: postgres-operator-ui
   envs:
     targetNamespace: "*"
