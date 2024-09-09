@@ -1,0 +1,5 @@
+postgres-operator:
+  fullnameOverride: postgres-operator
+
+postgres-operator-ui:
+  fullnameOverride: postgres-operator-ui
