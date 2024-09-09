@@ -12,6 +12,8 @@ spec:
     version: "16"
   numberOfInstances: 2
   enableMasterLoadBalancer: true
+  enableConnectionPooler: true
+  # enableMasterPoolerLoadBalancer: true
   maintenanceWindows:
   volume:
     size: "20Gi"

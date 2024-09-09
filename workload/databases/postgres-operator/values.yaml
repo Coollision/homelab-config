@@ -1,5 +1,7 @@
 postgres-operator:
   fullnameOverride: postgres-operator
+  configConnectionPooler:
+    connection_pooler_image: "edoburu/pgbouncer:latest"
 
 postgres-operator-ui:
   enabled: false
