@@ -12,8 +12,8 @@ spec:
     version: "16"
   numberOfInstances: 2
   enableMasterLoadBalancer: true
-  #enableConnectionPooler: true
-  #enableReplicaConnectionPooler: true
+  # enableConnectionPooler: true
+  # enableReplicaConnectionPooler: true
   # enableMasterPoolerLoadBalancer: true
   maintenanceWindows:
   volume:
