@@ -1,32 +1,50 @@
 # Use the official Bitnami PgBouncer image as the base
 FROM bitnami/pgbouncer:latest
 
-# Set environment variables for PgBouncer configuration based on provided custom environment variables
-ENV PGBOUNCER_DEFAULT_POOL_SIZE=${CONNECTION_POOLER_DEFAULT_SIZE:-15} \
-  PGBOUNCER_MAX_CLIENT_CONN=${CONNECTION_POOLER_MAX_CLIENT_CONN:-10000} \
-  PGBOUNCER_MAX_DB_CONNECTIONS=${CONNECTION_POOLER_MAX_DB_CONN:-30} \
-  PGBOUNCER_MIN_POOL_SIZE=${CONNECTION_POOLER_MIN_SIZE:-7} \
-  PGBOUNCER_POOL_MODE=${CONNECTION_POOLER_MODE:-transaction} \
-  PGBOUNCER_PORT=${CONNECTION_POOLER_PORT:-5432} \
-  PGBOUNCER_RESERVE_POOL_SIZE=${CONNECTION_POOLER_RESERVE_SIZE:-7} \
-  POSTGRESQL_HOST=${PGHOST:-the-cluster} \
-  POSTGRESQL_PORT=${PGPORT:-5432} \
-  POSTGRESQL_USERNAME=${PGUSER:-"secret(pooler.the-cluster.credentials.postgresql.acid.zalan.do)[username]"} \
-  POSTGRESQL_PASSWORD=${PGPASSWORD:-"secret(pooler.the-cluster.credentials.postgresql.acid.zalan.do)[password]"} \
-  PGBOUNCER_LISTEN_ADDRESS=0.0.0.0 \
-  PGBOUNCER_AUTH_TYPE=scram-sha-256 \
-  PGBOUNCER_LOG_FILE=/opt/bitnami/pgbouncer/logs/pgbouncer.log
+# Capture the build time and store it in an environment variable or file
+ENV BUILD_TIME="2"
+
+# Create a script to set the environment variables based on the provided ones
+RUN echo '#!/bin/bash' > /var/tmp/start.sh && \
+  echo 'set -e' >> /var/tmp/start.sh && \
+  echo 'export PGBOUNCER_DEFAULT_POOL_SIZE=${CONNECTION_POOLER_DEFAULT_SIZE:-15}' >> /var/tmp/start.sh && \
+  echo 'export PGBOUNCER_MAX_CLIENT_CONN=${CONNECTION_POOLER_MAX_CLIENT_CONN:-10000}' >> /var/tmp/start.sh && \
+  echo 'export PGBOUNCER_MAX_DB_CONNECTIONS=${CONNECTION_POOLER_MAX_DB_CONN:-30}' >> /var/tmp/start.sh && \
+  echo 'export PGBOUNCER_MIN_POOL_SIZE=${CONNECTION_POOLER_MIN_SIZE:-7}' >> /var/tmp/start.sh && \
+  echo 'export PGBOUNCER_POOL_MODE=${CONNECTION_POOLER_MODE:-transaction}' >> /var/tmp/start.sh && \
+  echo 'export PGBOUNCER_PORT=${CONNECTION_POOLER_PORT:-5432}' >> /var/tmp/start.sh && \
+  echo 'export PGBOUNCER_RESERVE_POOL_SIZE=${CONNECTION_POOLER_RESERVE_SIZE:-7}' >> /var/tmp/start.sh && \
+  echo 'export POSTGRESQL_HOST=${PGHOST:-the-cluster}' >> /var/tmp/start.sh && \
+  echo 'export POSTGRESQL_PORT=${PGPORT:-5432}' >> /var/tmp/start.sh && \
+  echo 'export POSTGRESQL_USERNAME=${PGUSER}' >> /var/tmp/start.sh && \
+  echo 'export POSTGRESQL_PASSWORD=${PGPASSWORD}' >> /var/tmp/start.sh && \
+  echo 'export PGBOUNCER_LISTEN_ADDRESS=0.0.0.0' >> /var/tmp/start.sh && \
+  echo 'export PGBOUNCER_AUTH_TYPE=scram-sha-256' >> /var/tmp/start.sh && \
+  echo 'export PGBOUNCER_LOG_FILE=/opt/bitnami/pgbouncer/logs/pgbouncer.log' >> /var/tmp/start.sh && \
+  echo 'echo Image build time: ${BUILD_TIME}' >> /var/tmp/start.sh &&  \
+  echo '/opt/bitnami/scripts/pgbouncer/entrypoint.sh "$@"' >> /var/tmp/start.sh && \
+  chmod +x /var/tmp/start.sh
 
 # Expose the PgBouncer port (default is 5432)
 EXPOSE 5432
 
-# Run PgBouncer with the appropriate configuration file
-CMD ["pgbouncer", "/opt/bitnami/pgbouncer/conf/pgbouncer.ini"]
+USER 0
+
+RUN chown 100 /var/tmp/start.sh
+RUN chown 100 /opt/bitnami/pgbouncer/conf/
+USER 100
+
+# Set the new entrypoint to use the script
+ENTRYPOINT [ "/var/tmp/start.sh" ]
+CMD [ "/opt/bitnami/scripts/pgbouncer/run.sh" ]
+
+
+# ENTRYPOINT [ "/opt/bitnami/scripts/pgbouncer/entrypoint.sh" ]
+# CMD [ "/opt/bitnami/scripts/pgbouncer/run.sh" ]
 
 
 # docker buildx build \
 #   --platform linux/amd64,linux/arm64 \
 #   --push \
 #   --tag ghcr.io/coollision/bitnami-pgbouncer:latest \
-#   --progress=plain \
 #   .        

@@ -1,7 +1,7 @@
 postgres-operator:
   fullnameOverride: postgres-operator
   configConnectionPooler:
-    connection_pooler_image: "ghcr.io/coollision/bitnami-pgbouncer:latest"
+    # connection_pooler_image: "ghcr.io/coollision/bitnami-pgbouncer:latest"
 
 postgres-operator-ui:
   enabled: false
