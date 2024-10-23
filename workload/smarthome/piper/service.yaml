@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: piper
+  name: piper
+  namespace: smarthome
+spec:
+  ports:
+  - name: piper-port
+    port: 10200
+    targetPort: piper-port
+  selector:
+    app: piper
+  type: ClusterIP

@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: openwakeword
+  namespace: smarthome
+spec:
+  serviceName: openwakeword
+  selector:
+    matchLabels:
+      app: openwakeword
+  template:
+    metadata:
+      labels:
+        app: openwakeword
+    spec:
+      containers:
+        - name: openwakeword
+          image: rhasspy/wyoming-openwakeword:1.10.0
+          args:
+            - --preload-model
+            - hey_jarvis
+          env:
+          - name: TZ
+            value: Europe/Brussels
+          resources: {}
+          ports:
+            - containerPort: 10400
+              name: openwakeword
+              protocol: TCP
+          volumeMounts:
+            - name: openwakeword-data
+              mountPath: /data
+      volumes:
+          - name: openwakeword-data
+            persistentVolumeClaim:
+              claimName: openwakeword-data
