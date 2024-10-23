@@ -8,10 +8,10 @@ metadata:
   labels:
     {{- include "helm.labels" . | nindent 4 }}
   annotations:
-    {{ if .Values.syncWave }}
+    {{- if .Values.syncWave }}
     argocd.argoproj.io/sync-wave: {{ .Values.syncWave | default 0 | quote }}
     {{- end }}
-    {{- if .Values.keel.enabled -}}
+    {{- if .Values.keel -}}
     {{- if eq .Values.keel.policy "force" }}
     keel.sh/match-tag: "true"
     {{- end }}

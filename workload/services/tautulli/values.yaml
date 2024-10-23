@@ -29,6 +29,5 @@ probes:
 
 
 keel:
-  enabled: true
   policy: force
   pollSchedule: "@midnight"
