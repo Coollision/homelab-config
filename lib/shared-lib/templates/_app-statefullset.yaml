@@ -19,7 +19,6 @@ metadata:
     keel.sh/pollSchedule: "@every 1m"
     keel.sh/trigger: poll
     {{- end }}
-    {{- end }}
 spec:
   serviceName: {{ include "helm.fullname" . }}
   replicas: {{ .Values.replicaCount | default "1" }}
