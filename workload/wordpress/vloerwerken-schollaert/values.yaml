@@ -3,7 +3,7 @@ wordpress:
   deployment:
     image:
       repository: wordpress
-      tag: 6.6.2
+      tag: 6.6.2@sha256:808d11c13cd0dec746a737e5f717a6b43f470ef197452657df1e71a163e6979e
     ports:
       wordpress: 80
   config:
@@ -40,7 +40,7 @@ mysql:
   deployment:
     image:
       repository: yobasystems/alpine-mariadb
-      tag: 10.11.8
+      tag: 10.11.8@sha256:0540029cd12d45bb93157e625d39446591e3f98a7029be83084074559f132416
     ports:
       mysql: 3306
   config:

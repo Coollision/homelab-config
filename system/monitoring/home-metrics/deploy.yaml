@@ -14,7 +14,7 @@ spec:
         app: snmp-exporter
     spec:
       containers:
-      - image: prom/snmp-exporter:v0.22.0
+      - image: prom/snmp-exporter:v0.22.0@sha256:207476129b73d81c4fd29548966c73267a276eaec700614a3d4d480bdacc2f8f
         name: snmp-exporter
         args:
           - '--config.file=/etc/snmp_exporter/snmp.yml'

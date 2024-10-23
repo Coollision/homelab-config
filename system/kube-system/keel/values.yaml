@@ -1,7 +1,7 @@
 keel:
   image:
     repository: fardjad/keel
-    tag: latest
+    tag: latest@sha256:22950b5254b03ba7224990be0dcf31f772cb22b597cb277061def47ece69842e
   basicauth:
     enabled: false
     user: <secret:kv/kube-system/keel~user>
