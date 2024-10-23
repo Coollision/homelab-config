@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mosquitto-configmap
+  labels:
+    name: mosquitto-configmap
+  namespace: smarthome
+data:
+  mosquitto.conf: |
+    listener 1883
+    # allow_anonymous true
+    persistence true
+    persistence_location /mosquitto/data
+    autosave_interval 1800
+    # log_dest file /mosquitto/logs/mosquitto.log 
+    password_file /mosquitto/creds/credentials
+
+
+  credential1: <secret:kv/data/smarthome/mosquito~credential1>
+  credential2: <secret:kv/data/smarthome/mosquito~credential2>
+  credential3: <secret:kv/data/smarthome/mosquito~credential3>
+  credential4: <secret:kv/data/smarthome/mosquito~credential4>
+  credential5: <secret:kv/data/smarthome/mosquito~credential5>
+  credential6: <secret:kv/data/smarthome/mosquito~credential6>

@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mosquitto
+  namespace: smarthome
+spec:
+  serviceName: mosquitto
+  selector:
+    matchLabels:
+      app: mosquitto
+  template:
+    metadata:
+      labels:
+        app: mosquitto
+    spec:
+      initContainers:
+      - name: mosquitto-init
+        image: eclipse-mosquitto:2.0.20-openssl
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+            echo "$(cat /mosquitto/config/credential1)" >> /mosquitto/creds/credentials &&
+            echo "$(cat /mosquitto/config/credential2)" >> /mosquitto/creds/credentials &&
+            echo "$(cat /mosquitto/config/credential3)" >> /mosquitto/creds/credentials &&
+            echo "$(cat /mosquitto/config/credential4)" >> /mosquitto/creds/credentials &&
+            echo "$(cat /mosquitto/config/credential5)" >> /mosquitto/creds/credentials &&
+            echo "$(cat /mosquitto/config/credential6)" >> /mosquitto/creds/credentials &&
+            chmod 0700 /mosquitto/creds/credentials &&
+            mosquitto_passwd -U /mosquitto/creds/credentials
+        volumeMounts:
+          - name: mosquitto-configmap
+            mountPath: /mosquitto/config
+          - name: mosquitto-creds
+            mountPath: /mosquitto/creds
+      containers:
+      - name: mosquitto
+        image: eclipse-mosquitto:openssl
+        env:
+        - name: TZ
+          value: Europe/Brussels
+        resources: {}
+        ports:
+          - containerPort: 1883
+            name: mqtt
+            protocol: TCP
+        volumeMounts:
+          - name: mosquitto-data
+            mountPath: /mosquitto/data
+          - name: mosquitto-config
+            mountPath: /mosquitto/config
+          - name: mosquitto-creds
+            mountPath: /mosquitto/creds
+      volumes:
+        - name: mosquitto-creds
+          emptyDir: {}
+        - name: mosquitto-data
+          persistentVolumeClaim:
+            claimName: mosquitto-data
+        - name: mosquitto-configmap
+          configMap:
+            name: mosquitto-configmap
+        - name: mosquitto-config
+          configMap:
+            name: mosquitto-configmap
+            items:
+            - key: mosquitto.conf
+              path: mosquitto.conf
