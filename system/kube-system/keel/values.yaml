@@ -7,6 +7,11 @@ keel:
     user: <secret:kv/data/kube-system/keel~user>
     password: <secret:kv/data/kube-system/keel~password>
 
+  dockerRegistry:
+    enabled: true
+    name: "keel-pull-secrets"
+    key: ".dockerconfigjson"
+
   service:
     enabled: true
     type: ClusterIP
