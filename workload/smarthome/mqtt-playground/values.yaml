@@ -10,4 +10,8 @@ config:
   MQTT_BROKERUSER: <secret:kv/data/smarthome/mqtt-go-playground~BrokerUser>
   MQTT_BROKERPASSWORD: <secret:kv/data/smarthome/mqtt-go-playground~BrokerPassword>
 
+keel:
+  enabled: true
+  policy: force
+
 disableService: true
