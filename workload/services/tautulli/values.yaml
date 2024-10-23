@@ -2,7 +2,7 @@ fullnameOverride: tautulli
 statefullset:
   image:
     repository: linuxserver/tautulli
-    tag: version-v2.14.5
+    tag: latest
   ports:
     web: 8181
 config:
@@ -26,3 +26,9 @@ probes:
       port: web
     initialDelaySeconds: 30
     periodSeconds: 10 
+
+
+keel:
+  enabled: true
+  policy: force
+  pollSchedule: "@midnight"
