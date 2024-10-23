@@ -1,5 +1,5 @@
 fullnameOverride: mqtt-playground
-deployment:
+statefullset:
   image:
     repository: ghcr.io/coollision/mqtt-go-playground
     tag: latest
@@ -11,7 +11,6 @@ config:
   MQTT_BROKERPASSWORD: <secret:kv/data/smarthome/mqtt-go-playground~BrokerPassword>
 
 keel:
-  enabled: true
   policy: force
 
 disableService: true
