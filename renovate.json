@@ -1,7 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended",
+    "config:best-practices",
     ":timezone(Europe/Brussels)",
     ":prHourlyLimitNone",
     ":rebaseStalePrs"
@@ -11,13 +11,6 @@
     "ignorePaths": ["lib/**"]
   },
   "packageRules": [
-    {
-      "matchPackageNames": ["ghcr.io/coollision/mqtt-go-playground"],
-      "updateTypes": ["digest"],
-      "matchPaths": ["workload/smarthome/mqtt-playground/values.yaml"],
-      "automerge": true,
-      "automergeType": "branch"
-    },
     {
       "matchUpdateTypes": ["patch"],
       "automerge": true,
