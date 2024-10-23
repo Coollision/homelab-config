@@ -12,6 +12,13 @@
   },
   "packageRules": [
     {
+      "matchPackageNames": ["ghcr.io/coollision/mqtt-go-playground"],
+      "updateTypes": ["digest"],
+      "matchPaths": ["workload/smarthome/mqtt-playground/values.yaml"],
+      "automerge": true,
+      "automergeType": "branch"
+    },
+    {
       "matchUpdateTypes": ["patch"],
       "automerge": true,
       "automergeType": "branch",
@@ -19,7 +26,5 @@
       "ignoreTests": true
     }
   ],
-  "schedule": [
-    "* 19-22 * * *"
-  ]
+  "schedule": ["* 19-22 * * *"]
 }

@@ -3,6 +3,7 @@ deployment:
   image:
     repository: ghcr.io/coollision/mqtt-go-playground
     tag: latest
+    digest: "dafbfc60af80e23eafda74af20feecf2b06a61b7a116a8878647fe25e19cf26c"
 config:
   LOGLEVEL: INFO
   MQTT_BROKERADDRESS: <secret:kv/data/smarthome/mqtt-go-playground~BrokerAddress>
