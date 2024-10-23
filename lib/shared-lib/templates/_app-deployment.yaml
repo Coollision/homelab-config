@@ -12,14 +12,12 @@ metadata:
     argocd.argoproj.io/sync-wave: {{ .Values.syncWave | default 0 | quote }}
     {{- end }}
     {{- if .Values.keel.enabled -}}
-    {{- if .Values.keel.enabled -}}
     {{- if eq .Values.keel.policy "force" }}
     keel.sh/match-tag: "true"
     {{- end }}
     keel.sh/policy: {{ .Values.keel.policy }}
     keel.sh/pollSchedule: "@every 1m"
     keel.sh/trigger: poll
-    {{- end }}
     {{- end }}
 spec:
   replicas: {{ .Values.replicaCount | default "1" }}
