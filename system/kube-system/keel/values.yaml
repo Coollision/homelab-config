@@ -3,9 +3,9 @@ keel:
     repository: fardjad/keel
     tag: latest
   basicauth:
-    enabled: false
-    user: <secret:kv/kube-system/keel~user>
-    password: <secret:kv/kube-system/keel~password>
+    enabled: true
+    user: <secret:kv/data/kube-system/keel~user>
+    password: <secret:kv/data/kube-system/keel~password>
 
   service:
     enabled: true
