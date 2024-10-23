@@ -1,7 +1,9 @@
 {{- define "shared-lib.image" -}}
   {{- $config := .Values.deployment | default .Values.statefullset -}}
   {{- $i := $config.image -}}
-  {{- if contains ":" $i.repository -}}
+  {{- if $i.digest -}}
+    {{- printf "%s@sha256:%s" $i.repository $i.digest -}}
+  {{- else if contains ":" $i.repository -}}
     {{- printf "%s" $i.repository -}}
   {{- else -}}
     {{- printf "%s:%s" $i.repository (default "latest" $i.tag) -}}
