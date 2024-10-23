@@ -1,0 +1,9 @@
+keel:
+  basicauth:
+    enabled: false
+    user: <secret:kv/kube-system/keel~user>
+    password: <secret:kv/kube-system/keel~password>
+
+  service:
+    enabled: true
+    type: ClusterIP
