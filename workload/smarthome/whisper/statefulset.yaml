@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: whisper
+  namespace: smarthome
+spec:
+  serviceName: whisper
+  selector:
+    matchLabels:
+      app: whisper
+  template:
+    metadata:
+      labels:
+        app: whisper
+    spec:
+      containers:
+        - name: whisper
+          image: rhasspy/wyoming-whisper:2.2.0
+          args:
+          # https://github.com/rhasspy/wyoming-faster-whisper/blob/master/wyoming_faster_whisper/__main__.py
+            - --data-dir
+            - /data
+            - --download-dir
+            - /download
+            - --language
+            - nl
+            - --model
+            - tiny-int8
+            - --beam-size
+            - "8"
+            - --compute-type
+            - int8
+            - --device
+            - cpu
+            - --debug
+
+          env:
+          - name: TZ
+            value: Europe/Brussels
+          resources: {}
+          ports:
+            - containerPort: 10300
+              name: whisper
+              protocol: TCP
+          volumeMounts:
+            - name: whisper-data
+              mountPath: /data
+            - name: whisper-download
+              mountPath: /download
+      volumes:
+          - name: whisper-data
+            persistentVolumeClaim:
+              claimName: whisper-data
+          - name: whisper-download
+            persistentVolumeClaim:
+              claimName: whisper-download
