@@ -16,7 +16,7 @@ metadata:
     keel.sh/match-tag: "true"
     {{- end }}
     keel.sh/policy: {{ .Values.keel.policy }}
-    keel.sh/pollSchedule: "@every 1m"
+    keel.sh/pollSchedule: {{ .Values.keel.pollSchedule | default "@every 1m" | quote }}
     keel.sh/trigger: poll
     {{- end }}
 spec:
