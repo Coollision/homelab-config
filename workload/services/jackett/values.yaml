@@ -2,7 +2,7 @@ fullnameOverride: jackett
 deployment:
   image:
     repository: linuxserver/jackett
-    tag: 0.22.825
+    tag: 0.22.832
   ports:
     web: 9117
 config:
