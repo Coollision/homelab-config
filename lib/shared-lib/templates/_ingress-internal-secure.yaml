@@ -15,7 +15,10 @@ spec:
     - websecure
   routes:
   - kind: Rule
-    match: Host(`{{ .Values.ingress_internal_secure.host }}`)
+    match: Host(`{{ .Values.ingress_internal_secure.host }}`) 
+           {{- if .Values.ingress_internal_secure.additionalRules }}
+           && {{ .Values.ingress_internal_secure.additionalRules }}
+           {{- end }}
     services:
     - kind: Service
       name: {{ include "helm.fullname" . }}-service

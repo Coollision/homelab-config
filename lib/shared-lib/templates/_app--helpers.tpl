@@ -10,6 +10,12 @@
   {{- end -}}
 {{- end -}}
 
+{{- define "shared-lib.imagePullPolicy" -}}
+{{- $config := .Values.deployment | default .Values.statefullset -}}
+{{- $i := $config.image -}}
+{{- $i.imagePullPolicy | default "IfNotPresent" | quote -}}
+{{- end -}}
+
 {{- define "shared-lib.env" -}}
 {{- if .Values.config }}
 env:

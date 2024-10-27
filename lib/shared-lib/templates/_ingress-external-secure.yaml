@@ -17,6 +17,9 @@ spec:
   routes:
   - kind: Rule
     match: Host(`{{ .Values.ingress_external_secure.host }}`)
+           {{- if .Values.ingress_external_secure.additionalRules }}
+           && {{ .Values.ingress_external_secure.additionalRules }}
+           {{- end }}
     services:
     - kind: Service
       name: {{ include "helm.fullname" . }}-service
