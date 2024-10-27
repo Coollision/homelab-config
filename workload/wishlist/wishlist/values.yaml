@@ -1,0 +1,88 @@
+wishlistdb:
+  syncWave: -10
+  fullnameOverride: wishlist-db
+  deployment:
+    image:
+      repository: postgres
+      tag: "17"
+    ports:
+      postgres: 5432
+  config:
+    POSTGRES_USER: <secret:kv/data/wishlist/wishlist~db-user>
+    POSTGRES_PASSWORD: <secret:kv/data/wishlist/wishlist~db-password>
+    POSTGRES_DB: <secret:kv/data/wishlist/wishlist~db-name>
+  storage:
+    - mountPath: /var/lib/postgresql/data
+      storagePath: wishlist-db/
+      size: 10Gi
+      type: nfs-client
+  probes:
+    livenessProbe:
+      exec:
+        command:
+        - pg_isready
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readinessProbe:
+      exec:
+        command:
+        - pg_isready
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+  resources: 
+    requests:
+      memory: "500Mi"
+      cpu: "500m"
+    limits:
+      memory: "700Mi"
+      cpu: "1000m"
+  labels:
+    app.kubernetes.io/component: wishlist-db
+
+wishlist:
+  fullnameOverride: wishlist
+  deployment:
+    image:
+      repository: ghcr.io/coollision/wishlist
+      tag: master
+      imagePullPolicy: Always
+    ports:
+      web: 4000
+  config:
+    TZ: Europe/Brussels
+    LOGLEVEL: TRACE
+
+    DB_HOST: wishlist-db-service
+    DB_PORT: 5432
+    DB_USER: <secret:kv/data/wishlist/wishlist~db-user>
+    DB_PASSWORD: <secret:kv/data/wishlist/wishlist~db-password>
+    DB_NAME: <secret:kv/data/wishlist/wishlist~db-name>
+
+    API_PORT: 4000
+
+    STRIPE_SECRETKEY: <secret:kv/data/wishlist/wishlist~stripe_secret_key>
+    STRIPE_PUBLICKEY: <secret:kv/data/wishlist/wishlist~stripe_public_key>
+    STRIPE_WEBHOOKSECRET: <secret:kv/data/wishlist/wishlist~stripe_webhook_secret>
+
+  ingress_internal_secure:
+    host: wishlist.<secret:kv/data/domains~domain>
+    port: web
+  ingress_external_secure:
+    host: wishlist.<secret:kv/data/domains~domain>
+    additionalRules: Path(`/api/stripe/confirmPayment`)
+    port: web
+  probes:
+    liveness:
+      httpGet:
+        path: /
+        port: web
+      initialDelaySeconds: 30
+      periodSeconds: 10 
+  labels:
+    app.kubernetes.io/component: wishlist
+  keel:
+    policy: force

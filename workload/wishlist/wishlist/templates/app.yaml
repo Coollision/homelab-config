@@ -1,0 +1,9 @@
+{{ $wishlistdbv := deepCopy . }}
+{{ $_ := unset $wishlistdbv ".Values" }}
+{{ $_ := set $wishlistdbv  "Values" .Values.wishlistdb }}
+{{ include "shared-lib.all" $wishlistdbv }}
+
+{{ $wishlistv := deepCopy . }}
+{{ $_ := unset $wishlistv ".Values" }}
+{{ $_ := set $wishlistv  "Values" .Values.wishlist }}
+{{ include "shared-lib.all" $wishlistv }}

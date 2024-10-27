@@ -2,6 +2,7 @@
 {{- $root := . -}}
 name: {{ .Chart.Name }}
 image: {{ include "shared-lib.image" . }}
+imagePullPolicy: {{ include "shared-lib.imagePullPolicy" . }}
 {{- include "shared-lib.env" . -}}
 {{- if .Values.resources }}
 resources:
