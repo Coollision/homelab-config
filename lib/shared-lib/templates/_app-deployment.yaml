@@ -21,6 +21,7 @@ metadata:
     {{- end }}
 spec:
   replicas: {{ .Values.replicaCount | default "1" }}
+  revisionHistoryLimit: 3
   selector:
     matchLabels:
       {{- include "helm.selectorLabels" . | nindent 6 }}
