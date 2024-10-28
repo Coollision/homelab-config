@@ -63,6 +63,7 @@ wishlist:
     DB_NAME: <secret:kv/data/wishlist/wishlist~db-name>
 
     API_PORT: 4000
+    GIN_MODE: release
 
     STRIPE_SECRETKEY: <secret:kv/data/wishlist/wishlist~stripe_secret_key>
     STRIPE_PUBLICKEY: <secret:kv/data/wishlist/wishlist~stripe_public_key>
@@ -78,7 +79,7 @@ wishlist:
   probes:
     liveness:
       httpGet:
-        path: /
+        path: /health
         port: web
       initialDelaySeconds: 30
       periodSeconds: 10 
