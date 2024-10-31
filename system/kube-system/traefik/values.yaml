@@ -16,6 +16,8 @@ traefik:
     prometheus.io/scrape: "true"
 
   providers:
+    kubernetesCRD:
+      enabled: true
     kubernetesIngress:
       publishedService:
         enabled: true
