@@ -2,7 +2,7 @@
 {{- $promStack := merge (deepCopy .) (dict "Values" (deepCopy .Values.promstack))  }}
 {{- $serviceName := printf "%s-%s" (include "kube-prometheus-stack.fullname" $promStack ) "prometheus" }}
 {{- $host := .Values.promstack.prometheus.prometheusSpec.externalUrl | trimPrefix `https://` | trimPrefix `http://` | trimSuffix `/` }}
-apiVersion: traefik.containo.us/v1alpha1
+apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: {{ $serviceName }}
