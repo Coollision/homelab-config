@@ -10,10 +10,22 @@ traefik:
     websecure:
       tls:
         enabled: true
-    
+
+  ingressRoute:
+    dashboard:
+      enabled: true
+      matchRule: Host(`traefik.<secret:kv/data/domains~local>`) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))
+      entryPoints:
+        - web
+
   podAnnotations:
     prometheus.io/port: "8082"
     prometheus.io/scrape: "true"
+
+  service:
+    spec:
+      externalTrafficPolicy: Local
+      loadBalancerIP: <secret:kv/data/kube-system/traefik~ip>
 
   providers:
     kubernetesCRD:
@@ -33,10 +45,7 @@ traefik:
     operator: "Exists"
     effect: "NoSchedule"
 
-  service:
-    spec:
-      externalTrafficPolicy: Local
-      loadBalancerIP: <secret:kv/data/kube-system/traefik~ip>
+ 
 
   additionalArguments:
     - '--entryPoints.web.forwardedHeaders.trustedIPs=<secret:kv/data/kube-system/traefik~trusted-ips>'
@@ -46,4 +55,4 @@ traefik:
     replicas: 2
 
     metrics:
-      prometheus:{}
+      prometheus: {}
