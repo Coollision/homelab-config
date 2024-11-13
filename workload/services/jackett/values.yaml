@@ -2,7 +2,7 @@ fullnameOverride: jackett
 deployment:
   image:
     repository: linuxserver/jackett
-    tag: 0.22.907
+    tag: latest
   ports:
     web: 9117
 config:
@@ -24,4 +24,7 @@ probes:
     tcpSocket:
       port: web
     initialDelaySeconds: 30
-    periodSeconds: 10 
+    periodSeconds: 10
+keel:
+  policy: force
+  pollSchedule: "@midnight"
