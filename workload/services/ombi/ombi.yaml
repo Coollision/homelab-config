@@ -1,0 +1,157 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ombi-config
+  namespace: services
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+  storageClassName: ""
+  volumeName: ombi-config
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  namespace: services
+  name: ombi-config
+  labels:
+    type: local
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  iscsi:
+    targetPortal: "<secret:kv/data/storage/iscsi~target-portal>"
+    iqn: <secret:kv/data/storage/iscsi~ombi-iqn>
+    initiatorName: <secret:kv/data/storage/iscsi~ombi-initiator>
+    lun: 1
+    fsType: 'ext4'
+    readOnly: false
+    chapAuthDiscovery: true
+    chapAuthSession: true
+    secretRef:
+      name: chap-secret
+      namespace: default
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ombi
+  namespace: services
+spec:
+  serviceName: ombi
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ombi
+      name: ombi
+  template:
+    metadata:
+      labels:
+        app: ombi
+        name: ombi
+    spec:
+      containers:
+      - image: linuxserver/ombi:4.44.1
+        name: ombi
+        imagePullPolicy: Always
+        env:
+        - name: TZ
+          value: Europe/Brussels
+        - name: PUID
+          value: "1000"
+        - name: PGID
+          value: "1000"
+        ports:
+          - containerPort: 3579
+            name: web
+            protocol: TCP
+        resources: {}
+        volumeMounts:
+        - mountPath: /config
+          name: ombi-config
+      securityContext:
+        fsGroup: 1000
+      volumes:
+        - name: ombi-config
+          persistentVolumeClaim:
+            claimName: ombi-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: ombi
+  name: ombi-web
+  namespace: services
+spec:
+  ports:
+  - name: web
+    port: 3579
+    targetPort: web
+  selector:
+    name: ombi
+    app: ombi
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: ombi-ingress
+  namespace: services
+spec:
+  entryPoints: 
+    - web
+  routes:
+  - kind: Rule
+    match: Host(`ombi.<secret:kv/data/domains~local>`)
+    priority: 0
+    services:
+    - kind: Service
+      name: ombi-web
+      namespace: services
+      port: 3579
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: ombi-ingress-secure
+  namespace: services
+spec:
+  entryPoints: 
+    - websecure 
+  routes:
+  - kind: Rule
+    match: host(`ombi.<secret:kv/data/domains~domain>`)
+    priority: 0
+    services:
+    - kind: Service
+      name: ombi-web
+      namespace: services
+      port: 3579
+  tls: {}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: ombi-ingress-secure-external
+  namespace: services
+  annotations:
+    kubernetes.io/ingress.class: traefik-external
+spec:
+  entryPoints: 
+    - websecure  
+  routes:
+  - kind: Rule
+    match: host(`ombi.<secret:kv/data/domains~domain>`)
+    priority: 0
+    services:
+    - kind: Service
+      name: ombi-web
+      namespace: services
+      port: 3579
+  tls: {}
