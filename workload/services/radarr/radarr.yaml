@@ -1,0 +1,188 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: radarr-config
+  namespace: services
+  annotations:
+    nfs.io/storage-path: "radarr/config"
+spec:
+  storageClassName: nfs-client
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 8Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: radarr
+  namespace: services
+spec:
+  replicas: 1
+  serviceName: radarr
+  selector:
+    matchLabels:
+      app: radarr
+      name: radarr
+  template:
+    metadata:
+      labels:
+        app: radarr
+        name: radarr
+    spec:
+      initContainers:
+        - name: radarr-init
+          image: alpine
+          command: 
+            - "/bin/sh"
+            - "-c"
+            - cp /init/script.sh /tmp && chmod +x /tmp/script.sh && /tmp/script.sh
+          resources: {}
+          env:
+            - name: CONFIG_FILE
+              value: "../config/config.xml"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: services-db
+                  key: radarr_user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: services-db
+                  key: radarr_password
+            - name: POSTGRES_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: service-db
+                  key: host
+            - name: POSTGRES_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: service-db
+                  key: port
+            - name: POSTGRES_MAIN_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: service-db
+                  key: radarr_database
+            - name: POSTGRES_LOG_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: service-db
+                  key: radarr_database_logs
+          volumeMounts:
+            - mountPath: /init
+              name: arr-init-script
+            - mountPath: /config
+              name: radarr-config
+      containers:
+        - image: linuxserver/radarr:5.15.1
+          name: radarr
+          imagePullPolicy: Always
+          env:
+            - name: TZ
+              value: Europe/Brussels
+            - name: PUID
+              value: "1000"
+            - name: PGID
+              value: "1000"
+          ports:
+            - containerPort: 7878
+              name: web
+              protocol: TCP
+          resources: 
+            requests:
+              memory: 400Mi
+              cpu: 200m
+            limits:
+              memory: 700Mi
+              cpu: 500m
+          readinessProbe:
+            httpGet:
+              port: 7878
+              path: /ping
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              port: 7878
+              path: /ping
+            initialDelaySeconds: 20
+          volumeMounts:
+            - name: radarr-config
+              mountPath: /config
+            - name: radarr-downloads
+              mountPath: /data/downloads
+            - name: radarr-videos
+              mountPath: /data/videos
+      volumes:
+        - name: arr-init-script
+          configMap:
+            name: arr-init-script
+        - name: radarr-config
+          persistentVolumeClaim:
+            claimName: radarr-config
+        - name: radarr-downloads
+          persistentVolumeClaim:
+            claimName: services-downloads
+        - name: radarr-videos
+          persistentVolumeClaim:
+            claimName: services-video
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: radarr
+  name: radarr-web
+  namespace: services
+spec:
+  ports:
+    - name: web
+      port: 7878
+      targetPort: web
+  selector:
+    name: radarr
+    app: radarr
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: radarr-ingress
+  namespace: services
+spec:
+  entryPoints: 
+    - web
+  routes:
+    - kind: Rule
+      match: Host(`radarr.<secret:kv/data/domains~local>`)
+      priority: 0
+      services:
+        - kind: Service
+          name: radarr-web
+          namespace: services
+          port: 7878
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: radarr-ingress-secure
+  namespace: services
+spec:
+  entryPoints: 
+    - websecure 
+  routes:
+    - kind: Rule
+      match: host(`radarr.<secret:kv/data/domains~domain>`)
+      priority: 0
+      services:
+        - kind: Service
+          name: radarr-web
+          namespace: services
+          port: 7878
+  tls: {}
+
+# pgloader --with "quote identifiers" --with "data only" --with "prefetch rows = 100" --with "batch size = 1MB" radarr.db 'postgresql://user:password@postgres-deployment-postgresql-hl/radarr_main'
+# pgloader --with "quote identifiers" --with "data only" --with "prefetch rows = 100" --with "batch size = 1MB" log.db 'postgresql://user:password@postgres-deployment-postgresql-hl/radarr_log'

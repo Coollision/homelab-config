@@ -1,0 +1,42 @@
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: services
+spec:
+  storageClassName: nfs-client-name-path
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: postgres-deployment
+spec:
+  repo: https://charts.bitnami.com/bitnami
+  chart: postgresql
+  targetNamespace: services
+  set:
+    image.tag: 14
+  valuesContent: |-
+    global:
+      postgresql:
+        auth:
+          postgresPassword: <secret:kv/data/services~db_root-pass>
+    primary:
+      persistence:
+        existingClaim: postgres-pvc
+      resources:
+        limits:
+          cpu: 200m
+          ephemeral-storage: 1Gi
+          memory: 192Mi
+        requests:
+          cpu: 150m
+          ephemeral-storage: 50Mi
+          memory: 128Mi
+---

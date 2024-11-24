@@ -1,0 +1,47 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: arr-init-script
+  namespace: services
+data:
+  script.sh: |
+    #!/bin/sh
+
+    echo "Hello, World!, I am the init script for arr services"
+    apk add xmlstarlet
+    filename="${CONFIG_FILE:-config.xml}"
+
+    echo "Using filename: $filename"
+
+    # Check if all required environment variables are set
+    if [ -z "$POSTGRES_USER" ] || [ -z "$POSTGRES_PASSWORD" ] || [ -z "$POSTGRES_PORT" ] || [ -z "$POSTGRES_HOST" ] || [ -z "$POSTGRES_MAIN_DB" ] || [ -z "$POSTGRES_LOG_DB" ]; then
+        echo "Error: One or more required environment variables are not set."
+        exit 1
+    fi
+
+    # Verify XML file exists
+    if [ ! -f "$filename" ]; then
+        echo "Error: XML file '$filename' not found."
+        exit 1
+    fi
+
+    PostgresUser="$POSTGRES_USER"
+    PostgresPassword="$POSTGRES_PASSWORD"
+    PostgresPort="$POSTGRES_PORT"
+    PostgresHost="$POSTGRES_HOST"
+    PostgresMainDb="$POSTGRES_MAIN_DB"
+    PostgresLogDb="$POSTGRES_LOG_DB"
+
+    # Update existing values or add new ones
+    for key in PostgresUser PostgresPassword PostgresPort PostgresHost PostgresMainDb PostgresLogDb; do
+        value=$(eval echo "\$$key")
+        echo "Updating $key with value: $value"
+        if xmlstarlet sel -Q -t -c "/Config/$key" "$filename" > /dev/null 2>&1; then
+            xmlstarlet ed -L -u "/Config/$key" -v "$value" "$filename"
+        else
+            xmlstarlet ed -L -s "/Config" -t elem -n "$key" -v "$value" "$filename"
+        fi
+    done
+
+    echo "Script completed successfully."

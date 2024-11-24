@@ -1,0 +1,176 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: bazarr-config
+  namespace: services
+  annotations:
+    nfs.io/storage-path: "bazarr/config"
+spec:
+  storageClassName: nfs-client
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 8Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: bazarr
+  namespace: services
+spec:
+  serviceName: bazarr
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bazarr
+      name: bazarr
+  template:
+    metadata:
+      labels:
+        app: bazarr
+        name: bazarr
+    spec:
+      containers:
+        - image: linuxserver/bazarr:1.4.6-development
+          imagePullPolicy: Always
+          name: bazarr
+          env:
+            - name: TZ
+              value: Europe/Brussels
+            - name: PUID
+              value: "1000"
+            - name: PGID
+              value: "1000"
+            - name: POSTGRES_ENABLED
+              value: "true"
+            - name: POSTGRES_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: service-db
+                  key: host
+            - name: POSTGRES_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: service-db
+                  key: port
+            - name: POSTGRES_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: service-db
+                  key: bazarr_database  
+            - name: POSTGRES_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: services-db
+                  key: bazarr_user  
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: services-db
+                  key: bazarr_password
+          ports:
+            - containerPort: 6767
+              name: web
+              protocol: TCP
+          resources: 
+            requests:
+              memory: 500Mi
+              cpu: 400m
+            limits:
+              memory: 700Mi
+              cpu: 800m
+          volumeMounts:
+            - mountPath: /config
+              name: bazarr-config
+            - mountPath: /data/series
+              name: bazarr-series
+            - mountPath: /data/videos
+              name: bazarr-videos
+          readinessProbe:
+            httpGet:
+              port: 6767
+              path: /api/system/status
+              httpHeaders:
+                - name: "x-api-key"
+                  value: "<secret:kv/data/services~bazarr_api-key>"
+            initialDelaySeconds: 60
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              port: 6767
+              path: /api/system/status
+              httpHeaders:
+                - name: "x-api-key"
+                  value: "<secret:kv/data/services~bazarr_api-key>"
+            initialDelaySeconds: 60
+            periodSeconds: 10
+      securityContext:
+        fsGroup: 1000
+      volumes:
+        - name: bazarr-config
+          persistentVolumeClaim:
+            claimName: bazarr-config
+        - name: bazarr-videos
+          persistentVolumeClaim:
+            claimName: services-video
+        - name: bazarr-series
+          persistentVolumeClaim:
+            claimName: services-series
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: bazarr
+  name: bazarr-web
+  namespace: services
+spec:
+  ports:
+    - name: web
+      port: 6767
+      targetPort: web
+  selector:
+    name: bazarr
+    app: bazarr
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: bazarr-ingress
+  namespace: services
+spec:
+  entryPoints:
+    - web
+  routes:
+    - kind: Rule
+      match: Host(`bazarr.<secret:kv/data/domains~local>`)
+      priority: 0
+      services:
+        - kind: Service
+          name: bazarr-web
+          namespace: services
+          port: 6767
+
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: bazarr-ingress-secure
+  namespace: services
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: host(`bazarr.<secret:kv/data/domains~domain>`)
+      priority: 0
+      services:
+        - kind: Service
+          name: bazarr-web
+          namespace: services
+          port: 6767
+  tls: {}
+
+
+# pgloader --with "quote identifiers" --with "data only" --cast "column table_blacklist.timestamp to timestamp" --cast "column table_blacklist_movie.timestamp to timestamp" --cast "column table_history.timestamp to timestamp" --cast "column table_history_movie.timestamp to timestamp" bazarr.db "postgresql://user:assword@postgres-deployment-postgresql-hl:5432/bazarr_main"
