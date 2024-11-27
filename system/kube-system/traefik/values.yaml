@@ -18,10 +18,6 @@ traefik:
       entryPoints:
         - web
 
-  podAnnotations:
-    prometheus.io/port: "8082"
-    prometheus.io/scrape: "true"
-
   service:
     spec:
       externalTrafficPolicy: Local
@@ -54,5 +50,5 @@ traefik:
   deployment:
     replicas: 2
 
-    metrics:
-      prometheus: {}
+  metrics:
+    prometheus: {}

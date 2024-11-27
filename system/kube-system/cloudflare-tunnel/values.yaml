@@ -13,10 +13,6 @@ traefik:
     websecure:
       tls:
         enabled: true
-      
-  podAnnotations:
-    prometheus.io/port: "8082"
-    prometheus.io/scrape: "true"
 
   service:
     spec:
@@ -55,5 +51,5 @@ traefik:
   deployment:
     replicas: 2
 
-    metrics:
-      prometheus: {}
+  metrics:
+    prometheus: {}
