@@ -25,26 +25,26 @@ homeassistantdb:
         command:
         - mysqladmin
         - ping
-      initialDelaySeconds: 30
-      periodSeconds: 10
+      initialDelaySeconds: 40
+      periodSeconds: 15
       timeoutSeconds: 5
-      failureThreshold: 3
+      failureThreshold: 4
     readinessProbe:
       exec:
         command:
         - mysqladmin
         - ping
-      initialDelaySeconds: 5
-      periodSeconds: 10
+      initialDelaySeconds: 15
+      periodSeconds: 15
       timeoutSeconds: 5
-      failureThreshold: 3
+      failureThreshold: 4
   resources: 
     requests:
-      memory: "500Mi"
+      memory: "600Mi"
       cpu: "500m"
     limits:
-      memory: "700Mi"
-      cpu: "1000m"
+      memory: "800Mi"
+      cpu: "1200m"
   labels:
     app.kubernetes.io/component: homeassistant-db
 
@@ -81,7 +81,25 @@ homeassistant:
       httpGet:
         path: /
         port: web
-      initialDelaySeconds: 30
+      initialDelaySeconds: 60
       periodSeconds: 10 
+      timeoutSeconds: 5
+      failureThreshold: 5
+    readiness:
+      httpGet:
+        path: /
+        port: web
+      initialDelaySeconds: 15
+      periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 5
+
+  resources: 
+    requests:
+      memory: "600Mi"
+      cpu: "500m"
+    limits:
+      memory: "800Mi"
+      cpu: "1200m"
   labels:
     app.kubernetes.io/component: homeassistant
