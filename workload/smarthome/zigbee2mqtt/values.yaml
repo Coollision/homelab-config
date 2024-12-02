@@ -2,7 +2,7 @@ fullnameOverride: zigbee2mqtt
 deployment:
   image:
     repository: koenkk/zigbee2mqtt
-    tag: 1.41.0
+    tag: 1.42.0
   ports:
     web: 8080
 config:
