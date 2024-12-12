@@ -10,7 +10,7 @@ Setup of my homelab
 
 (make sure to replace the secrets with your own values, you can use the vault values later)
 
-run `helm install storage system/storage -n storage`
+run `helm install storage system/kube-system/storage -n kube-system`
 
 #### we then depend on vault so make sure that is installed first
 
@@ -29,5 +29,7 @@ uncomment the \*-app files
 run `helm upgrade argocd argocd -n argocd`
 
 argo should be up and running now and managing itself
+
+if it all seems to lock, traefik might be causing a issue, it depends on servicemonitor, and montioring is not yet installed, while monitoring wants an ingress, so traefik is not yet installed, so we have a chicken and egg problem, so you need to do a commit and disable traefik monitoring first
 
 for more info on argo see the argo readme
