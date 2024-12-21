@@ -2,7 +2,7 @@ fullnameOverride: node-red
 statefullset:
   image:
     repository: nodered/node-red
-    tag: 4.0.7
+    tag: 4.0.8
   ports:
     web: 1880
 config:
