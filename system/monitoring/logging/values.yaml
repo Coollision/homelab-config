@@ -6,6 +6,81 @@ promtail:
       - url: http://logging-loki:3100/loki/api/v1/push
         tenant_id: 1
 
+    snippets:
+      extraScrapeConfigs: |
+        # Add an additional scrape config for syslog
+        - job_name: syslog
+          syslog:
+            listen_address: 0.0.0.0:{{ .Values.extraPorts.syslog.containerPort }}
+            idle_timeout: 60s
+            use_incoming_timestamp: yes
+            label_structured_data: yes
+            labels:
+              job: syslog
+          relabel_configs:
+            - source_labels:
+                - __syslog_message_hostname
+              target_label: hostname
+
+            # example label values: kernel, CRON, kubelet
+            - source_labels:
+                - __syslog_message_app_name
+              target_label: app
+
+            # example label values: debug, notice, informational, warning, error
+            - source_labels:
+                - __syslog_message_severity
+              target_label: level
+
+        # Add an additional scrape config for syslog
+        - job_name: journal
+          journal:
+            path: /var/log/journal
+            max_age: 12h
+            labels:
+              job: systemd-journal
+          relabel_configs:
+            - source_labels:
+                - __journal__hostname
+              target_label: hostname
+
+            # example label values: kubelet.service, containerd.service
+            - source_labels:
+                - __journal__systemd_unit
+              target_label: unit
+
+            # example label values: debug, notice, info, warning, error
+            - source_labels:
+                - __journal_priority_keyword
+              target_label: level
+
+    # Mount journal directory and machine-id file into promtail pods
+  extraVolumes:
+    - name: journal
+      hostPath:
+        path: /var/log/journal
+    - name: machine-id
+      hostPath:
+        path: /etc/machine-id
+
+  extraVolumeMounts:
+    - name: journal
+      mountPath: /var/log/journal
+      readOnly: true
+    - name: machine-id
+      mountPath: /etc/machine-id
+      readOnly: true
+  extraPorts:
+    # Add a port for syslog
+    syslog:
+      name: tcp-syslog
+      containerPort: 1514
+      service:
+        port: 80
+        type: LoadBalancer
+        externalTrafficPolicy: Local
+        loadBalancerIP: <secret:kv/data/monitoring/logging~syslog_ip>
+
 loki:
   deploymentMode: SingleBinary
   loki:
@@ -39,3 +114,5 @@ loki:
         memory: 1Gi
     limits:
       memory: 1Gi
+  
+  
