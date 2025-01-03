@@ -32,7 +32,7 @@ spec:
         name: bazarr
     spec:
       containers:
-        - image: linuxserver/bazarr:1.4.6-development
+        - image: linuxserver/bazarr:1.5.1-development
           imagePullPolicy: Always
           name: bazarr
           env:
