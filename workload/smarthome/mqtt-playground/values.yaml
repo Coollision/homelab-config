@@ -3,6 +3,7 @@ statefullset:
   image:
     repository: ghcr.io/coollision/mqtt-go-playground
     tag: latest
+    imagePullPolicy: Always
 config:
   LOGLEVEL: INFO
   MQTT_BROKERADDRESS: <secret:kv/data/smarthome/mqtt-go-playground~BrokerAddress>
@@ -12,5 +13,6 @@ config:
 
 keel:
   policy: force
+  pollSchedule: "@hourly"
 
 disableService: true
