@@ -7,9 +7,12 @@ traefik:
     enabled: true
   ports:
     web:
-      redirectTo:
-        port: websecure
-        priority: 10
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+          priority: 10
     websecure:
       tls:
         enabled: true
