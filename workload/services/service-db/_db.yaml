@@ -32,11 +32,21 @@ spec:
         existingClaim: postgres-pvc
       resources:
         limits:
-          cpu: 200m
-          ephemeral-storage: 1Gi
-          memory: 192Mi
+          cpu: 600m
+          memory: 256Mi
         requests:
-          cpu: 150m
-          ephemeral-storage: 50Mi
+          cpu: 200m
           memory: 128Mi
+      # livenessProbe:
+      #   initialDelaySeconds: 300
+      # readinessProbe:
+      #   initialDelaySeconds: 300
+      # configuration: |
+      #   shared_buffers = 64MB
+      #   work_mem = 1MB
+      #   maintenance_work_mem = 16MB
+      #   wal_buffers = 2MB
+      #   checkpoint_timeout = 1min
+      #   effective_cache_size = 128MB
+      terminationGracePeriodSeconds: 60
 ---
