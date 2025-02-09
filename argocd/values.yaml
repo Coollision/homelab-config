@@ -6,75 +6,77 @@ ingress:
   host: argocd.<secret:kv/data/domains~domain>
 
 argocd:
-    fullnameOverride: argocd
-    crds:
-      keep: false
-    configs:
-      cm:
-        exec.enabled: "true"
-        timeout.reconciliation: 180s
+  fullnameOverride: argocd
+  global:
+    domain: argocd.<secret:kv/data/domains~domain>
+  crds:
+    keep: false
+  configs:
+    cm:
+      exec.enabled: "true"
+      timeout.reconciliation: 180s
 
-      params:
-        server.insecure: true
-        server.disable.auth: false
-      
-      cmp:
-        create: true
-        plugins:
-          argocd-vault-replacer:
-            generate:
-              command: ["argocd-vault-replacer"]
-          kustomize-argocd-vault-replacer:
-            generate:
-              command: ["sh", "-c"]
-              args: ["kustomize", "build", ".", "|", "argocd-vault-replacer"]
-          helm-argocd-vault-replacer:
-            init:
-              command: ["/bin/sh", "-c"]
-              args: ["helm dependency build"]
-            generate:
-              command: [sh, -c]
-              args: ["helm template -n $ARGOCD_APP_NAMESPACE $ARGOCD_APP_NAME . | argocd-vault-replacer"]
+    params:
+      server.insecure: true
+      server.disable.auth: false
 
-    controller:
-      revisionHistoryLimit: 3
+    cmp:
+      create: true
+      plugins:
+        argocd-vault-replacer:
+          generate:
+            command: [ "argocd-vault-replacer" ]
+        kustomize-argocd-vault-replacer:
+          generate:
+            command: [ "sh", "-c" ]
+            args: [ "kustomize", "build", ".", "|", "argocd-vault-replacer" ]
+        helm-argocd-vault-replacer:
+          init:
+            command: [ "/bin/sh", "-c" ]
+            args: [ "helm dependency build" ]
+          generate:
+            command: [ sh, -c ]
+            args: [ "helm template -n $ARGOCD_APP_NAMESPACE $ARGOCD_APP_NAME . | argocd-vault-replacer" ]
 
-    notifications: 
-      enabled: false
-    
-    repoServer:
-      serviceAccount:
-        name: argocd-role
-      extraContainers:
-        - name: avp
-          command: [/var/run/argocd/argocd-cmp-server]
-          image: ghcr.io/crumbhole/lovely-vault-ver:1.2.0
-          envFrom:
-            - secretRef:
-                name: argocd-vault-replacer-credentials
-          securityContext:
-            runAsNonRoot: true
-            runAsUser: 999
-          volumeMounts:
-            - mountPath: /var/run/argocd
-              name: var-files
-            - mountPath: /home/argocd/cmp-server/plugins
-              name: plugins
-            - mountPath: /tmp
-              name: cmp-tmp
+  controller:
+    revisionHistoryLimit: 3
 
-            # Register plugins into sidecar
-            - mountPath: /home/argocd/cmp-server/config/plugin
-              subPath: argocd-vault-plugin.yaml
-              name: argocd-cmp-cm
-    
-      volumes:
-        - name: argocd-cmp-cm
-          configMap:
+  notifications:
+    enabled: false
+
+  repoServer:
+    serviceAccount:
+      name: argocd-role
+    extraContainers:
+      - name: avp
+        command: [ /var/run/argocd/argocd-cmp-server ]
+        image: ghcr.io/crumbhole/lovely-vault-ver:1.2.0
+        envFrom:
+          - secretRef:
+              name: argocd-vault-replacer-credentials
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 999
+        volumeMounts:
+          - mountPath: /var/run/argocd
+            name: var-files
+          - mountPath: /home/argocd/cmp-server/plugins
+            name: plugins
+          - mountPath: /tmp
+            name: cmp-tmp
+
+          # Register plugins into sidecar
+          - mountPath: /home/argocd/cmp-server/config/plugin
+            subPath: argocd-vault-plugin.yaml
             name: argocd-cmp-cm
-        - name: cmp-tmp
-          emptyDir: {}
-        - name: custom-tools
-          emptyDir: {}
 
-      
+    volumes:
+      - name: argocd-cmp-cm
+        configMap:
+          name: argocd-cmp-cm
+      - name: cmp-tmp
+        emptyDir: { }
+      - name: custom-tools
+        emptyDir: { }
+
+
