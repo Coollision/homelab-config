@@ -40,11 +40,25 @@ argocd:
 
   controller:
     revisionHistoryLimit: 3
+    resources:
+      requests:
+        memory: 500Mi
+        cpu: 500m
+      limits:
+        memory: 600Mi
+        cpu: 600m
 
   notifications:
     enabled: false
 
   repoServer:
+    resources:
+      requests:
+        memory: 300Mi
+        cpu: 200m
+      limits:
+        memory: 400Mi
+        cpu: 300m
     serviceAccount:
       name: argocd-role
     extraContainers:
@@ -79,4 +93,12 @@ argocd:
       - name: custom-tools
         emptyDir: { }
 
+  applicationSet:
+    resources:
+      requests:
+        memory: 100Mi
+        cpu: 200m
+      limits:
+        memory: 150Mi
+        cpu: 300m
 
