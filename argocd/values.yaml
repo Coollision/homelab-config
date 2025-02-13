@@ -42,11 +42,11 @@ argocd:
     revisionHistoryLimit: 3
     resources:
       requests:
-        memory: 500Mi
+        memory: 600Mi
         cpu: 500m
       limits:
-        memory: 600Mi
-        cpu: 600m
+        memory: 700Mi
+        cpu: 1
 
   notifications:
     enabled: false
@@ -96,9 +96,26 @@ argocd:
   applicationSet:
     resources:
       requests:
-        memory: 100Mi
-        cpu: 200m
+        memory: 50Mi
+        cpu: 10m
       limits:
-        memory: 150Mi
-        cpu: 300m
+        memory: 80Mi
+        cpu: 20m
 
+  dex:
+    resources:
+      requests:
+        memory: 35Mi
+        cpu: 10m
+      limits:
+        memory: 50Mi
+        cpu: 10m
+  
+  redis:
+    resources:
+      requests:
+        memory: 10Mi
+        cpu: 15m
+      limits:
+        memory: 15Mi
+        cpu: 20m
