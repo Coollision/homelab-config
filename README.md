@@ -6,6 +6,8 @@ Setup of my homelab
 
 ### Install argo from scratch
 
+note; always run in the folder an helm dependency update , otherwise the charts will fully work and to funky things
+
 #### we depend on storage so make sure that is installed first
 
 (make sure to replace the secrets with your own values, you can use the vault values later)
