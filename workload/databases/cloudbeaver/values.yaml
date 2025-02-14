@@ -8,6 +8,13 @@ deployment:
 config:
   CLOUDBEAVER_SERVICE_PORT_8978_TCP: 8978
   CLOUDBEAVER_SERVICE_PORT: 8978
+resources:
+  requests:
+    cpu: 10m
+    memory: 256Mi
+  limits:
+    cpu: 20m
+    memory: 300Mi
 ingress_internal:
   host: cloudbeaver.<secret:kv/data/domains~local>
   port: ingress
