@@ -10,10 +10,10 @@ config:
   CLOUDBEAVER_SERVICE_PORT: 8978
 resources:
   requests:
-    cpu: 10m
+    cpu: 30m
     memory: 256Mi
   limits:
-    cpu: 20m
+    cpu: 50m
     memory: 300Mi
 ingress_internal:
   host: cloudbeaver.<secret:kv/data/domains~local>
@@ -22,4 +22,3 @@ storage:
   - mountPath: /opt/cloudbeaver/workspace
     size: 5Gi
     type: nfs-client
-
