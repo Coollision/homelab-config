@@ -14,17 +14,17 @@ spec:
         app: snmp-exporter
     spec:
       containers:
-      - image: prom/snmp-exporter:v0.22.0
-        name: snmp-exporter
-        args:
-          - '--config.file=/etc/snmp_exporter/snmp.yml'
-        ports:
-        - containerPort: 9116
-          name: metrics
-        volumeMounts:
-        - name: snmp-exporter-dir
-          mountPath: /etc/snmp_exporter/
-        resources: {}
+        - image: prom/snmp-exporter:v0.28.0
+          name: snmp-exporter
+          args:
+            - "--config.file=/etc/snmp_exporter/snmp.yml"
+          ports:
+            - containerPort: 9116
+              name: metrics
+          volumeMounts:
+            - name: snmp-exporter-dir
+              mountPath: /etc/snmp_exporter/
+          resources: {}
       volumes:
         - name: snmp-exporter-dir
           configMap:
@@ -39,10 +39,10 @@ metadata:
   namespace: monitoring
 spec:
   ports:
-  - name: snmp-exporter-metrics
-    port: 9116
-    protocol: TCP
-    targetPort: metrics
+    - name: snmp-exporter-metrics
+      port: 9116
+      protocol: TCP
+      targetPort: metrics
   selector:
     app: snmp-exporter
 ---
@@ -61,21 +61,23 @@ spec:
       app: snmp-exporter
   namespaceSelector:
     matchNames:
-    - monitoring
+      - monitoring
   endpoints:
-  - interval: 5s
-    port: snmp-exporter-metrics
-    path: "/snmp"
-    targetPort: 9116
-    params:
-      module:
-      - synology
-      target:
-      - <secret:kv/data/external-ips~gobelijn>
-    relabelings:
-      - action: replace
-        regex: (.*)
-        replacement: Gobelijn
-        sourceLabels:
-        - instance
-        targetLabel: instance
+    - interval: 5s
+      port: snmp-exporter-metrics
+      path: "/snmp"
+      targetPort: 9116
+      params:
+        module:
+          - synology
+        target:
+          - <secret:kv/data/external-ips~gobelijn>
+        auth:
+          - public_v2
+      relabelings:
+        - action: replace
+          regex: (.*)
+          replacement: Gobelijn
+          sourceLabels:
+            - instance
+          targetLabel: instance
