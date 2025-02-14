@@ -18,8 +18,8 @@ keel:
 
   resources:
     requests:
-      cpu: 10m
+      cpu: 30m
       memory: 40Mi
     limits:
-      cpu: 25m
+      cpu: 50m
       memory: 45Mi
