@@ -40,13 +40,13 @@ spec:
           - name: cert
             mountPath: /etc/cloudflared
             readOnly: true
-          resources:
-            requests:
-              cpu: 100m
-              memory: 25Mi
-            limits:
-              cpu: 120m
-              memory: 30Mi
+          # resources:
+          #   requests:
+          #     cpu: 100m
+          #     memory: 25Mi
+          #   limits:
+          #     cpu: 120m
+          #     memory: 30Mi
       volumes:
       - name: creds
         secret:

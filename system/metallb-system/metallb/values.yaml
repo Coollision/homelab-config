@@ -1,43 +1,43 @@
 metallb:
   fullnameOverride: metallb
-  controller:
-    resources:
-      requests:
-        cpu: 5m
-        memory: 45Mi
-      limits:
-        cpu: 10m
-        memory: 60Mi
+  # controller:
+  #   resources:
+  #     requests:
+  #       cpu: 5m
+  #       memory: 45Mi
+  #     limits:
+  #       cpu: 10m
+  #       memory: 60Mi
 
-  speaker:
-    resources:
-      requests:
-        cpu: 20m
-        memory: 45Mi
-      limits:
-        cpu: 25m
-        memory: 60Mi
-    frr:
-      resources:
-        requests:
-          cpu: 10m
-          memory: 30Mi
-        limits:
-          cpu: 20m
-          memory: 35Mi
-    frrMetrics:
-      resources:
-        requests:
-          cpu: 30m
-          memory: 20Mi
-        limits:
-          cpu: 35m
-          memory: 25Mi
-    reloader:
-      resources:
-        requests:
-          cpu: 5m
-          memory: 5Mi
-        limits:
-          cpu: 10m
-          memory: 10Mi
+  # speaker:
+  #   resources:
+  #     requests:
+  #       cpu: 20m
+  #       memory: 45Mi
+  #     limits:
+  #       cpu: 25m
+  #       memory: 60Mi
+  #   frr:
+  #     resources:
+  #       requests:
+  #         cpu: 10m
+  #         memory: 30Mi
+  #       limits:
+  #         cpu: 20m
+  #         memory: 35Mi
+  #   frrMetrics:
+  #     resources:
+  #       requests:
+  #         cpu: 30m
+  #         memory: 20Mi
+  #       limits:
+  #         cpu: 35m
+  #         memory: 25Mi
+  #   reloader:
+  #     resources:
+  #       requests:
+  #         cpu: 5m
+  #         memory: 5Mi
+  #       limits:
+  #         cpu: 10m
+  #         memory: 10Mi
