@@ -27,20 +27,21 @@ node-feature-discovery:
         memory: 40Mi
     config:
       core:
-        labelSources: 
+        labelSources:
           - "custom"
 
       sources:
         custom:
           - name: "zigbee-coordinator"
-            labels: 
+            labels:
               feature.node.kubernetes.io/iot-zigbee-coordinator: "true"
             matchFeatures:
               - feature: usb.device
                 matchExpressions:
                   vendor: { op: In, value: ["10c4"] }
                   device: { op: In, value: ["ea60"] }
-                  serial: { op: In, value: ["54d39955bc39ec118f02e3680aac08d5"] }
+                  serial:
+                    { op: In, value: ["54d39955bc39ec118f02e3680aac08d5"] }
 
 descheduler:
   fullnameOverride: descheduler
@@ -63,7 +64,7 @@ descheduler:
           - name: "RemovePodsViolatingNodeAffinity"
             args:
               nodeAffinityType:
-              - "requiredDuringSchedulingIgnoredDuringExecution"
+                - "requiredDuringSchedulingIgnoredDuringExecution"
           - name: "RemovePodsViolatingInterPodAntiAffinity"
           - name: "RemovePodsViolatingTopologySpreadConstraint"
           - name: "RemovePodsViolatingNodeTaints"
@@ -77,6 +78,12 @@ descheduler:
                 cpu: 50
                 memory: 50
                 pods: 50
+              evictablePods:
+                exclude:
+                  - key: "critical-service"
+                    operator: "In"
+                    values:
+                      - "true"
         plugins:
           balance:
             enabled:
@@ -94,7 +101,7 @@ descheduler:
     enabled: true
   serviceMonitor:
     enabled: true
-  
+
   resources:
     requests:
       cpu: 100m
