@@ -43,10 +43,10 @@ argocd:
     resources:
       requests:
         memory: 600Mi
-        cpu: 500m
+        # cpu: 500m
       limits:
         memory: 700Mi
-        cpu: 1
+        # cpu: 1
 
   notifications:
     enabled: false
@@ -55,10 +55,10 @@ argocd:
     resources:
       requests:
         memory: 300Mi
-        cpu: 200m
+        # cpu: 200m
       limits:
         memory: 400Mi
-        cpu: 300m
+        # cpu: 300m
     serviceAccount:
       name: argocd-role
     extraContainers:
@@ -97,25 +97,25 @@ argocd:
     resources:
       requests:
         memory: 50Mi
-        cpu: 10m
+        # cpu: 10m
       limits:
         memory: 80Mi
-        cpu: 20m
+        # cpu: 20m
 
   dex:
     resources:
       requests:
         memory: 35Mi
-        cpu: 10m
+        # cpu: 10m
       limits:
         memory: 50Mi
-        cpu: 10m
+        # cpu: 10m
   
   redis:
     resources:
       requests:
         memory: 10Mi
-        cpu: 15m
+        # cpu: 15m
       limits:
         memory: 15Mi
-        cpu: 20m
+        # cpu: 20m

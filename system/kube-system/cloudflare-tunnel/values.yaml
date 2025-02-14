@@ -57,10 +57,10 @@ traefik:
   metrics:
     prometheus: {}
 
-  resources:
-    requests:
-      cpu: 100m
-      memory: 70Mi
-    limits:
-      cpu: 130m
-      memory: 80Mi
+  # resources:
+  #   requests:
+  #     cpu: 100m
+  #     memory: 70Mi
+  #   limits:
+  #     cpu: 130m
+  #     memory: 80Mi
