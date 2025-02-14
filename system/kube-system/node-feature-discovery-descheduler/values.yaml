@@ -1,6 +1,30 @@
 node-feature-discovery:
   fullnameOverride: node-feature-discovery
+  gc:
+    resources:
+      requests:
+        cpu: 5m
+        memory: 15Mi
+      limits:
+        cpu: 5m
+        memory: 25Mi
+  master:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 50Mi
+      limits:
+        cpu: 75m
+        memory: 75Mi
+
   worker:
+    resources:
+      requests:
+        cpu: 15m
+        memory: 30Mi
+      limits:
+        cpu: 20m
+        memory: 40Mi
     config:
       core:
         labelSources: 
@@ -70,3 +94,11 @@ descheduler:
     enabled: true
   serviceMonitor:
     enabled: true
+  
+  resources:
+    requests:
+      cpu: 100m
+      memory: 30Mi
+    limits:
+      cpu: 120m
+      memory: 40Mi

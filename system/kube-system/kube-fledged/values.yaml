@@ -16,3 +16,11 @@ kube-fledged:
   validatingWebhook:
     # Specifies whether a validating webhook configuration should be created
     create: false
+  
+  resources:
+    requests:
+      cpu: 5m
+      memory: 20Mi
+    limits:
+      cpu: 5m
+      memory: 25Mi

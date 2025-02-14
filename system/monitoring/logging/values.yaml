@@ -111,8 +111,8 @@ loki:
   chunksCache:
     resources:
       requests:
-        memory: 1Gi
-    limits:
-      memory: 1Gi
+        memory: 200Mi
+      limits:
+        memory: 200Mi
   
   
