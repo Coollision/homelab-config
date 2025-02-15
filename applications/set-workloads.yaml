@@ -7,13 +7,22 @@ spec:
   goTemplate: true
   goTemplateOptions: ["missingkey=error"]
   generators:
-    - git:
-        repoURL: https://github.com/Coollision/homelab-config.git
-        revision: master
-        directories:
-          - path: workload/*/*
-          - path: workload/*/disabled-*
-            exclude: true
+    - merge:
+        mergeKeys:
+          - path
+        generators:
+          - git:
+              repoURL: https://github.com/Coollision/homelab-config.git
+              revision: master
+              directories:
+                - path: workload/*/*
+                - path: workload/*/disabled-*
+                  exclude: true
+          - list:
+              elements:
+                - path: workload/testing/echo
+                  config:
+                    ignore_replicas: true
   template:
     metadata:
       name: "{{.path.basename}}"
@@ -42,3 +51,8 @@ spec:
           kind: MutatingWebhookConfiguration
           jqPathExpressions:
             - .webhooks[]?.clientConfig.caBundle
+              {{- if .config.ignore_replicas }}
+        - kind: Deployment
+          jsonPointers:
+            - /spec/replicas
+              {{- end }}

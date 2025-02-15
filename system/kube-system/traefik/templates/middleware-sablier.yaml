@@ -1,0 +1,15 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: sablier
+spec:
+  plugin:
+    sablier:
+      group: default
+      dynamic:
+        displayName: Please wait while we calculate the time remaining 😉
+        refreshFrequency: 5s
+        showDetails: "true"
+        theme: hacker-terminal
+      sablierUrl: http://sablier:10000
+      sessionDuration: 1m

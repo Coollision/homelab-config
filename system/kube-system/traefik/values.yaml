@@ -26,9 +26,9 @@ traefik:
   providers:
     kubernetesCRD:
       enabled: true
+      allowEmptyServices: true
     kubernetesIngress:
-      publishedService:
-        enabled: true
+      allowEmptyServices: true
 
   priorityClassName: "system-cluster-critical"
   tolerations:
@@ -41,7 +41,11 @@ traefik:
     operator: "Exists"
     effect: "NoSchedule"
 
- 
+  experimental:
+    plugins:
+      sablier:
+        moduleName: "github.com/sablierapp/sablier"
+        version: "v1.8.0-beta.22"
 
   additionalArguments:
     - '--entryPoints.web.forwardedHeaders.trustedIPs=<secret:kv/data/kube-system/traefik~trusted-ips>'
