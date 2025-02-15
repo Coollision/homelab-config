@@ -51,8 +51,8 @@ spec:
           kind: MutatingWebhookConfiguration
           jqPathExpressions:
             - .webhooks[]?.clientConfig.caBundle
-              {{- if .config.ignore_replicas }}
+        {{- if .config.ignore_replicas }}
         - kind: Deployment
           jsonPointers:
             - /spec/replicas
-              {{- end }}
+        {{- end }}
