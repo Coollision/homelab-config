@@ -13,6 +13,6 @@ config:
 
 keel:
   policy: force
-  pollSchedule: "@hourly"
+  pollSchedule: "@every 1m"
 
 disableService: true
