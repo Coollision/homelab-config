@@ -71,11 +71,11 @@ promstack:
           value: "1h"
       resources:
         limits:
-          cpu: 3
-          memory: 3Gi
-        requests:
-          cpu: 1
+          cpu: 2
           memory: 2.5Gi
+        requests:
+          cpu: 1200m
+          memory: 2Gi
       storageSpec:
         volumeClaimTemplate:
           metadata:
