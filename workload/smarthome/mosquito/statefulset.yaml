@@ -15,7 +15,7 @@ spec:
     spec:
       initContainers:
       - name: mosquitto-init
-        image: eclipse-mosquitto:2.0.20-openssl
+        image: eclipse-mosquitto:2.0.21-openssl
         command: ["/bin/sh", "-c"]
         args:
         - |
