@@ -23,11 +23,19 @@ env:
   - name: {{ $key }}
     {{- if not (kindIs "map" $value) }}
     value: {{ $value | quote }}
-    {{- else }}
+    {{- else if hasKey $value "secretKeyRef" }}
     valueFrom:
       secretKeyRef:
         name: {{ $value.secretKeyRef.name }}
         key: {{ $value.secretKeyRef.key }}
+    {{- else if hasKey $value "configMapKeyRef" }}
+    valueFrom:
+      configMapKeyRef:
+        name: {{ $value.configMapKeyRef.name }}
+        key: {{ $value.configMapKeyRef.key }}
+    {{- else }}
+    # Invalid configuration for {{ $key }}
+    value: "INVALID_CONFIGURATION"
     {{- end }}
   {{- end }}
 {{- end }}
