@@ -1,0 +1,36 @@
+fullnameOverride: jellyseerr
+deployment:
+  image:
+    repository: fallenbagel/jellyseerr
+    tag: 2.5.1
+  ports:
+    ingress: 5055
+config:
+  TZ: Europe/Brussels
+  LOG_LEVEL: debug
+  DB_TYPE: postgres
+  DB_HOST:
+    configMapKeyRef:
+      name: service-db
+      key: host
+  DB_PORT:
+    configMapKeyRef:
+      name: service-db
+      key: port
+  DB_NAME: jellyseerr
+  DB_USER:
+    secretKeyRef:
+      name: services-db
+      key: jellyseerr_user
+  DB_PASS:
+    secretKeyRef:
+      name: services-db
+      key: jellyseerr_password
+  DB_LOG_QUERIES: "false"
+ingress_internal:
+  host: jellyseerr.<secret:kv/data/domains~local>
+  port: ingress
+storage:
+  - mountPath: /app/config
+    size: 5Gi
+    type: nfs-client

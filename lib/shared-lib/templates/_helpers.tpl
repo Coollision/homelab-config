@@ -62,3 +62,12 @@ Selector labels
 app.kubernetes.io/name: {{ include "helm.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+
+{{- define "helm.var_dump" -}}
+{{- . | mustToPrettyJson | printf "\nThe JSON output of the dumped var is: \n%s" }}
+{{- end -}}
+
+{{- define "helm.var_dump_fail" -}}
+{{- . | mustToPrettyJson | printf "\nThe JSON output of the dumped var is: \n%s" | fail }}
+{{- end -}}
