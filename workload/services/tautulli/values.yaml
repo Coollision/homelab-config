@@ -3,6 +3,7 @@ statefullset:
   image:
     repository: linuxserver/tautulli
     tag: latest
+    imagePullPolicy: Always
   ports:
     web: 8181
 config:
