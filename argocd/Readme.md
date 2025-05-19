@@ -16,3 +16,9 @@ initPass=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath=
 argocd login argocd.$domain --username admin --password $initPass
 argocd account update-password --current-password $initPass --new-password ${newRootPass}
 ```
+
+remove finalyzers from all applications
+
+```bash
+kubectl get applications -n argocd -o name | xargs -I {} kubectl patch -n argocd {} -p '{"metadata":{"finalizers":null}}' --type=merge
+```
