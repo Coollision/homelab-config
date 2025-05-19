@@ -78,7 +78,7 @@ spec:
             - mountPath: /config
               name: radarr-config
       containers:
-        - image: linuxserver/radarr:5.22.4
+        - image: linuxserver/radarr:5.23.3
           name: radarr
           imagePullPolicy: Always
           env:
