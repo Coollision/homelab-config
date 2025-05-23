@@ -53,7 +53,7 @@ homeassistant:
   statefullset:
     image:
       repository: ghcr.io/home-assistant/home-assistant
-      tag: 2025.5.2
+      tag: 2025.5.3
     ports:
       web: 8123
   config:
