@@ -79,7 +79,7 @@ spec:
             - mountPath: /config
               name: prowlarr-config
       containers:
-        - image: linuxserver/prowlarr:1.35.1
+        - image: linuxserver/prowlarr:1.36.3
           name: prowlarr
           imagePullPolicy: Always
           env:
