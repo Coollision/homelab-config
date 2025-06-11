@@ -12,9 +12,9 @@ config:
 
 securityContext:
   fsGroup: 1000
-probes:
-  liveness:
-    tcpSocket:
-      port: web
-    initialDelaySeconds: 30
-    periodSeconds: 10 
+# probes:
+#   liveness:
+#     tcpSocket:
+#       port: web
+#     initialDelaySeconds: 30
+#     periodSeconds: 10 
