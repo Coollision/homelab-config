@@ -9,17 +9,25 @@
     ":rebaseStalePrs"
   ],
   "kubernetes": {
-    "fileMatch": ["\\.yaml$"],
-    "ignorePaths": ["lib/**"]
+    "managerFilePatterns": [
+      "/\\.yaml$/"
+    ],
+    "ignorePaths": [
+      "lib/**"
+    ]
   },
   "packageRules": [
     {
-      "matchUpdateTypes": ["patch"],
+      "matchUpdateTypes": [
+        "patch"
+      ],
       "automerge": true,
       "automergeType": "branch",
       "automergeSchedule": "* 1-4 * * *",
       "ignoreTests": true
     }
   ],
-  "schedule": ["* 19-22 * * *"]
+  "schedule": [
+    "* 19-22 * * *"
+  ]
 }
