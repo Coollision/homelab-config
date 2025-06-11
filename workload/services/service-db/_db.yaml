@@ -37,10 +37,16 @@ spec:
         requests:
           cpu: 200m
           memory: 128Mi
-      # livenessProbe:
-      #   initialDelaySeconds: 300
-      # readinessProbe:
-      #   initialDelaySeconds: 300
+      livenessProbe:
+        initialDelaySeconds: 60
+        periodSeconds: 120
+        timeoutSeconds: 35
+        failureThreshold: 15
+      readinessProbe:
+        initialDelaySeconds: 5
+        periodSeconds: 120
+        timeoutSeconds: 35
+        failureThreshold: 15
       # configuration: |
       #   shared_buffers = 64MB
       #   work_mem = 1MB
