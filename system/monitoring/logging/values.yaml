@@ -108,7 +108,7 @@ loki:
   write:
     replicas: 0
   
-  chunksCache:
+  # chunksCache:
     # resources:
     #   requests:
     #     memory: 200Mi

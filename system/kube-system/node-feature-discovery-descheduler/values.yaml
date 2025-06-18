@@ -1,21 +1,21 @@
 node-feature-discovery:
   fullnameOverride: node-feature-discovery
-  gc:
-    # resources:
-    #   requests:
-    #     cpu: 5m
-    #     memory: 15Mi
-    #   limits:
-    #     cpu: 5m
-    #     memory: 25Mi
-  master:
-    # resources:
-    #   requests:
-    #     cpu: 50m
-    #     memory: 50Mi
-    #   limits:
-    #     cpu: 75m
-    #     memory: 75Mi
+  # gc:
+  #   resources:
+  #     requests:
+  #       cpu: 5m
+  #       memory: 15Mi
+  #     limits:
+  #       cpu: 5m
+  #       memory: 25Mi
+  # master:
+  #   resources:
+  #     requests:
+  #       cpu: 50m
+  #       memory: 50Mi
+  #     limits:
+  #       cpu: 75m
+  #       memory: 75Mi
 
   worker:
     # resources:
