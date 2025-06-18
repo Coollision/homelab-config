@@ -18,9 +18,9 @@ kube-fledged:
     create: false
   
   resources:
-    requests:
-      cpu: 5m
-      memory: 20Mi
-    limits:
-      cpu: 5m
-      memory: 25Mi
+    # requests:
+    #   cpu: 5m
+    #   memory: 20Mi
+    # limits:
+    #   cpu: 5m
+    #   memory: 25Mi

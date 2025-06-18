@@ -40,25 +40,25 @@ argo-cd:
 
   controller:
     revisionHistoryLimit: 3
-    resources:
-      requests:
-        memory: 600Mi
-        # cpu: 500m
-      limits:
-        memory: 700Mi
-        # cpu: 1
+    # resources:
+    #   requests:
+    #     memory: 600Mi
+    #     # cpu: 500m
+    #   limits:
+    #     memory: 700Mi
+    #     # cpu: 1
 
   notifications:
     enabled: false
 
   repoServer:
-    resources:
-      requests:
-        memory: 300Mi
-        # cpu: 200m
-      limits:
-        memory: 400Mi
-        # cpu: 300m
+    # resources:
+    #   requests:
+    #     memory: 300Mi
+    #     # cpu: 200m
+    #   limits:
+    #     memory: 400Mi
+    #     # cpu: 300m
     serviceAccount:
       name: argocd-role
     extraContainers:
@@ -94,28 +94,28 @@ argo-cd:
         emptyDir: { }
 
   applicationSet:
-    resources:
-      requests:
-        memory: 50Mi
-        # cpu: 10m
-      limits:
-        memory: 80Mi
-        # cpu: 20m
+    # resources:
+    #   requests:
+    #     memory: 50Mi
+    #     # cpu: 10m
+    #   limits:
+    #     memory: 80Mi
+    #     # cpu: 20m
 
   dex:
-    resources:
-      requests:
-        memory: 35Mi
-        # cpu: 10m
-      limits:
-        memory: 50Mi
-        # cpu: 10m
+    # resources:
+    #   requests:
+    #     memory: 35Mi
+    #     # cpu: 10m
+    #   limits:
+    #     memory: 50Mi
+    #     # cpu: 10m
   
   redis:
-    resources:
-      requests:
-        memory: 10Mi
-        # cpu: 15m
-      limits:
-        memory: 15Mi
-        # cpu: 20m
+    # resources:
+    #   requests:
+    #     memory: 10Mi
+    #     # cpu: 15m
+    #   limits:
+    #     memory: 15Mi
+    #     # cpu: 20m

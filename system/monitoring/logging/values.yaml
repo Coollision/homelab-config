@@ -109,10 +109,10 @@ loki:
     replicas: 0
   
   chunksCache:
-    resources:
-      requests:
-        memory: 200Mi
-      limits:
-        memory: 200Mi
+    # resources:
+    #   requests:
+    #     memory: 200Mi
+    #   limits:
+    #     memory: 200Mi
   
   
