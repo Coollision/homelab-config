@@ -7,8 +7,8 @@ ingress:
 
 argo-cd:
   fullnameOverride: argocd
-  global:
-    domain: argocd.<secret:kv/data/domains~domain>
+  # global:
+  #   domain: argocd.<secret:kv/data/domains~domain>
   crds:
     keep: false
   configs:
