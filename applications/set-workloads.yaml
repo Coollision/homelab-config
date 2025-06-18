@@ -9,7 +9,7 @@ spec:
   generators:
     - git:
         repoURL: https://github.com/Coollision/homelab-config.git
-        revision: master
+        revision: test
         directories:
           - path: workload/*/*
           - path: workload/*/disabled-*
@@ -21,7 +21,7 @@ spec:
       project: workloads
       source:
         repoURL: https://github.com/Coollision/homelab-config.git
-        targetRevision: master
+        targetRevision: test
         path: "{{.path.path}}"
         plugin:
           name: argocd-lovely-plugin

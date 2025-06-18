@@ -8,7 +8,7 @@ spec:
   source:
     repoURL: "https://github.com/Coollision/homelab-config.git"
     path: applications
-    targetRevision: master
+    targetRevision: test
   destination:
     namespace: argocd
     server: https://kubernetes.default.svc

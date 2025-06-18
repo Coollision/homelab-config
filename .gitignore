@@ -4,3 +4,15 @@
 workload/secrets/vault/test.yaml
 
 **test.yaml
+
+.ansible/
+
+ansible/.vscode/settings.json
+
+ansible/inventory/group_vars/
+
+ansible/inventory/host_vars/
+
+ansible/inventory/
+
+ansible/playbooks/kubeconfig/

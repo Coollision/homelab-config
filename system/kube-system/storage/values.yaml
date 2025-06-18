@@ -8,7 +8,7 @@
       - nfsvers=4.1
       
   storageClass:
-    pathPattern: "${.PVC.namespace}/${.PVC.annotations.nfs.io/storage-path}"
+    pathPattern: "/testing/${.PVC.namespace}/${.PVC.annotations.nfs.io/storage-path}"
     archiveOnDelete: false
     onDelete: retain
     name: nfs-client

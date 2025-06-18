@@ -8,7 +8,7 @@ spec:
   source:
     repoURL: "https://github.com/Coollision/homelab-config.git"
     path: argocd
-    targetRevision: master
+    targetRevision: test
     plugin:
       name: argocd-lovely-plugin
   destination:
