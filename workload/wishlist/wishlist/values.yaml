@@ -33,13 +33,13 @@ wishlistdb:
       periodSeconds: 10
       timeoutSeconds: 5
       failureThreshold: 3
-  resources: 
-    requests:
-      memory: "500Mi"
-      cpu: "500m"
-    limits:
-      memory: "700Mi"
-      cpu: "1000m"
+  # resources: 
+  #   requests:
+  #     memory: "500Mi"
+  #     cpu: "500m"
+  #   limits:
+  #     memory: "700Mi"
+  #     cpu: "1000m"
   labels:
     app.kubernetes.io/component: wishlist-db
 

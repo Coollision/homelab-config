@@ -73,13 +73,13 @@ spec:
             - containerPort: 6767
               name: web
               protocol: TCP
-          resources: 
-            requests:
-              memory: 500Mi
-              cpu: 400m
-            limits:
-              memory: 700Mi
-              cpu: 800m
+          # resources: 
+          #   requests:
+          #     memory: 500Mi
+          #     cpu: 400m
+          #   limits:
+          #     memory: 700Mi
+          #     cpu: 800m
           volumeMounts:
             - mountPath: /config
               name: bazarr-config

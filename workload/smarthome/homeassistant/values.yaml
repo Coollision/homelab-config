@@ -94,12 +94,12 @@ homeassistant:
       timeoutSeconds: 5
       failureThreshold: 5
 
-  resources: 
-    requests:
-      memory: "600Mi"
-      cpu: "500m"
-    limits:
-      memory: "800Mi"
-      cpu: "1200m"
+  # resources: 
+  #   requests:
+  #     memory: "600Mi"
+  #     cpu: "500m"
+  #   limits:
+  #     memory: "800Mi"
+  #     cpu: "1200m"
   labels:
     app.kubernetes.io/component: homeassistant

@@ -56,13 +56,13 @@ promstack:
             resources:
               requests:
                 storage: 10Gi
-      resources:
-        limits:
-          cpu: 60m
-          memory: 30Mi
-        requests:
-          cpu: 50m
-          memory: 20Mi
+      # resources:
+      #   limits:
+      #     cpu: 60m
+      #     memory: 30Mi
+      #   requests:
+      #     cpu: 50m
+      #     memory: 20Mi
   prometheus:
     prometheusSpec:
       externalUrl: http://prometheus.<secret:kv/data/domains~local>/
@@ -72,13 +72,13 @@ promstack:
       additionalArgs:
         - name: "storage.tsdb.max-block-duration"
           value: "1h"
-      resources:
-        limits:
-          cpu: 2
-          memory: 2.5Gi
-        requests:
-          cpu: 1200m
-          memory: 2Gi
+      # resources:
+      #   limits:
+      #     cpu: 2
+      #     memory: 2.5Gi
+      #   requests:
+      #     cpu: 1200m
+      #     memory: 2Gi
       storageSpec:
         volumeClaimTemplate:
           metadata:

@@ -35,13 +35,13 @@ spec:
             - containerPort: 9243
               hostPort: 9243
               name: http
-          resources:
-            limits:
-              cpu: 150m
-              memory: 100Mi
-            requests:
-              cpu: 100m
-              memory: 50Mi
+          # resources:
+          #   limits:
+          #     cpu: 150m
+          #     memory: 100Mi
+          #   requests:
+          #     cpu: 100m
+          #     memory: 50Mi
           securityContext:
             privileged: true
 {{- end -}}
