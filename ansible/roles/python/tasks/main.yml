@@ -1,0 +1,45 @@
+- name: Attempt to install Python3 without password prompt
+  become: true
+  ignore_errors: true
+  ansible.builtin.package:
+    name: python3
+    state: present
+  register: python_install_result
+
+- name: Prompt for sudo password if installation fails
+  ansible.builtin.pause:
+    prompt: "[{{ inventory_hostname }}] Enter the sudo password for user: {{ ansible_user }}:"
+  register: host_sudo_password
+  when: python_install_result.failed
+
+- name: Set become password for this host
+  ansible.builtin.set_fact:
+    ansible_become_pass: "{{ host_sudo_password.user_input }}"
+  when: python_install_result.failed and host_sudo_password.user_input is defined and host_sudo_password.user_input != ''
+
+- name: Install Python3 with sudo password
+  become: true
+  become_user: root
+  ansible.builtin.raw: |
+    if command -v apt-get >/dev/null 2>&1; then
+      apt-get update && apt-get install -y python3
+    elif command -v yum >/dev/null 2>&1; then
+      yum install -y python3
+    elif command -v dnf >/dev/null 2>&1; then
+      dnf install -y python3
+    elif command -v pacman >/dev/null 2>&1; then
+      pacman -S --noconfirm python3
+    else
+      echo "No supported package manager found"
+      exit 1
+    fi
+  when: python_install_result.failed
+
+- name: Verify Python3 installation
+  ansible.builtin.command: python3 --version
+  register: python_version_check
+  changed_when: false
+
+- name: Debug Python3 version
+  ansible.builtin.debug:
+    msg: "Python3 version: {{ python_version_check.stdout }}"

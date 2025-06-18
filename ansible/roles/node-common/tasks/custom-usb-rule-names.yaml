@@ -1,0 +1,11 @@
+- name: Copy Udev rules
+  become: true
+  ansible.builtin.template:
+    src: "50-usb.rules"
+    dest: "/etc/udev/rules.d/50-usb.rules"
+    owner: root
+    group: root
+    mode: 0644
+  notify:
+    - Update-udev1
+    - Update-udev2

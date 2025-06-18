@@ -1,0 +1,17 @@
+- name: Ensure required DNS variables are defined
+  ansible.builtin.fail:
+    msg: "Missing required DNS variables: dns_key_name, dns_key_secret, dns_server_ip, dns_zone_name."
+  when: dns_key_name is not defined or dns_key_secret is not defined or dns_server_ip is not defined or dns_zone_name is not defined
+
+- name: Add records to DNS
+  become: false
+  community.general.nsupdate:
+    key_name: "{{ dns_key_name }}"
+    key_secret: "{{ dns_key_secret }}"
+    server: "{{ dns_server_ip }}"
+    zone: "{{ dns_zone_name }}"
+    record: '{{ dns_set_record | regex_replace("\." + dns_zone_name + "$", "") }}'
+    value: "{{ dns_set_record_value }}"
+    ttl: 3600
+    type: "{{ dns_record_type }}"
+  delegate_to: localhost

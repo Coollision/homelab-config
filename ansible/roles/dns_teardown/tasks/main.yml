@@ -1,0 +1,10 @@
+- name: Remove records from DNS
+  become: false
+  community.general.nsupdate:
+    key_name: "{{ dns_key_name }}"
+    key_secret: "{{ dns_key_secret }}"
+    server: "{{ dns_server_ip }}"
+    zone: "{{ dns_zone_name }}"
+    record: '{{ dns_set_record | regex_replace("\." + dns_zone_name + "$", "") }}'
+    state: absent
+  delegate_to: localhost

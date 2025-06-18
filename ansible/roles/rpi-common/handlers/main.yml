@@ -1,0 +1,5 @@
+- name: Reboot host
+  ansible.builtin.reboot: {}
+
+- name: Reload sysctl
+  ansible.builtin.command: sysctl -p

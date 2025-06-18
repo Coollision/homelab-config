@@ -1,0 +1,27 @@
+- name: Copy K3s service file
+  register: k3s_service
+  ansible.builtin.template:
+    src: "k3s.service.j2"
+    dest: "{{ systemd_dir }}/k3s.service"
+    owner: root
+    group: root
+    mode: 0644
+
+- name: Creates k3s config dir
+  ansible.builtin.file:
+    path: /etc/rancher/k3s
+    state: directory
+    mode: 0644
+
+- name: Copy K3s config file
+  ansible.builtin.template:
+    src: "{% if k3s_token is defined and k3s_token != '' %}config_token.j2{% else %}config.j2{% endif %}"
+    dest: "/etc/rancher/k3s/config.yaml"
+    mode: 0644
+
+- name: Enable and check K3s service
+  ansible.builtin.systemd:
+    name: k3s
+    daemon_reload: true
+    state: restarted
+    enabled: true

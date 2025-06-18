@@ -1,0 +1,14 @@
+mirrors:
+{% for regName, val in k3s_registries.items() %}
+  {{ regName }}:
+    endpoint: 
+{{ val.endpoints | to_nice_yaml | indent(6, true) -}}
+{% endfor %}
+configs:
+{% for regName, val in k3s_registries.items() %}
+{% if val.auth is defined %}
+  {{ regName }}:
+    auth: 
+{{ val.auth | to_nice_yaml | indent(6, true) -}}
+{%- endif %}
+{% endfor %}
