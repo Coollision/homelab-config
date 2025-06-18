@@ -10,3 +10,8 @@ ingress_internal:
   host: echo.<secret:kv/data/domains~local>
   path: /
   port: http
+
+  ingress_internal_secure:
+    host: echo.<secret:kv/data/domains~domain>
+    path: /
+    port: web
