@@ -1,0 +1,14 @@
+- name: Download k3s binary
+  ansible.builtin.include_tasks: download.yml
+
+- name: Creates k3s config dir
+  ansible.builtin.file:
+    path: /etc/rancher/k3s
+    state: directory
+    mode: 0644
+
+- name: Setup custom registries
+  ansible.builtin.template:
+    dest: "/etc/rancher/k3s/registries.yaml"
+    src: "registries.yaml.j2"
+    mode: 0660

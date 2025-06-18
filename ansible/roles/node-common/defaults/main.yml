@@ -1,0 +1,2 @@
+hostname_name: "{{ inventory_hostname }}"
+set_expected_state: present

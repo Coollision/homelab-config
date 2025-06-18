@@ -4,3 +4,7 @@
 workload/secrets/vault/test.yaml
 
 **test.yaml
+
+.ansible/
+
+ansible/playbooks/kubeconfig/

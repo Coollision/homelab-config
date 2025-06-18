@@ -1,0 +1,28 @@
+- name: Configure dns
+  hosts: nodes
+  gather_facts: false
+  roles:
+    - role: "dns"
+      vars:
+        dns_set_record: "{{ inventory_hostname }}"
+        dns_set_record_value: "{{ host_ip_address }}"
+
+# - name: Configure node basic things serially
+#   hosts: nodes
+#   gather_facts: false
+#   serial: 1
+#   roles:
+#     - role: python
+#     - role: sudoers
+
+- name: Configure node basic things
+  hosts: nodes
+  gather_facts: false
+  roles:
+    - role: node-common
+
+- name: Raspberry pi specific tasks
+  hosts: rpi
+  gather_facts: true
+  roles:
+    - role: rpi-common

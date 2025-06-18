@@ -1,0 +1,13 @@
+- name: Set maximum receive buffer size (net.core.rmem_max)
+  ansible.builtin.sysctl:
+    name: net.core.rmem_max
+    value: 8388608
+    state: present
+  notify: Reload sysctl
+
+- name: Set default receive buffer size (net.core.rmem_default)
+  ansible.builtin.sysctl:
+    name: net.core.rmem_default
+    value: 8388608
+    state: present
+  notify: Reload sysctl

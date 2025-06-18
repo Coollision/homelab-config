@@ -1,0 +1,26 @@
+# Configuration for /boot/config.txt
+rpi_config_txt:
+  arm_freq: 2000
+  over_voltage: 5
+  gpu_mem: 16
+
+# Configuration for /boot/cmdline.txt
+rpi_cmdline_txt:
+  - key: cgroup_disable
+    value: none
+    replace: true
+  - key: cgroup_enable
+    value: memory
+    replace: false
+  - key: cgroup_enable
+    value: cpu
+    replace: false
+  - key: cgroup_enable
+    value: cpuset
+    replace: false
+  - key: cgroup_memory
+    value: 1
+    replace: true
+  - key: swapaccount
+    value: 1
+    replace: true
