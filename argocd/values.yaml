@@ -93,7 +93,7 @@ argo-cd:
       - name: custom-tools
         emptyDir: { }
 
-  applicationSet:
+  # applicationSet:
     # resources:
     #   requests:
     #     memory: 50Mi
@@ -102,7 +102,7 @@ argo-cd:
     #     memory: 80Mi
     #     # cpu: 20m
 
-  dex:
+  # dex:
     # resources:
     #   requests:
     #     memory: 35Mi
@@ -111,7 +111,7 @@ argo-cd:
     #     memory: 50Mi
     #     # cpu: 10m
   
-  redis:
+  # redis:
     # resources:
     #   requests:
     #     memory: 10Mi
