@@ -5,7 +5,7 @@ vault:
 ingress:
   host: argocd.<secret:kv/data/domains~domain>
 
-argo-cd:
+argocd:
   fullnameOverride: argocd
   global:
     domain: argocd.<secret:kv/data/domains~domain>
@@ -64,7 +64,7 @@ argo-cd:
     extraContainers:
       - name: avp
         command: [ /var/run/argocd/argocd-cmp-server ]
-        image: ghcr.io/crumbhole/lovely-vault-ver:1.2.2
+        image: ghcr.io/crumbhole/lovely-vault-ver:1.2.0
         envFrom:
           - secretRef:
               name: argocd-vault-replacer-credentials
