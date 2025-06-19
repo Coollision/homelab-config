@@ -11,7 +11,7 @@ ingress_internal:
   path: /
   port: http
 
-  ingress_internal_secure:
-    host: echo.<secret:kv/data/domains~domain>
-    path: /
-    port: web
+ingress_internal_secure:
+  host: echo.<secret:kv/data/domains~domain>
+  path: /
+  port: web
