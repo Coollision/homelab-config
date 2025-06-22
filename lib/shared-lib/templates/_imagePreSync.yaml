@@ -12,8 +12,10 @@ metadata:
     argocd.argoproj.io/sync-wave: {{ sub -2 (.Values.syncWave | default 0) | quote }}
 spec:
   cacheSpec:
-  - images:
-    - {{ include "shared-lib.image" . }}
+    - nodeSelector:
+        kubefledged.io/cache: "true"
+      images:
+      - {{ include "shared-lib.image" . }}
 ---
 apiVersion: v1
 kind: ServiceAccount
