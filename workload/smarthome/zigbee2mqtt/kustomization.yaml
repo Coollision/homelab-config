@@ -5,6 +5,6 @@ patches:
   - target:
       group: apps
       version: v1
-      kind: Deployment
+      kind: StatefulSet
       name: zigbee2mqtt
     path: add-zigbee-stick.yaml

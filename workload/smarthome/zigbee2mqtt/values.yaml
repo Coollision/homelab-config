@@ -1,5 +1,5 @@
 fullnameOverride: zigbee2mqtt
-deployment:
+statefullset:
   image:
     repository: koenkk/zigbee2mqtt
     tag: 2.4.0
@@ -21,3 +21,10 @@ storage:
     size: 10Gi
     type: nfs-client
 
+affinity:
+  node:
+    required:
+      - matchExpressions:
+          - key: feature.node.kubernetes.io/iot-zigbee-coordinator
+            operator: In
+            values: ["true"]

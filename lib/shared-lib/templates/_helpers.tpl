@@ -71,3 +71,79 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- define "helm.var_dump_fail" -}}
 {{- . | mustToPrettyJson | printf "\nThe JSON output of the dumped var is: \n%s" | fail }}
 {{- end -}}
+
+{{/*
+Affinity helper: supports required/preferred lists for nodeAffinity and podAffinity.
+Example values:
+affinity:
+  nodeAffinity:
+    required:
+      - matchExpressions:
+          - key: feature.node.kubernetes.io/iot-zigbee-coordinator
+            operator: In
+            values: ["true"]
+    preferred:
+      - weight: 50
+        matchExpressions:
+          - key: some-key
+            operator: In
+            values: ["foo"]
+  podAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values: [homeassistant-db]
+          topologyKey: kubernetes.io/hostname
+*/}}
+{{- define "shared-lib.affinity" -}}
+{{- if .Values.affinity }}
+affinity:
+  {{- if .Values.affinity.node }}
+  nodeAffinity:
+    {{- if .Values.affinity.node.required }}
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        {{- range .Values.affinity.node.required }}
+        - matchExpressions:
+            {{- toYaml .matchExpressions | nindent 12 }}
+        {{- end }}
+    {{- end }}
+    {{- if .Values.affinity.node.preferred }}
+    preferredDuringSchedulingIgnoredDuringExecution:
+      {{- range .Values.affinity.node.preferred }}
+      - weight: {{ .weight }}
+        preference:
+          matchExpressions:
+            {{- toYaml .matchExpressions | nindent 12 }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+  {{- if .Values.affinity.pod }}
+  podAffinity:
+    {{- if .Values.affinity.pod.required }}
+    requiredDuringSchedulingIgnoredDuringExecution:
+      {{- toYaml .Values.affinity.pod.required | nindent 6 }}
+    {{- end }}
+    {{- if .Values.affinity.pod.preferred }}
+    preferredDuringSchedulingIgnoredDuringExecution:
+      {{- toYaml .Values.affinity.pod.preferred | nindent 6 }}
+    {{- end }}
+  {{- end }}
+  {{- if .Values.affinity.podAnti }}
+  podAntiAffinity:
+    {{- if .Values.affinity.podAnti.required }}
+    requiredDuringSchedulingIgnoredDuringExecution:
+      {{- toYaml .Values.affinity.podAnti.required | nindent 6 }}
+    {{- end }}
+    {{- if .Values.affinity.podAnti.preferred }}
+    preferredDuringSchedulingIgnoredDuringExecution:
+      {{- toYaml .Values.affinity.podAnti.preferred | nindent 6 }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- end }}
+

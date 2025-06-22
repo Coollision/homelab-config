@@ -40,6 +40,7 @@ spec:
       {{- include "shared-lib.securityContext" . | nindent 6 -}}
       {{- include "shared-lib.hostNetwork" . | nindent 6 -}}
       {{- include "shared-lib.dnsPolicy" . | nindent 6 }}
+      {{- include "shared-lib.affinity" . | nindent 6 }}
       containers:
         - {{- include "shared-lib.container" . | nindent 10 -}}
       {{- if .Values.storage }}

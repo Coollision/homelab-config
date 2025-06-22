@@ -1,19 +1,10 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: zigbee2mqtt
 spec:
   template:
     spec:
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: feature.node.kubernetes.io/iot-zigbee-coordinator
-                operator: In
-                values:
-                - "true"
       containers:
         - name: zigbee2mqtt
           volumeMounts:
