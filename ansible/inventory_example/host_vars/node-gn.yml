@@ -1,0 +1,13 @@
+---
+host_ip_address: 123.456.789.123
+ansible_user: user
+dns_record_name: node-gn.local-domain
+dns_record_value: "{{ host_ip_address }}"
+ansible_python_interpreter: /usr/bin/python3
+
+k3s_node_name: master-gn
+k3s_flannel_iface: enp1s0
+
+k3s_node_label:
+  - kubefledged.io/cache=true
+  - type=mini

@@ -1,0 +1,6 @@
+---
+dns_zone_name: local-domain
+dns_record_type: A
+dns_server_ip: 1.1.1.1
+dns_key_name: dnsUpdateAnsible
+dns_key_secret: dns update secret
