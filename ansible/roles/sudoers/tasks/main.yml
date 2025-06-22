@@ -1,0 +1,35 @@
+- name: Ensure ansible_user is defined
+  ansible.builtin.fail:
+    msg: "The variable 'ansible_user' is not defined. Please set it in your inventory or playbook."
+  when: ansible_user is not defined
+
+- name: Check if user is in sudoers using lineinfile in check mode
+  become: true
+  ansible.builtin.lineinfile:
+    path: /etc/sudoers
+    state: present
+    regexp: "^\\s*{{ ansible_user }}\\s+ALL=.*"
+    line: "{{ ansible_user }} ALL=(ALL) NOPASSWD:ALL"
+  check_mode: true
+  register: user_in_sudoers_check
+
+- name: Set fact if user is in sudoers
+  ansible.builtin.set_fact:
+    user_in_sudoers: "{{ user_in_sudoers_check.changed == false }}"
+
+- name: Prompt for sudo password if user is not in sudoers
+  ansible.builtin.pause:
+    prompt: "[{{ inventory_hostname }}] Enter the sudo password for user {{ ansible_user }}"
+  register: sudo_password_input
+  when: not user_in_sudoers
+
+- name: Add current user to sudoers
+  become: true
+  vars:
+    ansible_become_pass: "{{ sudo_password_input.user_input }}"
+  ansible.builtin.lineinfile:
+    path: /etc/sudoers
+    state: present
+    regexp: "^\\s*{{ ansible_user }}\\s+ALL=.*"
+    line: "{{ ansible_user }} ALL=(ALL) NOPASSWD:ALL"
+  when: not user_in_sudoers

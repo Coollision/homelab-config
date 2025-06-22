@@ -1,0 +1,8 @@
+- name: Teardown DNS records
+  hosts: vm
+  gather_facts: false
+  roles:
+    - role: dns_teardown
+      vars:
+        dns_set_record: "{{ inventory_hostname }}"
+        dns_set_record_value: "{{ host_ip_address }}"

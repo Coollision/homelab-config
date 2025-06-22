@@ -1,0 +1,42 @@
+- name: Setup Hostname
+  ansible.builtin.include_tasks: hostname-update.yaml
+  vars:
+    hostname_name: "{{ inventory_hostname }}"
+
+- name: Set locale en timezone
+  ansible.builtin.include_tasks: set-timezone.yaml
+
+- name: Add some bash aliases
+  ansible.builtin.include_tasks: bashStuff.yaml
+  vars:
+    bashrc_location: /home/{{ ansible_user }}/.bashrc
+    aliases:
+      grepi: "'grep -i'"
+      resource: "'source ~/.bashrc'"
+
+- name: Run apt upgrade
+  become: true
+  ansible.builtin.apt:
+    cache_valid_time: 600
+    update_cache: true
+    autoclean: true
+    autoremove: true
+    upgrade: true
+
+- name: Install some packages
+  become: true
+  ansible.builtin.apt:
+    cache_valid_time: 600
+    update_cache: true
+    autoclean: true
+    autoremove: true
+    name:
+      - dnsutils
+      - tmux
+      - jq
+      - htop
+      - vim
+      - systemd-timesyncd
+
+- name: Setup custom Usb rule names
+  ansible.builtin.include_tasks: custom-usb-rule-names.yaml

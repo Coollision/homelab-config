@@ -1,0 +1,22 @@
+- name: Setup Pi config options
+  ansible.builtin.include_tasks: pi-config-changes.yaml
+
+- name: Add some bash aliases
+  ansible.builtin.include_tasks: bashStuff.yaml
+  vars:
+    bashrc_location: /home/pi/.bashrc
+    aliases:
+      gettemp: "'vcgencmd measure_temp'"
+      watch: "'watch -n 0.5'"
+      wtemp: "'watch vcgencmd measure_temp'"
+      wcpu: "'watch vcgencmd measure_clock arm'"
+      wthrot: "'watch vcgencmd get_throttled'"
+
+- name: Disable Swap on host
+  ansible.builtin.systemd:
+    service: dphys-swapfile
+    enabled: false
+    state: stopped
+
+- name: Update Udp BufferSize
+  ansible.builtin.include_tasks: updateUdpBufferSize.yaml

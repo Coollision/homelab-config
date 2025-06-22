@@ -1,0 +1,6 @@
+- name: Set some bash aliases
+  ansible.builtin.lineinfile:
+    dest: "{{ bashrc_location }}"
+    regexp: "#?alias {{ item.key }}=.*"
+    line: "alias {{ item.key }}={{ item.value }}"
+  with_dict: "{{ aliases }}"

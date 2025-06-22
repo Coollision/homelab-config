@@ -1,0 +1,10 @@
+- name: Update /etc/hosts  # noqa no-tabs
+  become: true
+  ansible.builtin.lineinfile:
+    dest: /etc/hosts
+    regexp: '^{{ item.key | replace(".", "\.") }}\t{{ item.value }}'
+    line: "{{ item.key }}{{ '\t' }}{{ item.value }}"
+    backup: true
+    state: "{{ set_expected_state }}"
+  with_dict: "{{ item }}"
+  loop: "{{ set_addresses }}"

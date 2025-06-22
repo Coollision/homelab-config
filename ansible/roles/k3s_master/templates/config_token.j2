@@ -1,0 +1,51 @@
+node-name: {{ k3s_node_name }}
+server: https://{{ k3s_master_domain_name }}:6443
+write-kubeconfig-mode: "0644"
+token: {{ k3s_token }}
+
+node-external-ip: {{ host_ip_address }}
+flannel-backend: "vxlan"
+flannel-iface: "{{ k3s_flannel_iface | default('eth0') }}"
+flannel-external-ip: true
+
+disable:
+  - traefik
+  - servicelb
+
+tls-san:
+  - {{ k3s_master_domain_name }}
+
+{% if k3s_node_label is defined %}
+node-label:
+{% for label in k3s_node_label %}
+  - "{{ label }}"
+{% endfor %}
+{% endif %}
+
+{% if k3s_node_taint is defined %}
+node-taint:
+{% for taint in k3s_node_taint %}
+  - "{{ taint }}"
+{% endfor %}
+{% endif %}
+
+kubelet-arg:
+  - "image-gc-high-threshold=45"
+  - "image-gc-low-threshold=40"
+  - "kube-reserved=ephemeral-storage=5Gi"
+  - "system-reserved=ephemeral-storage=5Gi"
+  - "eviction-hard=imagefs.available<10%,imagefs.inodesFree<10%,memory.available<500Mi,nodefs.available<10%,nodefs.inodesFree<10%,pid.available<10%"
+  - "max-pods=60"
+
+kube-controller-manager-arg:
+  - "bind-address=0.0.0.0"
+kube-proxy-arg:
+  - "metrics-bind-address=0.0.0.0"
+kube-scheduler-arg:
+  - "bind-address=0.0.0.0"
+
+etcd-expose-metrics: true
+
+disable-cloud-controller: true
+
+prefer-bundled-bin: true

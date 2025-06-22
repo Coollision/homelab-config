@@ -1,0 +1,24 @@
+- name: Updating hostname (1/2)
+  become: true
+  ansible.builtin.hostname:
+    name: "{{ hostname_name }}"
+  register: hostname_change
+
+- name: Updating hostname (2/2)
+  become: true
+  ansible.builtin.copy:
+    content: "{{ hostname_name }}{{'\n'}}"
+    dest: /etc/hostname
+    backup: true
+    mode: preserve
+  register: hostname_file_change
+
+- name: Update /etc/hosts
+  ansible.builtin.include_tasks: ./ensureInHostsFile.yml
+  vars:
+    set_addresses:
+      - 127.0.0.1: localhost
+      - 127.0.0.1: "{{ inventory_hostname }}"
+      - "{{ {host_ip_address: ansible_host} }}"
+      - 127.0.1.1: raspberrypi
+    set_expected_state: present
