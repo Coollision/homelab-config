@@ -36,6 +36,7 @@
       - jq
       - htop
       - vim
+      - systemd-timesyncd
 
 - name: Setup custom Usb rule names
   ansible.builtin.include_tasks: custom-usb-rule-names.yaml
