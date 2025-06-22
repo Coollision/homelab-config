@@ -47,6 +47,15 @@ homeassistantdb:
       cpu: "1200m"
   labels:
     app.kubernetes.io/component: homeassistant-db
+  affinity:
+    node:
+      preferred:
+        - weight: 50
+          matchExpressions:
+            - key: type
+              operator: In
+              values:
+                - mini
 
 homeassistant:
   fullnameOverride: homeassistant
@@ -103,3 +112,16 @@ homeassistant:
   #     cpu: "1200m"
   labels:
     app.kubernetes.io/component: homeassistant
+  
+  affinity:
+    pod:
+      preferred:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/component
+                  operator: In
+                  values:
+                    - homeassistant-db
+            topologyKey: kubernetes.io/hostname

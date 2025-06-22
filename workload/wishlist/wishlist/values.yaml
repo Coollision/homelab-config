@@ -87,3 +87,16 @@ wishlist:
     app.kubernetes.io/component: wishlist
   keel:
     policy: force
+
+  affinity:
+    pod:
+      preferred:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/component
+                  operator: In
+                  values:
+                    - wishlist-db
+            topologyKey: kubernetes.io/hostname
