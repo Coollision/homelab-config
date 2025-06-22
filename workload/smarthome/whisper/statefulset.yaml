@@ -25,14 +25,13 @@ spec:
             - --language
             - nl
             - --model
-            - tiny-int8
+            - small-int8
             - --beam-size
-            - "8"
+            - "4"
             - --compute-type
-            - int8
+            - int8_float32
             - --device
             - cpu
-            - --debug
 
           env:
           - name: TZ
