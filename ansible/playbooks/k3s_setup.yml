@@ -10,6 +10,7 @@
 - name: K3s setup - master
   hosts: k3smaster
   become: true
+  serial: 1
   roles:
     - role: dns
       vars:

@@ -15,14 +15,9 @@
   ansible.builtin.include_tasks: gather_token.yml
   when: inventory_hostname == groups['k3smaster'][0]
 
-- name: Set K3s token fact for all nodes
-  ansible.builtin.set_fact:
-    k3s_token: "{{ hostvars[groups['k3scluster'][0]].k3s_token.content | b64decode }}"
-  run_once: true
-
 - name: Debug token
   ansible.builtin.debug:
-    msg: "K3s token gathered: {{ k3s_token }}"
+    msg: "K3s token gathered: {{ hostvars[groups['k3scluster'][0]].k3s_token.content | b64decode }}"
 
 - name: Install K3s on remaining master nodes using the token
   ansible.builtin.template:
@@ -32,6 +27,8 @@
     group: root
     mode: 0644
   when: inventory_hostname != groups['k3smaster'][0]
+  vars:
+    k3s_token: "{{ hostvars[groups['k3scluster'][0]].k3s_token.content | b64decode }}"
 
 - name: Start K3s on remaining master nodes
   ansible.builtin.include_tasks: install_k3s.yml
