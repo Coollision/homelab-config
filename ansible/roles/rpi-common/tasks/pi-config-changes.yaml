@@ -1,0 +1,18 @@
+- name: Update /boot/config.txt
+  ansible.builtin.lineinfile:
+    dest: /boot/firmware/config.txt
+    regexp: "^#?{{ item.key }}="
+    line: "{{ item.key }}={{ item.value }}"
+  with_dict: "{{ rpi_config_txt }}"
+  when: rpi_config_txt|length > 0
+  notify:
+    - Reboot host
+
+- name: Set cmdline stuff
+  ansible.builtin.include_tasks: cmdline.yml
+  vars:
+    cmd_line_location: "/boot/firmware/cmdline.txt"
+    key: "{{ item.key }}"
+    value: "{{ item.value }}"
+    update: "{{ item.update }}"
+  loop: "{{ rpi_cmdline_txt }}"

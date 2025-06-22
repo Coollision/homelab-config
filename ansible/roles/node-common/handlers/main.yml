@@ -1,0 +1,17 @@
+- name: Reboot host
+  ansible.builtin.reboot: {}
+
+- name: Update-locale
+  ansible.builtin.command: "update-locale LANG={{ system_locale }}"
+
+- name: Update-udev1
+  become: true
+  ansible.builtin.command: "udevadm control --reload-rules"
+
+- name: Update-udev2
+  become: true
+  ansible.builtin.command: "udevadm trigger"
+
+- name: Reload hostname
+  become: true
+  ansible.builtin.command: hostnamectl set-hostname "{{ inventory_hostname }}"

@@ -1,0 +1,10 @@
+- name: K3s-teardown
+  hosts: k3scluster
+  become: true
+  become_user: root
+  roles:
+    - k3s_teardown
+    - role: dns_teardown
+      vars:
+        dns_set_record: "{{ k3s_master_domain_name }}"
+        dns_set_record_value: "{{ host_ip_address }}"

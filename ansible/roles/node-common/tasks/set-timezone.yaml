@@ -1,0 +1,22 @@
+- name: Set timezone to {{ system_timezone }}
+  ansible.builtin.timezone:
+    name: "{{ system_timezone }}"
+  when: system_timezone is defined
+
+- name: Ensure locale exists {{ system_locale }}
+  ansible.builtin.locale_gen:
+    name: "{{ system_locale }}"
+    state: present
+  when: system_locale is defined
+  notify:
+    - Update-locale
+
+- name: Set default system locale
+  ansible.builtin.debconf:
+    name: 'locales'
+    question: 'locales/default_environment_locale'
+    vtype: 'string'
+    value: '{{ system_locale }}'
+  when: system_locale is defined
+  notify:
+    - Update-locale

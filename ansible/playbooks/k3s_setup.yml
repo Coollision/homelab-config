@@ -1,0 +1,24 @@
+- name: Configure dns
+  hosts: k3scluster
+  become: true
+  roles:
+    - role: k3s_pre
+      vars:
+        # curl -s https://api.github.com/repos/k3s-io/k3s/releases/latest | jq -r .tag_name
+        k3s_pre_version: v1.33.1+k3s1
+
+- name: K3s setup - master
+  hosts: k3smaster
+  become: true
+  roles:
+    - role: dns
+      vars:
+        dns_set_record: "{{ k3s_master_domain_name }}"
+        dns_set_record_value: "{{ hostvars[groups['k3smaster'][0]].host_ip_address }}"
+      run_once: true
+    - k3s_master
+    - role: dns
+      vars:
+        dns_set_record: "{{ k3s_master_domain_name }}"
+        dns_set_record_value: "{% set hostIps = []%}{% for host in ansible_play_hosts %}{{ hostIps.append(hostvars[host].host_ip_address) }}{% endfor %}{{hostIps}}"
+      run_once: true

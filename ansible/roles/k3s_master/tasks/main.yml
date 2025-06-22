@@ -1,0 +1,42 @@
+- name: Install K3s on the first master node without a token
+  ansible.builtin.template:
+    src: config.j2
+    dest: /etc/rancher/k3s/config.yaml
+    owner: root
+    group: root
+    mode: 0644
+  when: inventory_hostname == groups['k3smaster'][0]
+
+- name: Start K3s on the first master node
+  ansible.builtin.include_tasks: install_k3s.yml
+  when: inventory_hostname == groups['k3smaster'][0]
+
+- name: Gather K3s token from the first master node
+  ansible.builtin.include_tasks: gather_token.yml
+  when: inventory_hostname == groups['k3smaster'][0]
+
+- name: Set K3s token fact for all nodes
+  ansible.builtin.set_fact:
+    k3s_token: "{{ hostvars[groups['k3scluster'][0]].k3s_token.content | b64decode }}"
+  run_once: true
+
+- name: Debug token
+  ansible.builtin.debug:
+    msg: "K3s token gathered: {{ k3s_token }}"
+
+- name: Install K3s on remaining master nodes using the token
+  ansible.builtin.template:
+    src: config_token.j2
+    dest: /etc/rancher/k3s/config.yaml
+    owner: root
+    group: root
+    mode: 0644
+  when: inventory_hostname != groups['k3smaster'][0]
+
+- name: Start K3s on remaining master nodes
+  ansible.builtin.include_tasks: install_k3s.yml
+  when: inventory_hostname != groups['k3smaster'][0]
+
+- name: Get kubeconfig
+  ansible.builtin.include_tasks: fetch_kubeconfig.yml
+  when: inventory_hostname == groups['k3smaster'][0]
