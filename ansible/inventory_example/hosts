@@ -1,0 +1,26 @@
+[k3scluster:children]
+k3smaster
+k3sworkers
+
+[k3smaster:children]
+mini
+vm
+
+[k3sworkers:children]
+
+[nodes:children]
+vm
+mini
+rpi
+
+[rpi]
+node-b ansible_host=node-b.local-domain
+node-g ansible_host=node-g.local-domain
+node-r ansible_host=node-r.local-domain
+
+[vm]
+node-s ansible_host=node-s.local-domain
+
+[mini]
+node-gn ansible_host=node-gn.local-domain
+node-be ansible_host=node-be.local-domain
