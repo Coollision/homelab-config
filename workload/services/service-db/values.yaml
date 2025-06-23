@@ -1,0 +1,35 @@
+postgresql:
+  image:
+    tag: 14
+  global:
+    postgresql:
+      auth:
+        postgresPassword: <secret:kv/data/services~db_root-pass>
+  primary:
+    persistence:
+      existingClaim: postgres-pvc
+    livenessProbe:
+      initialDelaySeconds: 60
+      periodSeconds: 120
+      timeoutSeconds: 35
+      failureThreshold: 15
+    readinessProbe:
+      initialDelaySeconds: 5
+      periodSeconds: 120
+      timeoutSeconds: 35
+      failureThreshold: 15
+    terminationGracePeriodSeconds: 60
+    # resources:
+    #   limits:
+    #     cpu: 600m
+    #     memory: 256Mi
+    #   requests:
+    #     cpu: 200m
+    #     memory: 128Mi
+    # configuration: |
+    #   shared_buffers = 64MB
+    #   work_mem = 1MB
+    #   maintenance_work_mem = 16MB
+    #   wal_buffers = 2MB
+    #   checkpoint_timeout = 1min
+    #   effective_cache_size = 128MB
