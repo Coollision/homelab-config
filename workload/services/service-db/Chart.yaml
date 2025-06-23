@@ -1,0 +1,7 @@
+apiVersion: v2
+name: service-db
+version: 0.1.0
+dependencies:
+  - name: postgresql
+    version: 14.x.x
+    repository: https://charts.bitnami.com/bitnami
