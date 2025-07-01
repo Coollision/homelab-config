@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: piper
-          image: rhasspy/wyoming-piper:1.5.4
+          image: rhasspy/wyoming-piper:1.6.2
           args:
             - --voice
             - nl_BE-rdh-medium
