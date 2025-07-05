@@ -2,7 +2,7 @@ fullnameOverride: prefetcharr
 deployment:
   image:
     repository: phueber/prefetcharr
-    tag: sha256:4688f067f63f15720309ec8584136d421e370e046d19693a4b6b880d4be3e68f
+    digest: 4688f067f63f15720309ec8584136d421e370e046d19693a4b6b880d4be3e68f
 
 config:
   TZ: Europe/Brussels
@@ -16,7 +16,7 @@ config:
   # Sonarr API key
   SONARR_API_KEY: <secret:kv/data/services~sonarr_api_key>
   # Logging directory
-  # LOG_DIR: /log
+  LOG_DIR: /log
   # Log level
   RUST_LOG: prefetcharr=debug
   # Polling interval in seconds
@@ -27,3 +27,5 @@ config:
   # USERS: john,12345,Axel F
   # Optional: Only monitor sessions for specific libraries
   # LIBRARIES: TV Shows,Anime
+
+disableService: true
