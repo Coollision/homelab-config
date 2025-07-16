@@ -16,6 +16,9 @@ config:
 ingress_internal:
   host: cloudbeaver.<secret:kv/data/domains~local>
   port: ingress
+ingress_internal_secure:
+  host: cloudbeaver.<secret:kv/data/domains~domain>
+  port: ingress
 storage:
   - mountPath: /opt/cloudbeaver/workspace
     size: 5Gi
