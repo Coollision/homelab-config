@@ -2,7 +2,7 @@ fullnameOverride: jellyseerr
 deployment:
   image:
     repository: fallenbagel/jellyseerr
-    tag: 2.7.1
+    tag: 2.7.2
   ports:
     ingress: 5055
 config:
