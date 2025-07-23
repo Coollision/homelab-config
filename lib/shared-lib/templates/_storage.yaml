@@ -5,6 +5,8 @@
       {{- include "shared-lib.nfs-client-path" (dict "root" $root "storage" $storage)  -}}
     {{- else if eq $storage.type "nfs-client" }}
       {{- include "shared-lib.nfs-client-name" (dict "root" $root "storage" $storage) }}
+    {{- else if eq $storage.type "existingClaim" }}
+      {{/* No PVC creation needed for existing claims */}}
     {{- else }}
       {{- fail "Unsupported storage type or missing storage path" }}
     {{- end }}

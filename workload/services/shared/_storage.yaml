@@ -59,6 +59,26 @@ spec:
     - hard
 ---
 apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: services-books
+  namespace: services
+  labels:
+    type: local
+spec:
+  capacity:
+    storage: 10Ti
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  nfs:
+    server: <secret:kv/data/storage/nfs~server-ip>
+    path: "<secret:kv/data/storage/nfs~books-path>"
+  mountOptions:
+    - vers=4.1
+    - hard
+---
+apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: services-video
@@ -96,6 +116,20 @@ spec:
     requests:
       storage: 8Ti
   volumeName: services-series
+  storageClassName: ""
+  accessModes:
+    - ReadWriteMany
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: services-books
+  namespace: services
+spec:
+  resources:
+    requests:
+      storage: 8Ti
+  volumeName: services-books
   storageClassName: ""
   accessModes:
     - ReadWriteMany
