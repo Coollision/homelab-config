@@ -12,3 +12,4 @@ k3s_node_label:
 k3s_node_taint:
   - dedicated=master:NoSchedule
 
+longhorn_disk_device: /dev/sda3

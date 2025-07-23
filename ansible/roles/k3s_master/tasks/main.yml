@@ -1,3 +1,6 @@
+- name: mount disks for storage
+  ansible.builtin.include_tasks: mount-disks.yml
+
 - name: Install K3s on the primary master node without a token
   ansible.builtin.template:
     src: config.j2

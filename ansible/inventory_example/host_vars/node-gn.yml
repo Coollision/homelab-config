@@ -11,3 +11,5 @@ k3s_flannel_iface: enp1s0
 k3s_node_label:
   - kubefledged.io/cache=true
   - type=mini
+
+longhorn_disk_device: /dev/nvme0n1p3
