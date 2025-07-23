@@ -1,0 +1,40 @@
+fullnameOverride: lazylibrarian
+deployment:
+  image:
+    repository: linuxserver/lazylibrarian
+    tag: latest
+    imagePullPolicy: Always
+  ports:
+    ingress: 5299
+config:
+  TZ: Europe/Brussels
+  PUID: "1000"
+  PGID: "1000"
+
+ingress_internal:
+  host: lazylibrarian.<secret:kv/data/domains~local>
+  port: ingress
+
+ingress_internal_secure:
+  host: lazylibrarian.<secret:kv/data/domains~domain>
+  port: ingress
+
+storage:
+  - mountPath: /config
+    size: 8Gi
+    type: nfs-client
+    storagePath: "lazylibrarian/config"
+    nameSuffix: "config"
+  - mountPath: /data/downloads
+    type: existingClaim
+    claimName: services-downloads
+    nameSuffix: "downloads"
+  - mountPath: /data/books
+    type: existingClaim
+    claimName: services-books
+    nameSuffix: "books"
+
+
+keel:
+  policy: force
+  pollSchedule: "@midnight"

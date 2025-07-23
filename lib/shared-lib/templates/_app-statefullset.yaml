@@ -49,7 +49,11 @@ spec:
         {{- range .Values.storage }}
         - name: {{ printf "%s-%s" (include "helm.fullname" $root ) ( default  "" .nameSuffix )| trunc 63 | trimSuffix "-" }}
           persistentVolumeClaim:
+            {{- if eq .type "existingClaim" }}
+            claimName: {{ .claimName }}
+            {{- else }}
             claimName: {{ printf "%s-%s" (include "helm.fullname" $root ) ( default  "" .nameSuffix )| trunc 63 | trimSuffix "-" }}
+            {{- end }}
         {{- end }}
       {{- end }}
 {{- end }}
