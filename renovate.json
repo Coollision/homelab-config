@@ -8,14 +8,13 @@
     ":prHourlyLimitNone",
     ":rebaseStalePrs"
   ],
-  "kubernetes": {
-    "managerFilePatterns": [
-      "/\\.yaml$/"
-    ],
-    "ignorePaths": [
-      "lib/**"
-    ]
-  },
+  "managers": [
+    {
+      "matchManagers": ["kubernetes"],
+      "fileMatch": ["\\.ya?ml$"],
+      "ignorePaths": ["lib/**"]
+    }
+  ],
   "packageRules": [
     {
       "matchUpdateTypes": [
