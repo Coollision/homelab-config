@@ -3,14 +3,14 @@
   "extends": [
     "config:recommended",
     "helpers:pinGitHubActionDigests",
-    ":pinDevDependencies",
-    ":timezone(Europe/Brussels)",
-    ":prHourlyLimitNone",
-    ":rebaseStalePrs"
+    ":timezone(Europe/Brussels)"
   ],
+  "prHourlyLimit": 0,
+  "rebaseWhen": "conflicted",
+  "pinDigests": true,
   "kubernetes": {
-    "managerFilePatterns": [
-      "/\\.yaml$/"
+    "fileMatch": [
+      "\\.yaml$"
     ],
     "ignorePaths": [
       "lib/**"
@@ -22,12 +22,14 @@
         "patch"
       ],
       "automerge": true,
-      "automergeType": "branch",
-      "automergeSchedule": "* 1-4 * * *",
+      "platformAutomerge": true,
+      "automergeSchedule": [
+        "after 1am and before 4am"
+      ],
       "ignoreTests": true
     }
   ],
   "schedule": [
-    "* 19-22 * * *"
+    "after 7pm and before 10pm"
   ]
 }
