@@ -17,6 +17,14 @@
       "lib/**"
     ]
   },
+  "kubernetes": {
+    "fileMatch": [
+      "\\.ya?ml$"
+    ],
+    "ignorePaths": [
+      "lib/**"
+    ]
+  },
   "separateMinorPatch": true,
   "separateMajorMinor": true,
   "schedule": [
