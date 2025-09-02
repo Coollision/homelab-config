@@ -3,33 +3,70 @@
   "extends": [
     "config:recommended",
     "helpers:pinGitHubActionDigests",
-    ":timezone(Europe/Brussels)"
+    ":timezone(Europe/Brussels)",
+    ":label(dependencies)"
   ],
   "prHourlyLimit": 0,
   "rebaseWhen": "conflicted",
   "pinDigests": true,
-  "kubernetes": {
+  "helm-values": {
     "fileMatch": [
-      "\\.yaml$"
+      "Chart\\.yaml$"
     ],
     "ignorePaths": [
       "lib/**"
     ]
   },
-  "packageRules": [
-    {
-      "matchUpdateTypes": [
-        "patch"
-      ],
-      "automerge": true,
-      "platformAutomerge": true,
-      "automergeSchedule": [
-        "after 1am and before 4am"
-      ],
-      "ignoreTests": true
-    }
-  ],
+  "separateMinorPatch": true,
+  "separateMajorMinor": true,
   "schedule": [
     "after 7pm and before 10pm"
+  ],
+  "packageRules": [
+    {
+      "description": "Automerge patch updates for infrastructure stability",
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "platformAutomerge": true,
+      "automergeSchedule": ["after 1am and before 4am"],
+      "ignoreTests": true
+    },
+    {
+      "description": "Group system infrastructure updates",
+      "matchFileNames": ["system/**"],
+      "groupName": "system infrastructure",
+      "addLabels": ["system", "infrastructure"],
+      "stabilityDays": 3
+    },
+    {
+      "description": "Group workload application updates",
+      "matchFileNames": ["workload/**"],
+      "groupName": "workload applications",
+      "addLabels": ["workload", "applications"],
+      "stabilityDays": 1
+    },
+    {
+      "description": "Group ArgoCD configuration updates",
+      "matchFileNames": ["argocd/**"],
+      "groupName": "argocd configuration",
+      "addLabels": ["argocd", "gitops"],
+      "stabilityDays": 3
+    },
+    {
+      "description": "Group Prometheus/Grafana monitoring stack updates",
+      "matchSourceUrls": [
+        "https://prometheus-community.github.io/helm-charts",
+        "https://grafana.github.io/helm-charts"
+      ],
+      "groupName": "monitoring stack",
+      "addLabels": ["monitoring"],
+      "stabilityDays": 5
+    },
+    {
+      "description": "Critical security updates - no stability days",
+      "matchUpdateTypes": ["patch"],
+      "matchCurrentVersion": "!/.*security.*/",
+      "stabilityDays": 0
+    }
   ]
 }
