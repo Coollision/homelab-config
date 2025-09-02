@@ -2,7 +2,7 @@ fullnameOverride: zigbee2mqtt
 statefullset:
   image:
     repository: koenkk/zigbee2mqtt
-    tag: 2.6.0
+    tag: 2.6.1
   ports:
     web: 8080
 config:
