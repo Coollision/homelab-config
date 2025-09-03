@@ -34,7 +34,7 @@ spec:
               value: "none"
             - name: PWR
               value: "none"
-            image: alpine
+            image: alpine@sha256:4bcff63911fcb4448bd4fdacec207030997caf25e9bea4045fa6c8c44de311d1
             command: ['sh', '-c', 'echo $ACT | tee /leds/ACT/trigger && echo $PWR | tee /leds/PWR/trigger']
             volumeMounts:
             - mountPath: /leds
@@ -80,7 +80,7 @@ spec:
               value: "mmc0"
             - name: PWR
               value: "default-on"
-            image: alpine
+            image: alpine@sha256:4bcff63911fcb4448bd4fdacec207030997caf25e9bea4045fa6c8c44de311d1
             command: ['sh', '-c', 'maecho $ACT | tee /leds/ACT/trigger && echo $PWR | tee /leds/PWR/trigger']
             volumeMounts:
             - mountPath: /leds

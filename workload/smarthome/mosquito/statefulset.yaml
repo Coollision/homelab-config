@@ -15,7 +15,7 @@ spec:
     spec:
       initContainers:
       - name: mosquitto-init
-        image: eclipse-mosquitto:2.0.22-openssl
+        image: eclipse-mosquitto:2.0.22-openssl@sha256:d219d3a72847f3aed6a1d66975972d3b17f86e39e8f6f6b86b4088b879c1a2d6
         command: ["/bin/sh", "-c"]
         args:
         - |
@@ -34,7 +34,7 @@ spec:
             mountPath: /mosquitto/creds
       containers:
       - name: mosquitto
-        image: eclipse-mosquitto:openssl
+        image: eclipse-mosquitto:openssl@sha256:d219d3a72847f3aed6a1d66975972d3b17f86e39e8f6f6b86b4088b879c1a2d6
         env:
         - name: TZ
           value: Europe/Brussels
