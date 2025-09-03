@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: whisper
-          image: rhasspy/wyoming-whisper:2.5.0
+          image: rhasspy/wyoming-whisper:2.5.0@sha256:0d78ad506e450fb113616650b7328233385905e2f2ed07fa59221012144500e3
           args:
           # https://github.com/rhasspy/wyoming-faster-whisper/blob/master/wyoming_faster_whisper/__main__.py
             - --data-dir
