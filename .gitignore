@@ -8,3 +8,8 @@ workload/secrets/vault/test.yaml
 .ansible/
 
 ansible/playbooks/kubeconfig/
+
+# Python cache directories
+__pycache__/
+*.py[cod]
+*$py.class
