@@ -1,8 +1,11 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-resources:
-  - configmap.yaml
+configMapGenerator:
+  - name: homeassistant-bmw-api-config
+    namespace: smarthome
+    files:
+      - const.py=mybmw_api_urls.py
 
 patches:
   - target:
