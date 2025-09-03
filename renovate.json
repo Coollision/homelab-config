@@ -10,16 +10,16 @@
   "rebaseWhen": "conflicted",
   "pinDigests": true,
   "helm-values": {
-    "fileMatch": [
-      "Chart\\.yaml$"
+    "managerFilePatterns": [
+      "/Chart\\.yaml$/"
     ],
     "ignorePaths": [
       "lib/**"
     ]
   },
   "kubernetes": {
-    "fileMatch": [
-      "\\.ya?ml$"
+    "managerFilePatterns": [
+      "/\\.ya?ml$/"
     ],
     "ignorePaths": [
       "lib/**"
@@ -33,32 +33,51 @@
   "packageRules": [
     {
       "description": "Automerge patch updates for infrastructure stability",
-      "matchUpdateTypes": ["patch"],
+      "matchUpdateTypes": [
+        "patch"
+      ],
       "automerge": true,
       "platformAutomerge": true,
-      "automergeSchedule": ["after 1am and before 4am"],
+      "automergeSchedule": [
+        "after 1am and before 4am"
+      ],
       "ignoreTests": true
     },
     {
       "description": "Group system infrastructure updates",
-      "matchFileNames": ["system/**"],
+      "matchFileNames": [
+        "system/**"
+      ],
       "groupName": "system infrastructure",
-      "addLabels": ["system", "infrastructure"],
-      "stabilityDays": 3
+      "addLabels": [
+        "system",
+        "infrastructure"
+      ],
+      "minimumReleaseAge": "3 days"
     },
     {
       "description": "Group workload application updates",
-      "matchFileNames": ["workload/**"],
+      "matchFileNames": [
+        "workload/**"
+      ],
       "groupName": "workload applications",
-      "addLabels": ["workload", "applications"],
-      "stabilityDays": 1
+      "addLabels": [
+        "workload",
+        "applications"
+      ],
+      "minimumReleaseAge": "1 day"
     },
     {
       "description": "Group ArgoCD configuration updates",
-      "matchFileNames": ["argocd/**"],
+      "matchFileNames": [
+        "argocd/**"
+      ],
       "groupName": "argocd configuration",
-      "addLabels": ["argocd", "gitops"],
-      "stabilityDays": 3
+      "addLabels": [
+        "argocd",
+        "gitops"
+      ],
+      "minimumReleaseAge": "3 days"
     },
     {
       "description": "Group Prometheus/Grafana monitoring stack updates",
@@ -67,14 +86,18 @@
         "https://grafana.github.io/helm-charts"
       ],
       "groupName": "monitoring stack",
-      "addLabels": ["monitoring"],
-      "stabilityDays": 5
+      "addLabels": [
+        "monitoring"
+      ],
+      "minimumReleaseAge": "5 days"
     },
     {
       "description": "Critical security updates - no stability days",
-      "matchUpdateTypes": ["patch"],
+      "matchUpdateTypes": [
+        "patch"
+      ],
       "matchCurrentVersion": "!/.*security.*/",
-      "stabilityDays": 0
+      "minimumReleaseAge": null
     }
   ]
 }
