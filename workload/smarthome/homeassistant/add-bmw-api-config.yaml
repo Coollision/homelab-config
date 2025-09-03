@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: homeassistant
+spec:
+  template:
+    spec:
+      containers:
+        - name: homeassistant
+          volumeMounts:
+            - name: bmw-api-config
+              mountPath: /usr/local/lib/python3.13/site-packages/bimmer_connected/const.py
+              subPath: const.py
+              readOnly: true
+      volumes:
+        - name: bmw-api-config
+          configMap:
+            name: homeassistant-bmw-api-config
