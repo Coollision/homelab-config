@@ -57,7 +57,7 @@ spec:
         name: ombi
     spec:
       containers:
-      - image: linuxserver/ombi:4.47.1
+      - image: linuxserver/ombi:4.47.1@sha256:5a59dbc3884436182117a7e98c7caf951ccb9a30b79f4d48bc48c9a2372460c7
         name: ombi
         imagePullPolicy: Always
         env:
