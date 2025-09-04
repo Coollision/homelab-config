@@ -18,7 +18,7 @@ spec:
         app: {{ .Release.Name }}-speedtest-exporter
     spec:
       containers:
-        - image: ghcr.io/miguelndecarvalho/speedtest-exporter
+        - image: ghcr.io/miguelndecarvalho/speedtest-exporter@sha256:f1064d49124c7fc45faabb87c6c876a2fd04e92b3dc14d4b871301217ba30fed
           name: {{ .Release.Name }}-speedtest-exporter
           ports:
             - containerPort: 9798
