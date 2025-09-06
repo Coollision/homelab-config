@@ -2,102 +2,119 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended",
-    "helpers:pinGitHubActionDigests",
     ":timezone(Europe/Brussels)",
     ":label(dependencies)"
   ],
-  "prHourlyLimit": 0,
+  "prHourlyLimit": 2,
+  "prConcurrentLimit": 10,
   "rebaseWhen": "conflicted",
-  "pinDigests": true,
+  "pinDigests": false,
+  "dependencyDashboard": true,
+  "semanticCommits": "enabled",
+  "ignoreUnstable": true,
   "helm-values": {
-    "managerFilePatterns": [
-      "/Chart\\.yaml$/"
-    ],
-    "ignorePaths": [
-      "lib/**"
-    ]
+    "managerFilePatterns": ["/Chart\\.yaml$/"],
+    "ignorePaths": ["lib/**"]
   },
   "kubernetes": {
-    "managerFilePatterns": [
-      "/\\.ya?ml$/"
-    ],
-    "ignorePaths": [
-      "lib/**"
-    ]
+    "managerFilePatterns": ["/\\.ya?ml$/"],
+    "ignorePaths": ["lib/**"]
   },
   "separateMinorPatch": true,
   "separateMajorMinor": true,
-  "schedule": [
-    "after 7pm and before 10pm"
-  ],
+  "schedule": ["after 7pm and before 10pm"],
   "packageRules": [
     {
-      "description": "Automerge patch updates for infrastructure stability",
-      "matchUpdateTypes": [
-        "patch"
-      ],
+      "description": "Automerge system infrastructure patch updates",
+      "matchFileNames": ["system/**"],
+      "matchUpdateTypes": ["patch"],
       "automerge": true,
       "platformAutomerge": true,
-      "automergeSchedule": [
-        "after 1am and before 4am"
-      ],
-      "ignoreTests": true
+      "automergeSchedule": ["after 1am and before 4am"],
+      "addLabels": ["system"],
+      "minimumReleaseAge": "3 days"
     },
     {
-      "description": "Group system infrastructure updates",
-      "matchFileNames": [
-        "system/**"
-      ],
+      "description": "Group system infrastructure major/minor updates",
+      "matchFileNames": ["system/**"],
+      "matchUpdateTypes": ["major", "minor"],
       "groupName": "system infrastructure",
-      "addLabels": [
-        "system",
-        "infrastructure"
-      ],
+      "addLabels": ["system"],
       "minimumReleaseAge": "3 days"
     },
     {
-      "description": "Group workload application updates",
-      "matchFileNames": [
-        "workload/**"
-      ],
+      "description": "Automerge patch updates for workload applications",
+      "matchFileNames": ["workload/**"],
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "platformAutomerge": true,
+      "automergeSchedule": ["after 1am and before 4am"],
+      "addLabels": ["workload"]
+    },
+    {
+      "description": "Group workload major/minor updates",
+      "matchFileNames": ["workload/**"],
+      "matchUpdateTypes": ["major", "minor"],
       "groupName": "workload applications",
-      "addLabels": [
-        "workload",
-        "applications"
-      ],
-      "minimumReleaseAge": "1 day"
+      "addLabels": ["workload"]
     },
     {
-      "description": "Group ArgoCD configuration updates",
-      "matchFileNames": [
-        "argocd/**"
-      ],
-      "groupName": "argocd configuration",
-      "addLabels": [
-        "argocd",
-        "gitops"
-      ],
+      "description": "Automerge ArgoCD patch updates",
+      "matchFileNames": ["argocd/**"],
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "platformAutomerge": true,
+      "automergeSchedule": ["after 1am and before 4am"],
+      "addLabels": ["argocd"],
       "minimumReleaseAge": "3 days"
     },
     {
-      "description": "Group Prometheus/Grafana monitoring stack updates",
+      "description": "Group ArgoCD major/minor updates",
+      "matchFileNames": ["argocd/**"],
+      "matchUpdateTypes": ["major", "minor"],
+      "groupName": "argocd configuration",
+      "addLabels": ["argocd"],
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "Automerge monitoring patch and minor updates",
       "matchSourceUrls": [
         "https://prometheus-community.github.io/helm-charts",
         "https://grafana.github.io/helm-charts"
       ],
-      "groupName": "monitoring stack",
-      "addLabels": [
-        "monitoring"
-      ],
+      "matchUpdateTypes": ["patch", "minor"],
+      "automerge": true,
+      "platformAutomerge": true,
+      "automergeSchedule": ["after 1am and before 4am"],
+      "addLabels": ["monitoring"],
       "minimumReleaseAge": "5 days"
     },
     {
-      "description": "Critical security updates - no stability days",
-      "matchUpdateTypes": [
-        "patch"
+      "description": "Group Prometheus/Grafana major updates requiring approval",
+      "matchSourceUrls": [
+        "https://prometheus-community.github.io/helm-charts",
+        "https://grafana.github.io/helm-charts"
       ],
-      "matchCurrentVersion": "!/.*security.*/",
-      "minimumReleaseAge": null
+      "matchUpdateTypes": ["major"],
+      "groupName": "monitoring stack",
+      "addLabels": ["monitoring"],
+      "minimumReleaseAge": "5 days"
+    },
+    {
+      "description": "Critical security updates - immediate processing",
+      "matchUpdateTypes": ["patch"],
+      "matchCurrentVersion": "/.*security.*/",
+      "automerge": true,
+      "platformAutomerge": true,
+      "automergeSchedule": ["after 1am and before 4am"],
+      "minimumReleaseAge": null,
+      "addLabels": ["security"]
+    },
+    {
+      "description": "Group Ansible playbook updates",
+      "matchFileNames": ["ansible/**"],
+      "groupName": "ansible automation",
+      "addLabels": ["ansible"]
     }
   ]
 }

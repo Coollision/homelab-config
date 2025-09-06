@@ -29,7 +29,7 @@ spec:
         - command:
             - /bin/rpi_exporter
             - --web.listen-address=0.0.0.0:9243
-          image: carlosedp/arm_exporter:latest@sha256:c2510142e3824686cba8af75826737a8158b25648e29867e262d26f553de5211
+          image: carlosedp/arm_exporter:latest
           name: {{ .Release.Name }}-arm-exporter
           ports:
             - containerPort: 9243
