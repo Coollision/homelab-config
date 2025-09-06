@@ -33,7 +33,7 @@ spec:
     spec:
       initContainers:
         - name: sonarr-init
-          image: alpine@sha256:4bcff63911fcb4448bd4fdacec207030997caf25e9bea4045fa6c8c44de311d1
+          image: alpine
           command: 
             - "/bin/sh"
             - "-c"
@@ -78,7 +78,7 @@ spec:
             - mountPath: /config
               name: sonarr-config
       containers:
-        - image: linuxserver/sonarr:4.0.15@sha256:e00e87e0e7c24fdc992093756f120a6ab292790b6a637ff3641bf813091cd726
+        - image: linuxserver/sonarr:4.0.15
           name: sonarr
           imagePullPolicy: Always
           env:
