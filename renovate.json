@@ -5,8 +5,8 @@
     ":timezone(Europe/Brussels)",
     ":label(dependencies)"
   ],
-  "prHourlyLimit": 2,
-  "prConcurrentLimit": 10,
+  "prHourlyLimit": 6,
+  "prConcurrentLimit": 15,
   "rebaseWhen": "conflicted",
   "pinDigests": false,
   "dependencyDashboard": true,
