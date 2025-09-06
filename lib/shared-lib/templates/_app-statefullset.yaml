@@ -22,6 +22,7 @@ metadata:
 spec:
   serviceName: {{ include "helm.fullname" . }}
   replicas: {{ .Values.replicaCount | default "1" }}
+  revisionHistoryLimit: 3
   podManagementPolicy: Parallel
   selector:
     matchLabels:
