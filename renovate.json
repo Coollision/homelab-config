@@ -25,6 +25,13 @@
   "schedule": ["after 7pm and before 10pm"],
   "packageRules": [
     {
+      "description": "Auto-merge existing grouped PRs (temporary fix)",
+      "groupName": ["system infrastructure", "workload applications"],
+      "automerge": true,
+      "platformAutomerge": true,
+      "automergeSchedule": ["after 1am and before 4am"]
+    },
+    {
       "description": "Automerge system infrastructure patch updates",
       "matchFileNames": ["system/**"],
       "matchUpdateTypes": ["patch"],
@@ -35,9 +42,19 @@
       "minimumReleaseAge": "3 days"
     },
     {
-      "description": "Group system infrastructure major/minor updates",
+      "description": "Automerge system infrastructure minor updates",
       "matchFileNames": ["system/**"],
-      "matchUpdateTypes": ["major", "minor"],
+      "matchUpdateTypes": ["minor"],
+      "automerge": true,
+      "platformAutomerge": true,
+      "automergeSchedule": ["after 1am and before 4am"],
+      "addLabels": ["system"],
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "Group system infrastructure major updates",
+      "matchFileNames": ["system/**"],
+      "matchUpdateTypes": ["major"],
       "groupName": "system infrastructure",
       "addLabels": ["system"],
       "minimumReleaseAge": "3 days"
@@ -52,9 +69,18 @@
       "addLabels": ["workload"]
     },
     {
-      "description": "Group workload major/minor updates",
+      "description": "Automerge workload minor updates",
       "matchFileNames": ["workload/**"],
-      "matchUpdateTypes": ["major", "minor"],
+      "matchUpdateTypes": ["minor"],
+      "automerge": true,
+      "platformAutomerge": true,
+      "automergeSchedule": ["after 1am and before 4am"],
+      "addLabels": ["workload"]
+    },
+    {
+      "description": "Group workload major updates",
+      "matchFileNames": ["workload/**"],
+      "matchUpdateTypes": ["major"],
       "groupName": "workload applications",
       "addLabels": ["workload"]
     },
@@ -69,9 +95,19 @@
       "minimumReleaseAge": "3 days"
     },
     {
-      "description": "Group ArgoCD major/minor updates",
+      "description": "Automerge ArgoCD minor updates",
       "matchFileNames": ["argocd/**"],
-      "matchUpdateTypes": ["major", "minor"],
+      "matchUpdateTypes": ["minor"],
+      "automerge": true,
+      "platformAutomerge": true,
+      "automergeSchedule": ["after 1am and before 4am"],
+      "addLabels": ["argocd"],
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "Group ArgoCD major updates",
+      "matchFileNames": ["argocd/**"],
+      "matchUpdateTypes": ["major"],
       "groupName": "argocd configuration",
       "addLabels": ["argocd"],
       "minimumReleaseAge": "3 days"
