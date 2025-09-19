@@ -25,8 +25,8 @@
   "schedule": ["after 7pm and before 10pm"],
   "packageRules": [
     {
-      "description": "Auto-merge existing grouped PRs (temporary fix)",
-      "groupName": ["system infrastructure", "workload applications"],
+      "description": "Auto-merge existing system infrastructure grouped PRs (temporary fix)",
+      "groupName": ["system infrastructure"],
       "automerge": true,
       "platformAutomerge": true,
       "automergeSchedule": ["after 1am and before 4am"]
@@ -69,18 +69,9 @@
       "addLabels": ["workload"]
     },
     {
-      "description": "Automerge workload minor updates",
+      "description": "Group workload major/minor updates requiring approval",
       "matchFileNames": ["workload/**"],
-      "matchUpdateTypes": ["minor"],
-      "automerge": true,
-      "platformAutomerge": true,
-      "automergeSchedule": ["after 1am and before 4am"],
-      "addLabels": ["workload"]
-    },
-    {
-      "description": "Group workload major updates",
-      "matchFileNames": ["workload/**"],
-      "matchUpdateTypes": ["major"],
+      "matchUpdateTypes": ["major", "minor"],
       "groupName": "workload applications",
       "addLabels": ["workload"]
     },
