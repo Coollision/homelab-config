@@ -1,120 +1,43 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended",
-    ":timezone(Europe/Brussels)",
-    ":label(dependencies)"
-  ],
-  "prHourlyLimit": 6,
-  "prConcurrentLimit": 15,
-  "rebaseWhen": "conflicted",
-  "pinDigests": false,
-  "dependencyDashboard": true,
-  "semanticCommits": "enabled",
-  "ignoreUnstable": true,
-  "helm-values": {
-    "managerFilePatterns": ["/Chart\\.yaml$/"],
-    "ignorePaths": ["lib/**"]
-  },
-  "kubernetes": {
-    "managerFilePatterns": ["/\\.ya?ml$/"],
-    "ignorePaths": ["lib/**"]
-  },
-  "separateMinorPatch": true,
-  "separateMajorMinor": true,
+  "extends": ["config:recommended", ":timezone(Europe/Brussels)"],
   "schedule": ["after 7pm and before 10pm"],
   "packageRules": [
     {
-      "description": "Automerge system infrastructure patch updates",
-      "matchFileNames": ["system/**"],
-      "matchUpdateTypes": ["patch"],
-      "automerge": true,
-      "platformAutomerge": true,
-      "automergeSchedule": ["after 1am and before 4am"],
-      "addLabels": ["system"],
-      "minimumReleaseAge": "3 days"
-    },
-    {
-      "description": "Group system infrastructure major/minor updates",
-      "matchFileNames": ["system/**"],
-      "matchUpdateTypes": ["major", "minor"],
-      "groupName": "system infrastructure",
-      "addLabels": ["system"],
-      "minimumReleaseAge": "3 days"
-    },
-    {
-      "description": "Automerge patch updates for workload applications",
-      "matchFileNames": ["workload/**"],
-      "matchUpdateTypes": ["patch"],
-      "automerge": true,
-      "platformAutomerge": true,
-      "automergeSchedule": ["after 1am and before 4am"],
-      "addLabels": ["workload"]
-    },
-    {
-      "description": "Group workload major/minor updates",
-      "matchFileNames": ["workload/**"],
-      "matchUpdateTypes": ["major", "minor"],
-      "groupName": "workload applications",
-      "addLabels": ["workload"]
-    },
-    {
-      "description": "Automerge ArgoCD patch updates",
-      "matchFileNames": ["argocd/**"],
-      "matchUpdateTypes": ["patch"],
-      "automerge": true,
-      "platformAutomerge": true,
-      "automergeSchedule": ["after 1am and before 4am"],
-      "addLabels": ["argocd"],
-      "minimumReleaseAge": "3 days"
-    },
-    {
-      "description": "Group ArgoCD major/minor updates",
-      "matchFileNames": ["argocd/**"],
-      "matchUpdateTypes": ["major", "minor"],
-      "groupName": "argocd configuration",
-      "addLabels": ["argocd"],
-      "minimumReleaseAge": "3 days"
-    },
-    {
-      "description": "Automerge monitoring patch and minor updates",
-      "matchSourceUrls": [
-        "https://prometheus-community.github.io/helm-charts",
-        "https://grafana.github.io/helm-charts"
-      ],
+      "description": "System & ArgoCD - automerge patch and minor",
+      "matchFileNames": ["system/**", "argocd/**"],
       "matchUpdateTypes": ["patch", "minor"],
       "automerge": true,
       "platformAutomerge": true,
-      "automergeSchedule": ["after 1am and before 4am"],
-      "addLabels": ["monitoring"],
-      "minimumReleaseAge": "5 days"
+      "automergeSchedule": ["after 1am and before 4am"]
     },
     {
-      "description": "Group Prometheus/Grafana major updates requiring approval",
-      "matchSourceUrls": [
-        "https://prometheus-community.github.io/helm-charts",
-        "https://grafana.github.io/helm-charts"
-      ],
-      "matchUpdateTypes": ["major"],
-      "groupName": "monitoring stack",
-      "addLabels": ["monitoring"],
-      "minimumReleaseAge": "5 days"
+      "description": "System majors - individual PRs",
+      "matchFileNames": ["system/**"],
+      "matchUpdateTypes": ["major"]
     },
     {
-      "description": "Critical security updates - immediate processing",
+      "description": "ArgoCD majors - individual PRs",
+      "matchFileNames": ["argocd/**"],
+      "matchUpdateTypes": ["major"]
+    },
+    {
+      "description": "Workload - automerge patch only",
+      "matchFileNames": ["workload/**"],
       "matchUpdateTypes": ["patch"],
-      "matchCurrentVersion": "/.*security.*/",
       "automerge": true,
       "platformAutomerge": true,
-      "automergeSchedule": ["after 1am and before 4am"],
-      "minimumReleaseAge": null,
-      "addLabels": ["security"]
+      "automergeSchedule": ["after 1am and before 4am"]
     },
     {
-      "description": "Group Ansible playbook updates",
-      "matchFileNames": ["ansible/**"],
-      "groupName": "ansible automation",
-      "addLabels": ["ansible"]
+      "description": "Workload minors - individual PRs",
+      "matchFileNames": ["workload/**"],
+      "matchUpdateTypes": ["minor"]
+    },
+    {
+      "description": "Workload majors - individual PRs",
+      "matchFileNames": ["workload/**"],
+      "matchUpdateTypes": ["major"]
     }
   ]
 }
