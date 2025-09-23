@@ -58,7 +58,6 @@
       "matchUpdateTypes": ["patch"],
       "automerge": true,
       "platformAutomerge": true,
-      "automergeSchedule": ["after 1am and before 4am"],
       "addLabels": ["workload"]
     },
     {
