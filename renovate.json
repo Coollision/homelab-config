@@ -8,17 +8,12 @@
       "matchFileNames": ["system/**", "argocd/**"],
       "matchUpdateTypes": ["patch", "minor"],
       "automerge": true,
-      "platformAutomerge": true,
+      "automergeType": "branch",
       "automergeSchedule": ["after 1am and before 4am"]
     },
     {
-      "description": "System majors - individual PRs",
-      "matchFileNames": ["system/**"],
-      "matchUpdateTypes": ["major"]
-    },
-    {
-      "description": "ArgoCD majors - individual PRs",
-      "matchFileNames": ["argocd/**"],
+      "description": "System & ArgoCD majors - individual PRs",
+      "matchFileNames": ["system/**", "argocd/**"],
       "matchUpdateTypes": ["major"]
     },
     {
@@ -26,18 +21,13 @@
       "matchFileNames": ["workload/**"],
       "matchUpdateTypes": ["patch"],
       "automerge": true,
-      "platformAutomerge": true,
+      "automergeType": "branch",
       "automergeSchedule": ["after 1am and before 4am"]
     },
     {
       "description": "Workload minors - individual PRs",
       "matchFileNames": ["workload/**"],
-      "matchUpdateTypes": ["minor"]
-    },
-    {
-      "description": "Workload majors - individual PRs",
-      "matchFileNames": ["workload/**"],
-      "matchUpdateTypes": ["major"]
+      "matchUpdateTypes": ["minor", "major"]
     }
   ]
 }
