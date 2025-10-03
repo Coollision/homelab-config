@@ -50,6 +50,27 @@ traefik:
   deployment:
     replicas: 2
 
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      # Avoid running internal Traefik replicas on the same node
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+          topologyKey: kubernetes.io/hostname
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      # Prefer non-Pi nodes for better performance
+      - weight: 50
+        preference:
+          matchExpressions:
+          - key: type
+            operator: NotIn
+            values:
+            - rpi
+
   metrics:
     prometheus: {}
 
