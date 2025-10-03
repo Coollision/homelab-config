@@ -7,7 +7,7 @@ armexporter:
 promstack:
   kubeControllerManager:
     endpoints:
-      - <secret:kv/data/config/master~ip-0>
+      # - <secret:kv/data/config/master~ip-0>
       - <secret:kv/data/config/master~ip-1>
       - <secret:kv/data/config/master~ip-2>
     enabled: true
@@ -21,7 +21,7 @@ promstack:
       insecureSkipVerify: true
   kubeScheduler:
     endpoints:
-      - <secret:kv/data/config/master~ip-0>
+      # - <secret:kv/data/config/master~ip-0>
       - <secret:kv/data/config/master~ip-1>
       - <secret:kv/data/config/master~ip-2>
     enabled: true
@@ -35,7 +35,7 @@ promstack:
       insecureSkipVerify: true
   kubeProxy:
     endpoints:
-      - <secret:kv/data/config/master~ip-0>
+      # - <secret:kv/data/config/master~ip-0>
       - <secret:kv/data/config/master~ip-1>
       - <secret:kv/data/config/master~ip-2>
     enabled: true
