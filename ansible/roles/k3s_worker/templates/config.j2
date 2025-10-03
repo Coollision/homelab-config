@@ -3,14 +3,20 @@ token: {{ k3s_token }}
 server: https://{{ k3s_master_domain_name }}:6443
 
 node-external-ip: {{ host_ip_address }}
-flannel-iface: "eth0"
+flannel-iface: "{{ k3s_flannel_iface | default('eth0') }}"
 
+{% if k3s_node_label is defined %}
+node-label:
+{% for label in k3s_node_label %}
+  - "{{ label }}"
+{% endfor %}
+{% endif %}
 
 kubelet-arg:
   - "image-gc-high-threshold=45"
   - "image-gc-low-threshold=40"
-  - "kube-reserved=cpu=150m,memory=150Mi,ephemeral-storage=5Gi"
-  - "system-reserved=cpu=200m,memory=200Mi,ephemeral-storage=5Gi"
+  - "kube-reserved=cpu=100m,memory=100Mi,ephemeral-storage=5Gi"
+  - "system-reserved=cpu=100m,memory=100Mi,ephemeral-storage=5Gi"
   - "eviction-hard=imagefs.available<10%,imagefs.inodesFree<10%,memory.available<500Mi,nodefs.available<10%,nodefs.inodesFree<10%,pid.available<10%"
   - "max-pods=60"
 

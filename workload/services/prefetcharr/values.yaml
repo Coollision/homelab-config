@@ -28,4 +28,14 @@ config:
   # Optional: Only monitor sessions for specific libraries
   # LIBRARIES: TV Shows,Anime
 
+# Hard requirement: Never schedule on rpi nodes, prefer mini nodes
+affinity:
+  node:
+    required:
+      - matchExpressions:
+          - key: type
+            operator: NotIn
+            values:
+              - rpi
+
 disableService: true
