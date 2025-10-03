@@ -4,7 +4,7 @@
     dest: /etc/rancher/k3s/config.yaml
     owner: root
     group: root
-    mode: 0644
+    mode: "0644"
   when: inventory_hostname == groups['k3smaster'][0]
 
 - name: Start K3s on the first master node
@@ -17,7 +17,17 @@
 
 - name: Debug token
   ansible.builtin.debug:
-    msg: "K3s token gathered: {{ hostvars[groups['k3scluster'][0]].k3s_token.content | b64decode }}"
+    msg: "K3s token gathered: {{ k3s_token_file.content | b64decode | trim }}"
+  when:
+    - inventory_hostname != groups['k3smaster'][0]
+    - k3s_token_file is defined
+
+- name: Get token from first master node for remaining masters
+  ansible.builtin.slurp:
+    path: "/var/lib/rancher/k3s/server/node-token"
+  register: k3s_token_file
+  delegate_to: "{{ groups['k3smaster'][0] }}"
+  when: inventory_hostname != groups['k3smaster'][0]
 
 - name: Install K3s on remaining master nodes using the token
   ansible.builtin.template:
@@ -25,10 +35,10 @@
     dest: /etc/rancher/k3s/config.yaml
     owner: root
     group: root
-    mode: 0644
+    mode: "0644"
   when: inventory_hostname != groups['k3smaster'][0]
   vars:
-    k3s_token: "{{ hostvars[groups['k3scluster'][0]].k3s_token.content | b64decode }}"
+    k3s_token: "{{ k3s_token_file.content | b64decode | trim }}"
 
 - name: Start K3s on remaining master nodes
   ansible.builtin.include_tasks: install_k3s.yml

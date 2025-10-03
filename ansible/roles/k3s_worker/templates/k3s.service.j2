@@ -7,7 +7,7 @@ After=network-online.target
 Type=notify
 ExecStartPre=-/sbin/modprobe br_netfilter
 ExecStartPre=-/sbin/modprobe overlay
-ExecStart={{ k3s_server_location }} agent -d /var/lib/rancher/k3s {% if node_args is defined %}{% for arg in node_args %}--{{ arg }} {% endfor +%}{% endif %}
+ExecStart={{ k3s_server_location | default('/usr/local/bin/k3s') }} agent -d /var/lib/rancher/k3s {% if node_args is defined %}{% for arg in node_args %}--{{ arg }} {% endfor +%}{% endif %}
 KillMode=process
 Delegate=yes
 # Having non-zero Limit*s causes performance problems due to accounting overhead

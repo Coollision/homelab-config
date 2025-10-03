@@ -35,7 +35,7 @@ kubelet-arg:
   - "kube-reserved=ephemeral-storage=5Gi"
   - "system-reserved=ephemeral-storage=5Gi"
   - "eviction-hard=imagefs.available<10%,imagefs.inodesFree<10%,memory.available<500Mi,nodefs.available<10%,nodefs.inodesFree<10%,pid.available<10%"
-  - "max-pods=60"
+  - "max-pods=90"
 
 kube-controller-manager-arg:
   - "bind-address=0.0.0.0"

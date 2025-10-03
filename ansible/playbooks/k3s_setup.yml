@@ -23,7 +23,7 @@
         dns_set_record: "{{ k3s_master_domain_name }}"
         dns_set_record_value: "{% set hostIps = []%}{% for host in ansible_play_hosts %}{{ hostIps.append(hostvars[host].host_ip_address) }}{% endfor %}{{hostIps}}"
       run_once: true
-    
+
     - role: dns
       vars:
         dns_set_record: "ingress"
@@ -37,3 +37,9 @@
         dns_set_record_value: "ingress"
         dns_record_type: "cname"
       run_once: true
+
+- name: K3s setup - workers
+  hosts: k3sworkers
+  become: true
+  roles:
+    - k3s_worker
