@@ -2,32 +2,28 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended", ":timezone(Europe/Brussels)"],
   "schedule": ["after 7pm and before 10pm"],
+  "kubernetes": {
+    "fileMatch": ["\\.yaml$"],
+    "ignorePaths": ["lib/**"]
+  },
   "packageRules": [
     {
       "description": "System & ArgoCD - automerge patch and minor",
       "matchFileNames": ["system/**", "argocd/**"],
-      "matchUpdateTypes": ["patch", "minor"],
       "automerge": true,
       "automergeType": "branch",
+      "ignoreTests": true,
+      "matchUpdateTypes": ["patch", "minor"],
       "automergeSchedule": ["after 1am and before 4am"]
-    },
-    {
-      "description": "System & ArgoCD majors - individual PRs",
-      "matchFileNames": ["system/**", "argocd/**"],
-      "matchUpdateTypes": ["major"]
     },
     {
       "description": "Workload - automerge patch only",
       "matchFileNames": ["workload/**"],
-      "matchUpdateTypes": ["patch"],
       "automerge": true,
       "automergeType": "branch",
+      "ignoreTests": true,
+      "matchUpdateTypes": ["patch"],
       "automergeSchedule": ["after 1am and before 4am"]
-    },
-    {
-      "description": "Workload minors - individual PRs",
-      "matchFileNames": ["workload/**"],
-      "matchUpdateTypes": ["minor", "major"]
     }
   ]
 }
