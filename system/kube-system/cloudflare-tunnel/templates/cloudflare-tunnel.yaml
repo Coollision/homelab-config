@@ -19,10 +19,10 @@ spec:
         - name: cloudflared
           image: cloudflare/cloudflared:2025.8.1
           args:
-          - tunnel
-          - --config
-          - /etc/cloudflared/config/config.yaml
-          - run
+            - tunnel
+            - --config
+            - /etc/cloudflared/config/config.yaml
+            - run
           livenessProbe:
             httpGet:
               path: /ready
@@ -31,15 +31,15 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 10
           volumeMounts:
-          - name: config
-            mountPath: /etc/cloudflared/config
-            readOnly: true
-          - name: creds
-            mountPath: /etc/cloudflared/creds
-            readOnly: true
-          - name: cert
-            mountPath: /etc/cloudflared
-            readOnly: true
+            - name: config
+              mountPath: /etc/cloudflared/config
+              readOnly: true
+            - name: creds
+              mountPath: /etc/cloudflared/creds
+              readOnly: true
+            - name: cert
+              mountPath: /etc/cloudflared
+              readOnly: true
           # resources:
           #   requests:
           #     cpu: 100m
@@ -47,19 +47,39 @@ spec:
           #   limits:
           #     cpu: 120m
           #     memory: 30Mi
+      affinity:
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            # Prefer to run on same nodes as external Traefik for performance
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: traefik-external
+                topologyKey: kubernetes.io/hostname
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            # Prefer non-Pi nodes for better performance
+            - weight: 80
+              preference:
+                matchExpressions:
+                  - key: type
+                    operator: NotIn
+                    values:
+                      - rpi
       volumes:
-      - name: creds
-        secret:
-          secretName: tunnel-credentials
-      - name: cert
-        secret:
-          secretName: tunnel-pem
-      - name: config
-        configMap:
-          name: cloudflared
-          items:
-          - key: config.yaml
-            path: config.yaml
+        - name: creds
+          secret:
+            secretName: tunnel-credentials
+        - name: cert
+          secret:
+            secretName: tunnel-pem
+        - name: config
+          configMap:
+            name: cloudflared
+            items:
+              - key: config.yaml
+                path: config.yaml
 ---
 apiVersion: v1
 kind: ConfigMap
