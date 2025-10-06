@@ -40,7 +40,7 @@ mysql:
   deployment:
     image:
       repository: yobasystems/alpine-mariadb
-      tag: 11.4.5
+      tag: 11.4.8
     ports:
       mysql: 3306
   config:
