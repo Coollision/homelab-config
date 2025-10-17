@@ -15,10 +15,7 @@ spec:
     spec:
       containers:
         - name: openwakeword
-          image: rhasspy/wyoming-openwakeword:1.10.0
-          args:
-            - --preload-model
-            - hey_jarvis
+          image: rhasspy/wyoming-openwakeword:2.0.0
           env:
           - name: TZ
             value: Europe/Brussels
