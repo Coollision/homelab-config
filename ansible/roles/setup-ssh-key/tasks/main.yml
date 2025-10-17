@@ -1,0 +1,14 @@
+---
+- name: Add SSH public key to authorized_keys
+  authorized_key:
+    user: "{{ ansible_user }}" # Use as username
+    key: "{{ ssh_public_key }}"
+    state: present
+    exclusive: yes
+  become: true # Escalate to root if needed to modify authorized_keys
+
+- name: Restart SSH service
+  service:
+    name: ssh
+    state: restarted
+  become: true
