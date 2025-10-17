@@ -1,4 +1,5 @@
 - name: Update /boot/config.txt
+  become: true
   ansible.builtin.lineinfile:
     dest: /boot/firmware/config.txt
     regexp: "^#?{{ item.key }}="

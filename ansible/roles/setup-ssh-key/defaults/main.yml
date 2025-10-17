@@ -1,0 +1,2 @@
+---
+ssh_public_key: "" # Default empty; override in group_vars or playbook

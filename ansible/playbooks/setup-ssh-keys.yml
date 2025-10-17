@@ -1,0 +1,6 @@
+---
+- name: Setup SSH keys on nodes
+  hosts: nodes
+  gather_facts: yes # Ensure hostname is available
+  roles:
+    - setup-ssh-key
