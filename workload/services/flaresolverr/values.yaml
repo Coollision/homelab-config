@@ -2,7 +2,7 @@ fullnameOverride: flaresolverr
 deployment:
   image:
     repository: ghcr.io/flaresolverr/flaresolverr
-    tag: v3.4.2
+    tag: v3.4.3
   ports:
     web: 8191
 config:
