@@ -1,33 +1,40 @@
-- name: Install K3s on the first master node without a token
+- name: Install K3s on the primary master node without a token
   ansible.builtin.template:
     src: config.j2
     dest: /etc/rancher/k3s/config.yaml
     owner: root
     group: root
     mode: "0644"
-  when: inventory_hostname == groups['k3smaster'][0]
+  when: inventory_hostname == k3s_primary_master
 
-- name: Start K3s on the first master node
+- name: Start K3s on the primary master node
   ansible.builtin.include_tasks: install_k3s.yml
-  when: inventory_hostname == groups['k3smaster'][0]
+  when: inventory_hostname == k3s_primary_master
 
-- name: Gather K3s token from the first master node
+- name: Gather K3s token from the primary master node
   ansible.builtin.include_tasks: gather_token.yml
-  when: inventory_hostname == groups['k3smaster'][0]
+  when: inventory_hostname == k3s_primary_master
 
 - name: Debug token
   ansible.builtin.debug:
     msg: "K3s token gathered: {{ k3s_token_file.content | b64decode | trim }}"
   when:
-    - inventory_hostname != groups['k3smaster'][0]
+    - inventory_hostname != k3s_primary_master
     - k3s_token_file is defined
 
-- name: Get token from first master node for remaining masters
+- name: Get token from primary master node for remaining masters
   ansible.builtin.slurp:
     path: "/var/lib/rancher/k3s/server/node-token"
   register: k3s_token_file
-  delegate_to: "{{ groups['k3smaster'][0] }}"
-  when: inventory_hostname != groups['k3smaster'][0]
+  delegate_to: "{{ k3s_primary_master }}"
+  when: inventory_hostname != k3s_primary_master
+
+- name: Validate token from primary master node for remaining masters
+  ansible.builtin.fail:
+    msg: "Failed to retrieve valid node token from primary master node {{ k3s_primary_master }}. Ensure K3s is properly running on the primary master."
+  when:
+    - inventory_hostname != k3s_primary_master
+    - k3s_token_file.content is not defined or k3s_token_file.content | b64decode | trim == ""
 
 - name: Install K3s on remaining master nodes using the token
   ansible.builtin.template:
@@ -36,14 +43,14 @@
     owner: root
     group: root
     mode: "0644"
-  when: inventory_hostname != groups['k3smaster'][0]
+  when: inventory_hostname != k3s_primary_master
   vars:
     k3s_token: "{{ k3s_token_file.content | b64decode | trim }}"
 
 - name: Start K3s on remaining master nodes
   ansible.builtin.include_tasks: install_k3s.yml
-  when: inventory_hostname != groups['k3smaster'][0]
+  when: inventory_hostname != k3s_primary_master
 
 - name: Get kubeconfig
   ansible.builtin.include_tasks: fetch_kubeconfig.yml
-  when: inventory_hostname == groups['k3smaster'][0]
+  when: inventory_hostname == k3s_primary_master
