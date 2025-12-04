@@ -3,7 +3,7 @@ wordpress:
   deployment:
     image:
       repository: wordpress
-      tag: 6.8.3
+      tag: 6.9.0
     ports:
       wordpress: 80
   config:
