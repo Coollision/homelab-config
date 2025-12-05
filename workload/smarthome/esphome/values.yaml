@@ -2,7 +2,7 @@ fullnameOverride: esphome
 deployment:
   image:
     repository: ghcr.io/esphome/esphome
-    tag: 2025.11.2
+    tag: 2025.11.4
   ports:
     web: 6052
     webing: 6123
