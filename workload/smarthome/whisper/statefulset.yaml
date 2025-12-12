@@ -25,11 +25,11 @@ spec:
             - --language
             - nl
             - --model
-            - small-int8
+            - medium-int8
             - --beam-size
-            - "4"
+            - "5"
             - --compute-type
-            - int8_float32
+            - int8
             - --device
             - cpu
 
