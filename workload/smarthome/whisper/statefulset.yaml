@@ -27,16 +27,27 @@ spec:
             - --model
             - medium-int8
             - --beam-size
-            - "5"
+            - "3"
             - --compute-type
             - int8
             - --device
             - cpu
+            - --num-workers
+            - "2"
+            - --vad-filter
+            - --initial-prompt
+            - "Dutch speech transcription"
 
           env:
-          - name: TZ
-            value: Europe/Brussels
-          resources: {}
+            - name: TZ
+              value: Europe/Brussels
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "1000m"
+            limits:
+              memory: "4Gi"
+              cpu: "3000m"
           ports:
             - containerPort: 10300
               name: whisper
@@ -47,9 +58,9 @@ spec:
             - name: whisper-download
               mountPath: /download
       volumes:
-          - name: whisper-data
-            persistentVolumeClaim:
-              claimName: whisper-data
-          - name: whisper-download
-            persistentVolumeClaim:
-              claimName: whisper-download
+        - name: whisper-data
+          persistentVolumeClaim:
+            claimName: whisper-data
+        - name: whisper-download
+          persistentVolumeClaim:
+            claimName: whisper-download
