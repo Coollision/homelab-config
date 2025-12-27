@@ -13,3 +13,4 @@ ansible/playbooks/kubeconfig/
 __pycache__/
 *.py[cod]
 *$py.class
+ZZ_Travel setup.md
