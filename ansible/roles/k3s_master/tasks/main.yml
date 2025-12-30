@@ -57,3 +57,6 @@
 - name: Get kubeconfig
   ansible.builtin.include_tasks: fetch_kubeconfig.yml
   when: inventory_hostname == k3s_primary_master
+
+- name: Apply node annotations (labels are applied during registration)
+  ansible.builtin.include_tasks: apply_annotations.yml
