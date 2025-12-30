@@ -103,14 +103,18 @@ spec:
             httpGet:
               port: 8989
               path: /ping
-            initialDelaySeconds: 30
+            initialDelaySeconds: 60
             periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
           livenessProbe:
             httpGet:
               port: 8989
               path: /ping
-            initialDelaySeconds: 30
+            initialDelaySeconds: 90
             periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
           volumeMounts:
             - name: sonarr-config
               mountPath: /config
