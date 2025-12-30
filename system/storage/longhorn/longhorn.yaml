@@ -16,6 +16,7 @@ spec:
           defaultReplicaCount: 3
           taintToleration: []
           createDefaultDiskLabeledNodes: false
+          defaultDataPath: ""
         global:
           tolerations:
             - key: "node-role.kubernetes.io/control-plane"
