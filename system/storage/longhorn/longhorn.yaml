@@ -18,7 +18,7 @@ spec:
           createDefaultDiskLabeledNodes: false
         global:
           tolerations:
-            - key: "node-role.kubernetes.io/master"
+            - key: "node-role.kubernetes.io/control-plane"
               operator: "Exists"
               effect: "NoSchedule"
             - key: "dedicated"
@@ -27,9 +27,9 @@ spec:
               effect: "NoSchedule"
         longhornManager:
           nodeSelector:
-            node-role.kubernetes.io/master: "true"
+            node-role.kubernetes.io/control-plane: "true"
           tolerations:
-            - key: "node-role.kubernetes.io/master"
+            - key: "node-role.kubernetes.io/control-plane"
               operator: "Exists"
               effect: "NoSchedule"
             - key: "dedicated"
