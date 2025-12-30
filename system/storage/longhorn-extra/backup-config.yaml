@@ -1,0 +1,98 @@
+---
+# NFS Backup Target for Longhorn
+# This allows Longhorn to backup volumes to your NFS server
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: longhorn-backup-nfs
+  namespace: storage
+  annotations:
+    nfs.io/storage-path: "longhorn-backups"
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: nfs-client
+  resources:
+    requests:
+      storage: 500Gi
+---
+# Longhorn Setting CRD to configure backup target automatically
+apiVersion: longhorn.io/v1beta2
+kind: Setting
+metadata:
+  name: backup-target
+  namespace: storage
+spec:
+  value: "nfs://longhorn-backup-nfs.storage.svc.cluster.local:/"
+---
+# Example: Recurring Backup Job CRD
+# This creates automated daily backups at 2 AM
+# Uncomment and modify for your volumes
+# apiVersion: longhorn.io/v1beta2
+# kind: RecurringJob
+# metadata:
+#   name: backup-daily
+#   namespace: storage
+# spec:
+#   name: backup-daily
+#   task: backup
+#   cron: "0 2 * * *"
+#   retain: 7  # Keep 7 backups
+#   concurrency: 2
+#   labels:
+#     backup: daily
+---
+# Example: Recurring Snapshot Job CRD
+# This creates local snapshots every 6 hours
+# apiVersion: longhorn.io/v1beta2
+# kind: RecurringJob
+# metadata:
+#   name: snapshot-frequent
+#   namespace: storage
+# spec:
+#   name: snapshot-frequent
+#   task: snapshot
+#   cron: "0 */6 * * *"
+#   retain: 12  # Keep 12 snapshots (3 days)
+#   concurrency: 2
+#   labels:
+#     snapshot: frequent
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: longhorn-backup-info
+  namespace: storage
+data:
+  instructions: |
+    Backup Configuration via CRDs:
+    
+    1. Backup Target: Automatically configured via Setting CRD
+    
+    2. Create Recurring Backup Jobs:
+       - Edit backup-config.yaml
+       - Uncomment RecurringJob examples
+       - Customize cron schedule and retention
+       - Apply: kubectl apply -f backup-config.yaml
+    
+    3. Attach Job to Volume:
+       kubectl -n storage label volume <volume-name> backup=daily
+       
+    4. Manual Backup:
+       kubectl -n storage create -f - <<EOF
+       apiVersion: longhorn.io/v1beta2
+       kind: Backup
+       metadata:
+         name: manual-backup-$(date +%Y%m%d-%H%M%S)
+         namespace: storage
+       spec:
+         snapshotName: ""
+         labels:
+           created-by: manual
+       EOF
+    
+    Cron Schedule Examples:
+    - Daily 2 AM:      0 2 * * *
+    - Every 6 hours:   0 */6 * * *
+    - Weekly Sunday:   0 3 * * 0
+    - Twice daily:     0 2,14 * * *

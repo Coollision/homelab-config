@@ -412,9 +412,183 @@ kubectl -n storage patch nodes.longhorn.io <node-name> --type='json' -p='[{"op":
 - **Access Control**: RBAC rules for Longhorn resources
 - **UI Authentication**: Configure ingress authentication (OAuth2, BasicAuth)
 
+---
+
+## Backup Configuration
+
+### NFS Backup Target
+
+Longhorn can backup volumes to your NFS server for disaster recovery.
+
+**Setup:**
+
+1. **Deploy backup PVC** (already configured in `longhorn-extra/backup-config.yaml`):
+
+   ```bash
+   kubectl apply -f system/storage/longhorn-extra/backup-config.yaml
+   ```
+
+2. **Configure Longhorn backup target** via UI:
+
+   - Go to: `https://longhorn.<your-domain>` → Settings → General
+   - Set **Backup Target**: `nfs://longhorn-backup-nfs.storage.svc.cluster.local:/`
+   - Click Save
+
+3. **Create manual backup**:
+
+   ```bash
+   # Via kubectl
+   kubectl -n storage annotate volume pvc-<volume-id> longhorn.io/backup-volume=true
+
+   # Or via UI: Volume → Select Volume → Create Backup
+   ```
+
+4. **Schedule recurring backups**:
+   ```bash
+   # Via UI: Volume → Schedule Recurring Backup
+   # Example cron: "0 2 * * *" (daily at 2 AM)
+   ```
+
+### Backup Storage Location
+
+Backups are stored on NFS at: `<nfs-server>:<nfs-path>/longhorn-backups/`
+
+You can access them via your existing NFS backup system.
+
+### Automated Recurring Backups via CRD
+
+Create automated backup schedules using RecurringJob CRDs:
+
+1. **Edit `backup-config.yaml`** and uncomment RecurringJob examples
+2. **Customize schedule** (cron format) and retention policy
+3. **Apply**: `kubectl apply -f system/storage/longhorn-extra/backup-config.yaml`
+4. **Attach to volumes**: `kubectl -n storage label volume <volume-name> backup=daily`
+
+---
+
+## File-Level Access to Volumes
+
+### NFS Server Method (Recommended for Mac)
+
+Mount Longhorn volumes directly on your Mac via NFS:
+
+**Quick Start:**
+
+1. **Deploy NFS server**:
+
+   ```bash
+   kubectl apply -f system/storage/longhorn-extra/nfs-server.yaml
+   ```
+
+2. **Edit deployment** to add your volumes:
+
+   ```bash
+   kubectl edit deployment longhorn-nfs-server -n storage
+   ```
+
+   Add under `volumeMounts` and `volumes` sections (see MAC-ACCESS.md)
+
+3. **Get NFS server IP**:
+
+   ```bash
+   kubectl get svc longhorn-nfs-server -n storage -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+   ```
+
+4. **Mount on Mac**:
+   - Via Finder: `⌘K` → `nfs://<IP>/tautulli`
+   - Via Terminal: `sudo mount -t nfs -o resvport <IP>:/tautulli /Volumes/longhorn-tautulli`
+
+**See `longhorn-extra/MAC-ACCESS.md` for detailed instructions and troubleshooting.**
+
+**Benefits:**
+
+- ✅ Native Mac integration (Finder, any app)
+- ✅ Direct file editing
+- ✅ Drag & drop support
+- ✅ No kubectl commands needed
+
+### Alternative: kubectl cp Method
+
+For quick file operations without setting up NFS:
+
+```bash
+# Copy file from volume to local
+kubectl cp services/<pod-name>:/path/to/file ./local-file
+
+# Copy file from local to volume
+kubectl cp ./local-file services/<pod-name>:/path/to/file
+```
+
+---
+
+## Common File Access Scenarios
+
+### Browse and Edit Files on Mac
+
+```bash
+# Mount volume via NFS
+sudo mount -t nfs -o resvport <NFS-IP>:/tautulli /Volumes/longhorn-tautulli
+
+# Open in Finder
+open /Volumes/longhorn-tautulli
+
+# Edit with any app
+code /Volumes/longhorn-tautulli/config.ini
+vim /Volumes/longhorn-tautulli/settings.json
+
+# Unmount when done
+sudo umount /Volumes/longhorn-tautulli
+```
+
+### Restore Individual Files
+
+```bash
+# Mount volume
+sudo mount -t nfs -o resvport <NFS-IP>:/tautulli /Volumes/longhorn-tautulli
+
+# Copy backup to volume
+cp ~/Backups/config.db.backup /Volumes/longhorn-tautulli/config.db
+
+# Unmount
+sudo umount /Volumes/longhorn-tautulli
+```
+
+### Inspect Volume Contents
+
+```bash
+# Mount and browse
+sudo mount -t nfs -o resvport <NFS-IP>:/tautulli /Volumes/longhorn-tautulli
+open /Volumes/longhorn-tautulli
+
+# Or use terminal
+cd /Volumes/longhorn-tautulli
+ls -la
+du -sh *
+
+# Unmount
+sudo umount /Volumes/longhorn-tautulli
+```
+
+### Migrate Data Between Volumes
+
+```bash
+# Mount both source and destination volumes
+sudo mount -t nfs <NFS-IP>:/source /Volumes/longhorn-source
+sudo mount -t nfs <NFS-IP>:/destination /Volumes/longhorn-destination
+
+# Use rsync to migrate
+rsync -av --progress /Volumes/longhorn-source/ /Volumes/longhorn-destination/
+
+# Unmount
+sudo umount /Volumes/longhorn-source
+sudo umount /Volumes/longhorn-destination
+```
+
+---
+
 ## References
 
-- **Longhorn Documentation**: https://longhorn.io/docs/
-- **Helm Chart**: https://github.com/longhorn/longhorn
-- **GitHub Repository**: https://github.com/longhorn/longhorn
-- **Community Support**: https://slack.cncf.io/ (#longhorn)
+- **Longhorn Documentation**: <https://longhorn.io/docs/>
+- **Helm Chart**: <https://github.com/longhorn/longhorn>
+- **GitHub Repository**: <https://github.com/longhorn/longhorn>
+- **Community Support**: <https://slack.cncf.io/> (#longhorn)

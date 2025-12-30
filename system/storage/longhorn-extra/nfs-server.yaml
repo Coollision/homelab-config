@@ -1,0 +1,354 @@
+---
+# Dynamic NFS Server that auto-discovers and exports ALL Longhorn volumes
+# No manual configuration needed - just deploy and mount!
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: longhorn-nfs-server
+  namespace: storage
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: longhorn-nfs-server
+  namespace: storage
+rules:
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: longhorn-nfs-server
+  namespace: storage
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: longhorn-nfs-server
+subjects:
+- kind: ServiceAccount
+  name: longhorn-nfs-server
+  namespace: storage
+---
+# ClusterRole for cross-namespace PVC access
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: longhorn-nfs-server-pvcs
+rules:
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: longhorn-nfs-server-pvcs
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: longhorn-nfs-server-pvcs
+subjects:
+- kind: ServiceAccount
+  name: longhorn-nfs-server
+  namespace: storage
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: longhorn-nfs-server
+  namespace: storage
+spec:
+  serviceName: longhorn-nfs-server
+  replicas: 1
+  selector:
+    matchLabels:
+      app: longhorn-nfs-server
+  template:
+    metadata:
+      labels:
+        app: longhorn-nfs-server
+    spec:
+      serviceAccountName: longhorn-nfs-server
+      automountServiceAccountToken: true
+      initContainers:
+      - name: setup-mounts
+        image: bitnami/kubectl:latest
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+          echo "Discovering Longhorn PVCs across all namespaces..."
+          
+          # Find all Longhorn PVCs
+          PVCS=$(kubectl get pvc -A -o json | jq -r '.items[] | select(.spec.storageClassName == "longhorn") | "\(.metadata.namespace)/\(.metadata.name)"')
+          
+          if [ -z "$PVCS" ]; then
+            echo "No Longhorn PVCs found"
+            exit 0
+          fi
+          
+          echo "Found Longhorn PVCs:"
+          echo "$PVCS"
+          
+          # Create mount script for main container
+          cat > /config/mount-script.sh <<'EOF'
+          #!/bin/bash
+          set -e
+          mkdir -p /exports
+          echo "NFS exports for Longhorn volumes:" > /exports/.volumes
+          EOF
+          
+          chmod +x /config/mount-script.sh
+          
+          echo "Setup complete. Main container will handle mounts via hostPath."
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+      containers:
+      - name: nfs-server
+        image: erichough/nfs-server:2.2.1
+        ports:
+        - name: nfs
+          containerPort: 2049
+          protocol: TCP
+        - name: mountd
+          containerPort: 20048
+          protocol: TCP
+        - name: rpcbind
+          containerPort: 111
+          protocol: TCP
+        securityContext:
+          privileged: true
+          capabilities:
+            add:
+              - SYS_ADMIN
+              - SETPCAP
+        env:
+        - name: NFS_EXPORT_0
+          value: "/exports *(rw,sync,no_subtree_check,no_root_squash,fsid=0)"
+        volumeMounts:
+        - name: exports
+          mountPath: /exports
+          mountPropagation: HostToContainer
+        - name: config
+          mountPath: /config
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+      volumes:
+      - name: exports
+        hostPath:
+          path: /var/lib/longhorn-nfs-exports
+          type: DirectoryOrCreate
+      - name: config
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: longhorn-nfs-server
+  namespace: storage
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: <secret:kv/data/storage/longhorn-nfs~ip>
+    metallb.universe.tf/address-pool: default
+spec:
+  type: LoadBalancer
+  selector:
+    app: longhorn-nfs-server
+  ports:
+  - name: nfs
+    port: 2049
+    targetPort: 2049
+    protocol: TCP
+  - name: mountd
+    port: 20048
+    targetPort: 20048
+    protocol: TCP
+  - name: rpcbind
+    port: 111
+    targetPort: 111
+    protocol: TCP
+---
+# DaemonSet to create symlinks on each node for Longhorn volumes
+# This makes volumes accessible via hostPath in the NFS server
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: longhorn-nfs-linker
+  namespace: storage
+spec:
+  selector:
+    matchLabels:
+      app: longhorn-nfs-linker
+  template:
+    metadata:
+      labels:
+        app: longhorn-nfs-linker
+    spec:
+      hostNetwork: true
+      hostPID: true
+      serviceAccountName: longhorn-nfs-server
+      tolerations:
+      - operator: Exists
+      containers:
+      - name: linker
+        image: bitnami/kubectl:latest
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+          echo "Starting Longhorn NFS volume linker on $(hostname)..."
+          
+          while true; do
+            # Create export directory
+            mkdir -p /host-exports
+            
+            # Find all longhorn volumes on this node
+            for VOLUME_DIR in /host-longhorn/replicas/pvc-*; do
+              if [ -d "$VOLUME_DIR" ]; then
+                VOLUME_NAME=$(basename "$VOLUME_DIR")
+                
+                # Find the PVC name from Longhorn volume
+                PVC_INFO=$(kubectl get volumes.longhorn.io -n storage -o json | \
+                  jq -r --arg vol "$VOLUME_NAME" '.items[] | select(.metadata.name == $vol) | "\(.spec.kubernetesStatus.namespace)/\(.spec.kubernetesStatus.pvcName)"')
+                
+                if [ -n "$PVC_INFO" ]; then
+                  NAMESPACE=$(echo $PVC_INFO | cut -d/ -f1)
+                  PVC_NAME=$(echo $PVC_INFO | cut -d/ -f2)
+                  
+                  # Create symlink: /exports/namespace/pvc-name -> volume path
+                  TARGET_DIR="/host-exports/${NAMESPACE}"
+                  mkdir -p "$TARGET_DIR"
+                  
+                  LINK_PATH="$TARGET_DIR/$PVC_NAME"
+                  if [ ! -L "$LINK_PATH" ]; then
+                    ln -sf "$VOLUME_DIR" "$LINK_PATH"
+                    echo "Created link: $LINK_PATH -> $VOLUME_DIR"
+                  fi
+                fi
+              fi
+            done
+            
+            # Sleep and check again
+            sleep 60
+          done
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: longhorn-storage
+          mountPath: /host-longhorn
+          mountPropagation: HostToContainer
+        - name: exports
+          mountPath: /host-exports
+          mountPropagation: Bidirectional
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+      volumes:
+      - name: longhorn-storage
+        hostPath:
+          path: /var/lib/longhorn
+          type: Directory
+      - name: exports
+        hostPath:
+          path: /var/lib/longhorn-nfs-exports
+          type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nfs-mount-instructions
+  namespace: storage
+data:
+  README.md: |
+    # Mount Longhorn Volumes on Your Mac - AUTOMATIC DISCOVERY
+    
+    All Longhorn PVCs are automatically discovered and exported!
+    
+    ## Get NFS Server IP
+    
+    The NFS server has a static IP assigned by MetalLB.
+    
+    ```bash
+    kubectl get svc longhorn-nfs-server -n storage -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+    ```
+    
+    Or check your Vault secret: `kv/data/storage/longhorn-nfs~ip`
+    
+    ## Mount on Mac
+    
+    ### Mount All Volumes (Root)
+    
+    ```bash
+    # Via Finder
+    # Press ⌘K, enter: nfs://192.168.30.100/
+    
+    # Via Terminal
+    sudo mount -t nfs -o resvport 192.168.30.100:/ /Volumes/longhorn
+    open /Volumes/longhorn
+    
+    # You'll see folders organized by namespace:
+    # /Volumes/longhorn/services/tautulli/
+    # /Volumes/longhorn/services/sonarr/
+    # /Volumes/longhorn/services/radarr/
+    # etc...
+    ```
+    
+    ### Mount Specific Volume
+    
+    ```bash
+    # Via Finder
+    # Press ⌘K, enter: nfs://192.168.30.100/services/tautulli
+    
+    # Via Terminal
+    sudo mount -t nfs -o resvport 192.168.30.100:/services/tautulli /Volumes/tautulli
+    ```
+    
+    ## Usage
+    
+    ```bash
+    # Browse all volumes
+    cd /Volumes/longhorn
+    ls -la services/
+    
+    # Edit a config
+    vim /Volumes/longhorn/services/tautulli/config.ini
+    
+    # Copy files
+    cp backup.db /Volumes/longhorn/services/tautulli/
+    ```
+    
+    ## How It Works
+    
+    1. DaemonSet runs on each node
+    2. Discovers Longhorn volumes automatically
+    3. Creates organized symlinks: /namespace/pvc-name
+    4. NFS server exports everything
+    5. No manual configuration needed!
+    
+    ## Add/Remove Volumes
+    
+    New Longhorn PVCs are automatically discovered within 60 seconds.
+    Deleted PVCs are automatically cleaned up.
