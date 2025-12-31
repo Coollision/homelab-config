@@ -1,0 +1,133 @@
+---
+# SMB Operator (Python) - Deployment with ConfigMap from file
+# To deploy: 
+#   kubectl create configmap smb-operator-python -n storage --from-file=operator.py=operator.py --dry-run=client -o yaml | kubectl apply -f -
+#   kubectl apply -f smb-operator-deploy.yaml
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: smb-operator
+  namespace: storage
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: smb-operator
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "create", "update", "patch"]
+  - apiGroups: ["longhorn.io"]
+    resources: ["volumes"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: smb-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: smb-operator
+subjects:
+  - kind: ServiceAccount
+    name: smb-operator
+    namespace: storage
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: smb-operator
+  namespace: storage
+  labels:
+    app: smb-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: smb-operator
+  template:
+    metadata:
+      labels:
+        app: smb-operator
+    spec:
+      serviceAccountName: smb-operator
+      containers:
+      - name: operator
+        image: python:3.11-slim
+        command:
+        - /bin/bash
+        - -c
+        - |
+          echo "Installing dependencies..."
+          pip install --no-cache-dir kubernetes pyyaml
+          echo "Starting operator..."
+          python /scripts/smb_operator_v2.py
+        env:
+        - name: OPERATOR_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: CONFIG_MAP_NAME
+          value: "smb-operator-config"
+        - name: LOG_LEVEL
+          value: "INFO"
+        ports:
+        - name: health
+          containerPort: 8080
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: health
+          initialDelaySeconds: 90
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: health
+          initialDelaySeconds: 60
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: scripts
+          mountPath: /scripts
+        - name: config
+          mountPath: /etc/smb-operator
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+      volumes:
+      - name: scripts
+        configMap:
+          name: smb-operator-python
+          defaultMode: 0755
+      - name: config
+        configMap:
+          name: smb-operator-config

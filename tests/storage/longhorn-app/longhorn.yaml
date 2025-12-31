@@ -1,0 +1,46 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: longhorn
+  namespace: argocd
+spec:
+  source:
+    repoURL: https://charts.longhorn.io
+    chart: longhorn
+    targetRevision: 1.11.0
+    helm:
+      valuesObject: 
+        preUpgradeChecker:
+            jobEnabled: false
+        defaultSettings:
+          taintToleration: "node-role.kubernetes.io/control-plane:NoSchedule;dedicated=master:NoSchedule"
+          createDefaultDiskLabeledNodes: true
+        defaultBackupStore:
+          backupTarget: "nfs://<secret:kv/data/storage/nfs~server-ip>:/volume4/k3s-volumes/storage/longhorn-backups"
+        longhornManager:
+          nodeSelector:
+            longhorn: "true"
+          tolerations:
+            - key: "node-role.kubernetes.io/control-plane"
+              operator: "Exists"
+              effect: "NoSchedule"
+            - key: "dedicated"
+              operator: "Equal"
+              value: "master"
+              effect: "NoSchedule"
+        longhornUI:
+          replicas: 1
+
+      
+  destination:
+    namespace: storage
+    server: https://kubernetes.default.svc
+  project: tests
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - PruneLast=true
+      - RespectIgnoreDifferences=true
+    automated:
+      prune: false
+      selfHeal: false

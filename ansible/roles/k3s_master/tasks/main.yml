@@ -1,3 +1,6 @@
+- name: mount disks for storage
+  ansible.builtin.include_tasks: mount-disks.yml
+
 - name: Install K3s on the primary master node without a token
   ansible.builtin.template:
     src: config.j2
@@ -54,3 +57,6 @@
 - name: Get kubeconfig
   ansible.builtin.include_tasks: fetch_kubeconfig.yml
   when: inventory_hostname == k3s_primary_master
+
+- name: Apply node annotations (labels are applied during registration)
+  ansible.builtin.include_tasks: apply_annotations.yml

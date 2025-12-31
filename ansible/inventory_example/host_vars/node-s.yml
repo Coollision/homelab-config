@@ -8,5 +8,11 @@ k3s_node_name: master-s
 k3s_flannel_iface: ens3
 k3s_node_label:
   - type=vm
+  - node.longhorn.io/create-default-disk=config
 k3s_node_taint:
   - dedicated=master:NoSchedule
+
+k3s_node_annotations:
+  node.longhorn.io/default-disks-config: '[{"path":"/mnt/longhorn","allowScheduling":true,"tags":["fast"]}]'
+
+longhorn_disk_device: /dev/sda3

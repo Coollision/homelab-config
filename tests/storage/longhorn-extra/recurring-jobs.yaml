@@ -1,0 +1,58 @@
+---
+# 30-min Snapshot RecurringJob
+# Creates local snapshots every 30 minutes, keeps only the last 2
+# (rolling ~1hr window — snapshots are cheap local data, not NFS transfers)
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: snapshot-30min
+  namespace: storage
+spec:
+  # Cron schedule: every 30 minutes
+  cron: "*/30 * * * *"
+  task: snapshot
+  retain: 2   # Keep only the 2 most recent snapshots
+  concurrency: 2
+  # Volumes must opt-in by adding label: recurring-job.longhorn.io/snapshot-30min=enabled
+  groups: []
+
+---
+# Daily Backup RecurringJob
+# Creates volume backups to NFS daily at 2 AM, keeps 7 (1 week)
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: backup-daily
+  namespace: storage
+spec:
+  # Cron schedule: every day at 2:00 AM
+  cron: "0 2 * * *"
+  task: backup
+  retain: 7   # Keep 7 backups (1 week)
+  concurrency: 2
+  # Volumes must opt-in by adding label: recurring-job.longhorn.io/backup-daily=enabled
+  groups: []
+  labels:
+    backup-type: daily
+
+---
+# Daily System Backup RecurringJob
+# Runs AFTER volume backups (3 AM) so volume backups are fresh.
+# Backs up all Longhorn metadata + config to NFS: StorageClasses, Volume CRs,
+# PVs, PVCs, RecurringJobs, Settings — everything needed to restore a full
+# cluster from scratch with a single SystemRestore CR.
+# On restore: Longhorn recreates all Volume CRs and auto-restores each from
+# its latest NFS backup. No manual Volume CR wrangling needed.
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: system-backup-daily
+  namespace: storage
+spec:
+  # Cron schedule: every day at 3:00 AM (1hr after volume backups finish)
+  cron: "0 3 * * *"
+  task: system-backup
+  retain: 7   # Keep 7 system backups (1 week)
+  parameters:
+    # Use latest existing backup — volume backups at 2 AM cover this
+    volume-backup-policy: if-not-present
