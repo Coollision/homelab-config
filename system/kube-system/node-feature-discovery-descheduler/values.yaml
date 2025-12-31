@@ -76,6 +76,9 @@ descheduler:
           - name: "RemovePodsViolatingNodeTaints"
           - name: "LowNodeUtilization"
             args:
+              evictableNamespaces:
+                exclude:
+                  - storage
               thresholds:
                 cpu: 20
                 memory: 20
