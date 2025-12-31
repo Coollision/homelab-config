@@ -43,5 +43,15 @@
       - cryptsetup
       - dmsetup
 
+- name: Load NFS kernel modules
+  become: true
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+    persistent: present
+  loop:
+    - nfs
+    - nfsd
+
 - name: Setup custom Usb rule names
   ansible.builtin.include_tasks: custom-usb-rule-names.yaml

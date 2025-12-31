@@ -139,6 +139,14 @@ spec:
         env:
         - name: NFS_EXPORT_0
           value: "/exports *(rw,sync,no_subtree_check,no_root_squash,fsid=0)"
+        - name: NFS_PORT
+          value: "2049"
+        - name: NFS_PORT_MOUNTD
+          value: "20048"
+        - name: NFS_PORT_STATD_IN
+          value: "32765"
+        - name: NFS_PORT_STATD_OUT
+          value: "32766"
         volumeMounts:
         - name: exports
           mountPath: /exports

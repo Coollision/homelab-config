@@ -36,6 +36,8 @@ spec:
               operator: "Equal"
               value: "master"
               effect: "NoSchedule"
+        longhornUI:
+          replicas: 1
 
       
   destination:
