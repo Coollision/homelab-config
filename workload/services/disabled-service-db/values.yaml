@@ -3,6 +3,7 @@ postgresql:
     enabled: false
   auth:
     postgresPassword: <secret:kv/data/services~db_root-pass>
+    usePasswordFiles: false
   primary:
     persistence:
       existingClaim: postgres-pvc
