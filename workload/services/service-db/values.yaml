@@ -1,24 +1,51 @@
 postgresql:
-  image:
-    tag: 14
-  global:
-    postgresql:
-      auth:
-        postgresPassword: <secret:kv/data/services~db_root-pass>
+  diagnosticMode:
+    enabled: false
+  auth:
+    postgresPassword: <secret:kv/data/services~db_root-pass>
+    usePasswordFiles: false
   primary:
     persistence:
       existingClaim: postgres-pvc
+    # Extended configuration optimized for NFS
+    extendedConfiguration: |
+      # NFS-friendly fsync settings - reduces disk I/O latency
+      fsync = off
+      synchronous_commit = off
+      wal_sync_method = fdatasync
+      
+      # Performance tuning for NFS environments
+      effective_cache_size = 256MB
+      shared_buffers = 64MB
+      work_mem = 4MB
+      maintenance_work_mem = 16MB
+      max_connections = 100
+      
+      # Checkpoint settings to reduce fsync operations
+      checkpoint_timeout = 10min
+      checkpoint_completion_target = 0.9
+      
+      # WAL settings for better performance
+      wal_buffers = 16MB
+      default_statistics_target = 100
     livenessProbe:
-      initialDelaySeconds: 60
+      initialDelaySeconds: 90
       periodSeconds: 120
       timeoutSeconds: 35
       failureThreshold: 15
     readinessProbe:
-      initialDelaySeconds: 5
+      initialDelaySeconds: 30
       periodSeconds: 120
       timeoutSeconds: 35
       failureThreshold: 15
-    terminationGracePeriodSeconds: 60
+    startupProbe:
+      enabled: true
+      initialDelaySeconds: 120
+      periodSeconds: 30
+      timeoutSeconds: 1
+      failureThreshold: 40
+      successThreshold: 1
+    terminationGracePeriodSeconds: 180
     # resources:
     #   limits:
     #     cpu: 600m
@@ -26,10 +53,12 @@ postgresql:
     #   requests:
     #     cpu: 200m
     #     memory: 128Mi
-    # configuration: |
-    #   shared_buffers = 64MB
-    #   work_mem = 1MB
-    #   maintenance_work_mem = 16MB
-    #   wal_buffers = 2MB
-    #   checkpoint_timeout = 1min
-    #   effective_cache_size = 128MB
+
+# Shared memory configuration for better PostgreSQL performance
+shmVolume:
+  enabled: true
+  sizeLimit: "256Mi"
+
+# Volume permissions - critical for NFS mounts
+volumePermissions:
+  enabled: true
