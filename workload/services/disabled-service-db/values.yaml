@@ -1,0 +1,33 @@
+postgresql:
+  diagnosticMode:
+    enabled: false
+  auth:
+    postgresPassword: <secret:kv/data/services~db_root-pass>
+  primary:
+    persistence:
+      existingClaim: postgres-pvc
+    livenessProbe:
+      initialDelaySeconds: 60
+      periodSeconds: 60
+      timeoutSeconds: 35
+      failureThreshold: 15
+    readinessProbe:
+      initialDelaySeconds: 5
+      periodSeconds: 60
+      timeoutSeconds: 35
+      failureThreshold: 15
+    startupProbe:
+      enabled: true
+      initialDelaySeconds: 60
+      periodSeconds: 20
+      timeoutSeconds: 1
+      failureThreshold: 30
+      successThreshold: 1
+    terminationGracePeriodSeconds: 180
+    # resources:
+    #   limits:
+    #     cpu: 600m
+    #     memory: 256Mi
+    #   requests:
+    #     cpu: 200m
+    #     memory: 128Mi
