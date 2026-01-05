@@ -17,6 +17,8 @@ argo-cd:
       timeout.reconciliation: 180s
       timeout.hard.reconciliation: 180s
       repos.server.timeout.seconds: "180"
+      # Reduce concurrent operations to prevent resource exhaustion
+      controller.operation.processors: "2"
       # Garbage collection
       server.default.logout.url: https://argocd.<secret:kv/data/domains~domain>/
       application.resourceTrackingMethod: annotation
@@ -147,11 +149,11 @@ argo-cd:
               - rpi
     resources:
       requests:
-        memory: 512Mi
-        cpu: 250m
+        memory: 1Gi
+        cpu: 500m
       limits:
-        memory: 1024Mi
-        cpu: 1000m
+        memory: 2Gi
+        cpu: 2000m
     serviceAccount:
       name: argocd-role
     extraContainers:
@@ -166,6 +168,12 @@ argo-cd:
             value: "180"
           - name: VAULT_CLIENT_TIMEOUT
             value: "180s"
+          - name: HELM_CACHE_HOME
+            value: /tmp/helm
+          - name: XDG_CACHE_HOME
+            value: /tmp/cache
+          - name: HELM_EXPERIMENTAL_OCI
+            value: "1"
         securityContext:
           runAsNonRoot: true
           runAsUser: 999
