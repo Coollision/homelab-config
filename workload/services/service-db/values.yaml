@@ -1,6 +1,4 @@
 postgresql:
-  image:
-    tag: 14
   global:
     postgresql:
       auth:
