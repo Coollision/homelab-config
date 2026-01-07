@@ -16,7 +16,6 @@ argo-cd:
       exec.enabled: "true"
       timeout.reconciliation: 180s
       timeout.hard.reconciliation: 180s
-      repos.server.timeout.seconds: "180"
       # Reduce concurrent operations to prevent resource exhaustion
       controller.operation.processors: "2"
       # Garbage collection
@@ -81,37 +80,34 @@ argo-cd:
     params:
       server.insecure: true
       server.disable.auth: false
+      # Increase timeouts for slow helm operations
+      reposerver.git.request.timeout: "180s"
+      controller.operation.timeout: "300s"
+      # Set gRPC timeout for repo-server CMP calls
+      server.repo.server.timeout.seconds: "300"
+      controller.repo.server.timeout.seconds: "300"
+      # Enable debug logging for repo server to monitor chart rendering performance
+      reposerver.log.level: debug
 
     cmp:
       create: true
       plugins:
-        argocd-vault-replacer:
+        argocd-lovely-plugin:
           generate:
-            command: [ "argocd-vault-replacer" ]
-        kustomize-argocd-vault-replacer:
-          generate:
-            command: [ "sh", "-c" ]
-            args: [ "kustomize", "build", ".", "|", "argocd-vault-replacer" ]
-        helm-argocd-vault-replacer:
-          init:
-            command: [ "/bin/sh", "-c" ]
-            args: [ "helm dependency build" ]
-          generate:
-            command: [ sh, -c ]
-            args: [ "helm template -n $ARGOCD_APP_NAMESPACE $ARGOCD_APP_NAME . | argocd-vault-replacer" ]
+            command: ["argocd-lovely-plugin"]
 
   controller:
     revisionHistoryLimit: 3
     affinity:
       nodeAffinity:
         preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          preference:
-            matchExpressions:
-            - key: type
-              operator: NotIn
-              values:
-              - rpi
+          - weight: 100
+            preference:
+              matchExpressions:
+                - key: type
+                  operator: NotIn
+                  values:
+                    - rpi
     resources:
       requests:
         memory: 512Mi
@@ -124,13 +120,13 @@ argo-cd:
     affinity:
       nodeAffinity:
         preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          preference:
-            matchExpressions:
-            - key: type
-              operator: NotIn
-              values:
-              - rpi
+          - weight: 100
+            preference:
+              matchExpressions:
+                - key: type
+                  operator: NotIn
+                  values:
+                    - rpi
 
   notifications:
     enabled: false
@@ -140,34 +136,47 @@ argo-cd:
     affinity:
       nodeAffinity:
         preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          preference:
-            matchExpressions:
-            - key: type
-              operator: NotIn
-              values:
-              - rpi
+          - weight: 100
+            preference:
+              matchExpressions:
+                - key: type
+                  operator: NotIn
+                  values:
+                    - rpi
     resources:
       requests:
-        memory: 1Gi
+        memory: 500Mi
         cpu: 500m
       limits:
         memory: 2Gi
         cpu: 2000m
     serviceAccount:
       name: argocd-role
+    extraEnv:
+      - name: ARGOCD_EXEC_TIMEOUT
+        value: "300s"
+      - name: ARGOCD_GIT_REQUEST_TIMEOUT
+        value: "180s"
     extraContainers:
       - name: avp
-        command: [ /var/run/argocd/argocd-cmp-server ]
+        command: [/var/run/argocd/argocd-cmp-server]
         image: ghcr.io/crumbhole/lovely-vault-ver:1.2.2
         envFrom:
           - secretRef:
               name: argocd-vault-replacer-credentials
         env:
           - name: ARGOCD_PLUGIN_TIMEOUT
-            value: "180"
+            value: "300"
+          - name: ARGOCD_EXEC_TIMEOUT
+            value: "300s"
+          - name: ARGOCD_EXEC_FATAL_TIMEOUT
+            value: "320s"
           - name: VAULT_CLIENT_TIMEOUT
             value: "180s"
+          - name: LOG_LEVEL
+            value: "debug"
+          - name: LOVELY_PLUGINS
+            value: "argocd-vault-replacer"
           - name: HELM_CACHE_HOME
             value: /tmp/helm
           - name: XDG_CACHE_HOME
@@ -195,21 +204,21 @@ argo-cd:
         configMap:
           name: argocd-cmp-cm
       - name: cmp-tmp
-        emptyDir: { }
+        emptyDir: {}
       - name: custom-tools
-        emptyDir: { }
+        emptyDir: {}
 
   applicationSet:
     affinity:
       nodeAffinity:
         preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          preference:
-            matchExpressions:
-            - key: type
-              operator: NotIn
-              values:
-              - rpi
+          - weight: 100
+            preference:
+              matchExpressions:
+                - key: type
+                  operator: NotIn
+                  values:
+                    - rpi
     resources:
       requests:
         memory: 128Mi
@@ -222,13 +231,13 @@ argo-cd:
     affinity:
       nodeAffinity:
         preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          preference:
-            matchExpressions:
-            - key: type
-              operator: NotIn
-              values:
-              - rpi
+          - weight: 100
+            preference:
+              matchExpressions:
+                - key: type
+                  operator: NotIn
+                  values:
+                    - rpi
     resources:
       requests:
         memory: 64Mi
@@ -236,18 +245,18 @@ argo-cd:
       limits:
         memory: 128Mi
         cpu: 100m
-  
+
   redis:
     affinity:
       nodeAffinity:
         preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          preference:
-            matchExpressions:
-            - key: type
-              operator: NotIn
-              values:
-              - rpi
+          - weight: 100
+            preference:
+              matchExpressions:
+                - key: type
+                  operator: NotIn
+                  values:
+                    - rpi
     # resources:
     #   requests:
     #     memory: 10Mi
@@ -255,3 +264,7 @@ argo-cd:
     #   limits:
     #     memory: 15Mi
     #     # cpu: 20m
+
+config:
+  ARGOCD_SERVER_REPO_SERVER_TIMEOUT_SECONDS: "300"
+  ARGOCD_CONTROLLER_REPO_SERVER_TIMEOUT_SECONDS: "300"
