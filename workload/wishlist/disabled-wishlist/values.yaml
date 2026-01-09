@@ -4,7 +4,7 @@ wishlistdb:
   deployment:
     image:
       repository: postgres
-      tag: "17"
+      tag: "18"
     ports:
       postgres: 5432
   config:
