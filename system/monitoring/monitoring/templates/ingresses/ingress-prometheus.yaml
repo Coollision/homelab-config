@@ -10,7 +10,8 @@ metadata:
   labels:
     {{- include "k3s-monitoring.labels" . | nindent 4 }}
 spec:
-  entryPoints: []
+  entryPoints: 
+    - web
   routes:
   - kind: Rule
     match: Host(`{{ $host }}`) && ( PathPrefix(`/`) || PathPrefix(`/api/v1/`) || PathPrefix(`/api/v1/query/`))
