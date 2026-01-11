@@ -5,7 +5,7 @@
     - role: k3s_pre
       vars:
         # curl -s https://api.github.com/repos/k3s-io/k3s/releases/latest | jq -r .tag_name
-        k3s_pre_version: v1.34.1+k3s1
+        k3s_pre_version: v1.35.0+k3s1
 
 - name: K3s setup - master
   hosts: k3smaster

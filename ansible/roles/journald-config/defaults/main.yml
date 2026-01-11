@@ -1,0 +1,21 @@
+---
+# Journald configuration defaults
+# These settings limit journal log retention to prevent disk pressure
+
+# Maximum disk space journal can use (1GB is reasonable for k3s nodes)
+journald_system_max_use: "1G"
+
+# Keep at least this much disk space free
+journald_system_keep_free: "1G"
+
+# Maximum size for a single journal file
+journald_system_max_file_size: "100M"
+
+# Maximum retention time for journal logs
+journald_max_retention_sec: "7day"
+
+# Vacuum journal to this size on first run (cleans up existing logs)
+journald_vacuum_size: "1G"
+
+# Whether to vacuum journal logs immediately during role execution
+journald_vacuum_now: true
