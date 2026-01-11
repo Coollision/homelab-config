@@ -1,0 +1,37 @@
+---
+- name: Configure journald retention limits
+  become: true
+  ansible.builtin.template:
+    src: journald.conf.j2
+    dest: /etc/systemd/journald.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: yes
+  notify: Restart journald
+
+- name: Vacuum journal logs to enforce size limit
+  become: true
+  ansible.builtin.command:
+    cmd: "journalctl --vacuum-size={{ journald_vacuum_size }}"
+  when: journald_vacuum_now | bool
+  changed_when: true
+  register: vacuum_result
+
+- name: Display vacuum results
+  ansible.builtin.debug:
+    var: vacuum_result.stdout_lines
+  when:
+    - journald_vacuum_now | bool
+    - vacuum_result.stdout_lines is defined
+
+- name: Check journal disk usage after vacuum
+  become: true
+  ansible.builtin.command:
+    cmd: journalctl --disk-usage
+  register: disk_usage_result
+  changed_when: false
+
+- name: Display current journal disk usage
+  ansible.builtin.debug:
+    msg: "{{ disk_usage_result.stdout }}"
