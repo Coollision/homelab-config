@@ -13,12 +13,12 @@ node-label:
 {% endif %}
 
 kubelet-arg:
-  - "image-gc-high-threshold=45"
-  - "image-gc-low-threshold=40"
-  - "kube-reserved=cpu=100m,memory=100Mi,ephemeral-storage=5Gi"
-  - "system-reserved=cpu=100m,memory=100Mi,ephemeral-storage=5Gi"
-  - "eviction-hard=imagefs.available<10%,imagefs.inodesFree<10%,memory.available<500Mi,nodefs.available<10%,nodefs.inodesFree<10%,pid.available<10%"
-  - "max-pods={{ k3s_max_pods | default(30) }}"
+  - "image-gc-high-threshold=65"
+  - "image-gc-low-threshold=60"
+  - "kube-reserved=cpu=100m,memory=100Mi,ephemeral-storage=2Gi"
+  - "system-reserved=cpu=100m,memory=100Mi,ephemeral-storage=2Gi"
+  - "eviction-hard=imagefs.available<5%,imagefs.inodesFree<3%,memory.available<500Mi,nodefs.available<5%,nodefs.inodesFree<3%,pid.available<5%"
+  - "max-pods={{ k3s_max_pods | default(90) }}"
 
 kube-proxy-arg:
   - "metrics-bind-address=0.0.0.0"
