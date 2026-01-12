@@ -14,11 +14,9 @@ argo-cd:
   configs:
     cm:
       exec.enabled: "true"
-      timeout.reconciliation: 180s
-      timeout.hard.reconciliation: 180s
+      timeout.reconciliation: 5m
+      timeout.reconciliation.jitter: 2m
       repos.server.timeout.seconds: "180"
-      # Reduce concurrent operations to prevent resource exhaustion
-      controller.operation.processors: "2"
       # Garbage collection
       server.default.logout.url: https://argocd.<secret:kv/data/domains~domain>/
       application.resourceTrackingMethod: annotation
@@ -81,6 +79,7 @@ argo-cd:
     params:
       server.insecure: true
       server.disable.auth: false
+      server.repo.server.timeout.seconds: "180"
 
     cmp:
       create: true
@@ -136,7 +135,6 @@ argo-cd:
     enabled: false
 
   repoServer:
-    replicas: 2
     affinity:
       nodeAffinity:
         preferredDuringSchedulingIgnoredDuringExecution:
@@ -156,6 +154,10 @@ argo-cd:
         cpu: 2000m
     serviceAccount:
       name: argocd-role
+    env:
+      # Increase timeout for Helm/Kustomize execution (default 90s)
+      - name: ARGOCD_EXEC_TIMEOUT
+        value: "180s"
     extraContainers:
       - name: avp
         command: [ /var/run/argocd/argocd-cmp-server ]
@@ -168,12 +170,6 @@ argo-cd:
             value: "180"
           - name: VAULT_CLIENT_TIMEOUT
             value: "180s"
-          - name: HELM_CACHE_HOME
-            value: /tmp/helm
-          - name: XDG_CACHE_HOME
-            value: /tmp/cache
-          - name: HELM_EXPERIMENTAL_OCI
-            value: "1"
         securityContext:
           runAsNonRoot: true
           runAsUser: 999
@@ -210,13 +206,6 @@ argo-cd:
               operator: NotIn
               values:
               - rpi
-    resources:
-      requests:
-        memory: 128Mi
-        cpu: 100m
-      limits:
-        memory: 256Mi
-        cpu: 200m
 
   dex:
     affinity:
@@ -229,13 +218,6 @@ argo-cd:
               operator: NotIn
               values:
               - rpi
-    resources:
-      requests:
-        memory: 64Mi
-        cpu: 50m
-      limits:
-        memory: 128Mi
-        cpu: 100m
   
   redis:
     affinity:
@@ -248,10 +230,3 @@ argo-cd:
               operator: NotIn
               values:
               - rpi
-    # resources:
-    #   requests:
-    #     memory: 10Mi
-    #     # cpu: 15m
-    #   limits:
-    #     memory: 15Mi
-    #     # cpu: 20m
