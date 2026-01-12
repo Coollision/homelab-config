@@ -8,8 +8,8 @@ promstack:
   kubeControllerManager:
     endpoints:
       - <secret:kv/data/config/master~ip-0>
-      - <secret:kv/data/config/master~ip-1>
-      - <secret:kv/data/config/master~ip-2>
+      # - <secret:kv/data/config/master~ip-1>
+      # - <secret:kv/data/config/master~ip-2>
     enabled: true
     service:
       enabled: true
@@ -22,8 +22,8 @@ promstack:
   kubeScheduler:
     endpoints:
       - <secret:kv/data/config/master~ip-0>
-      - <secret:kv/data/config/master~ip-1>
-      - <secret:kv/data/config/master~ip-2>
+      # - <secret:kv/data/config/master~ip-1>
+      # - <secret:kv/data/config/master~ip-2>
     enabled: true
     service:
       enabled: true
@@ -36,8 +36,8 @@ promstack:
   kubeProxy:
     endpoints:
       - <secret:kv/data/config/master~ip-0>
-      - <secret:kv/data/config/master~ip-1>
-      - <secret:kv/data/config/master~ip-2>
+      # - <secret:kv/data/config/master~ip-1>
+      # - <secret:kv/data/config/master~ip-2>
     enabled: true
     service:
       enabled: true
