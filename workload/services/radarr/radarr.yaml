@@ -34,7 +34,7 @@ spec:
       initContainers:
         - name: radarr-init
           image: alpine
-          command: 
+          command:
             - "/bin/sh"
             - "-c"
             - cp /init/script.sh /tmp && chmod +x /tmp/script.sh && /tmp/script.sh
@@ -92,7 +92,7 @@ spec:
             - containerPort: 7878
               name: web
               protocol: TCP
-          # resources: 
+          # resources:
           #   requests:
           #     memory: 400Mi
           #     cpu: 200m
@@ -153,7 +153,7 @@ metadata:
   name: radarr-ingress
   namespace: services
 spec:
-  entryPoints: 
+  entryPoints:
     - web
   routes:
     - kind: Rule
@@ -171,8 +171,8 @@ metadata:
   name: radarr-ingress-secure
   namespace: services
 spec:
-  entryPoints: 
-    - websecure 
+  entryPoints:
+    - websecure
   routes:
     - kind: Rule
       match: host(`radarr.<secret:kv/data/domains~domain>`)

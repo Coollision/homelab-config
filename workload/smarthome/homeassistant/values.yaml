@@ -38,7 +38,7 @@ homeassistantdb:
       periodSeconds: 15
       timeoutSeconds: 5
       failureThreshold: 4
-  resources: 
+  resources:
     requests:
       memory: "600Mi"
       cpu: "500m"
@@ -91,7 +91,7 @@ homeassistant:
         path: /
         port: web
       initialDelaySeconds: 60
-      periodSeconds: 10 
+      periodSeconds: 10
       timeoutSeconds: 5
       failureThreshold: 5
     readiness:
@@ -103,7 +103,7 @@ homeassistant:
       timeoutSeconds: 5
       failureThreshold: 5
 
-  # resources: 
+  # resources:
   #   requests:
   #     memory: "600Mi"
   #     cpu: "500m"
@@ -112,7 +112,7 @@ homeassistant:
   #     cpu: "1200m"
   labels:
     app.kubernetes.io/component: homeassistant
-  
+
   affinity:
     pod:
       preferred:

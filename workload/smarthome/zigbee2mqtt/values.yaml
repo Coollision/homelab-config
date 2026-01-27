@@ -8,7 +8,7 @@ statefullset:
 config:
   TZ: Europe/Brussels
   ZIGBEE2MQTT_DATA: /data
-  
+
 ingress_internal_secure:
   host: zigbee2mqtt.<secret:kv/data/domains~domain>
   port: web

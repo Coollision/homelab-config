@@ -11,4 +11,3 @@ dependencies:
     alias: traefik
     version: 39.0.0
     repository: https://traefik.github.io/charts
-

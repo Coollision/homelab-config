@@ -90,7 +90,7 @@ spec:
   accessModes:
     - ReadWriteMany
   storageClassName: ""
-  volumeName:  services-video
+  volumeName: services-video
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

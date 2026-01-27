@@ -12,11 +12,11 @@ wordpress:
       secretKeyRef:
         name: vloerwerken-schollaert-mysql-wp
         key: db_name
-    WORDPRESS_DB_USER: 
+    WORDPRESS_DB_USER:
       secretKeyRef:
         name: vloerwerken-schollaert-mysql-wp
         key: db_user
-    WORDPRESS_DB_PASSWORD: 
+    WORDPRESS_DB_PASSWORD:
       secretKeyRef:
         name: vloerwerken-schollaert-mysql-wp
         key: db_user_pass
@@ -52,11 +52,11 @@ mysql:
       secretKeyRef:
         name: vloerwerken-schollaert-mysql-wp
         key: db_name
-    MYSQL_USER: 
+    MYSQL_USER:
       secretKeyRef:
         name: vloerwerken-schollaert-mysql-wp
         key: db_user
-    MYSQL_PASSWORD: 
+    MYSQL_PASSWORD:
       secretKeyRef:
         name: vloerwerken-schollaert-mysql-wp
         key: db_user_pass

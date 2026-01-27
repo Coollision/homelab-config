@@ -20,7 +20,7 @@
 - name: Validate node-token exists and is not empty
   ansible.builtin.fail:
     msg: "Node token is missing or empty. K3s may not be properly installed on master node."
-  when: 
+  when:
     - k3s_token.content is not defined or k3s_token.content | b64decode | trim == ""
 
 - name: Store Master node-token

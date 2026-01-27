@@ -29,7 +29,6 @@ config:
   DB_LOG_QUERIES: "false"
 
 
-
 ingress_internal:
   host: jellyseerr.<secret:kv/data/domains~local>
   port: ingress

@@ -6,7 +6,7 @@ kube-fledged:
     # increase the controllerImagePullDeadlineDuration to 20m to allow for slower image pulls
     controllerImagePullDeadlineDuration: 20m
 
-    # enable to debug controller 
+    # enable to debug controller
     # controllerJobRetentionPolicy: retain
 
   # disable the webhook server and validating webhook
@@ -14,10 +14,9 @@ kube-fledged:
   webhookServer:
     enable: false
   validatingWebhook:
-    # Specifies whether a validating webhook configuration should be created
     create: false
-  
-  resources:
+
+    resources:
     # requests:
     #   cpu: 5m
     #   memory: 20Mi

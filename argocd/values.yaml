@@ -191,9 +191,9 @@ argo-cd:
         configMap:
           name: argocd-cmp-cm
       - name: cmp-tmp
-        emptyDir: { }
+        emptyDir: {}
       - name: custom-tools
-        emptyDir: { }
+        emptyDir: {}
 
   applicationSet:
     affinity:
@@ -218,7 +218,7 @@ argo-cd:
               operator: NotIn
               values:
               - rpi
-  
+
   redis:
     affinity:
       nodeAffinity:

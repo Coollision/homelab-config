@@ -2,8 +2,8 @@ traefik:
   # Resources will be named "cloudflare-tunnel-traefik"
   # Use instanceLabelOverride to distinguish this instance in labels
   instanceLabelOverride: "traefik-external"
-  
-  commonLabels: 
+
+  commonLabels:
     app: traefik-external
   rbac:
     enabled: true
@@ -80,10 +80,10 @@ traefik:
   metrics:
     prometheus: {}
 
-  # resources:
-  #   requests:
-  #     cpu: 100m
-  #     memory: 70Mi
-  #   limits:
-  #     cpu: 130m
-  #     memory: 80Mi
+# resources:
+#   requests:
+#     cpu: 100m
+#     memory: 70Mi
+#   limits:
+#     cpu: 130m
+#     memory: 80Mi

@@ -58,12 +58,12 @@ spec:
               valueFrom:
                 configMapKeyRef:
                   name: service-db
-                  key: bazarr_database  
+                  key: bazarr_database
             - name: POSTGRES_USERNAME
               valueFrom:
                 secretKeyRef:
                   name: services-db
-                  key: bazarr_user  
+                  key: bazarr_user
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -73,7 +73,7 @@ spec:
             - containerPort: 6767
               name: web
               protocol: TCP
-          # resources: 
+          # resources:
           #   requests:
           #     memory: 500Mi
           #     cpu: 400m
@@ -87,24 +87,24 @@ spec:
               name: bazarr-series
             - mountPath: /data/videos
               name: bazarr-videos
-          # readinessProbe:
-          #   httpGet:
-          #     port: 6767
-          #     path: /api/system/status
-          #     httpHeaders:
-          #       - name: "x-api-key"
-          #         value: "<secret:kv/data/services~bazarr_api-key>"
-          #   initialDelaySeconds: 60
-          #   periodSeconds: 10
-          # livenessProbe:
-          #   httpGet:
-          #     port: 6767
-          #     path: /api/system/status
-          #     httpHeaders:
-          #       - name: "x-api-key"
-          #         value: "<secret:kv/data/services~bazarr_api-key>"
-          #   initialDelaySeconds: 60
-          #   periodSeconds: 10
+      # readinessProbe:
+      #   httpGet:
+      #     port: 6767
+      #     path: /api/system/status
+      #     httpHeaders:
+      #       - name: "x-api-key"
+      #         value: "<secret:kv/data/services~bazarr_api-key>"
+      #   initialDelaySeconds: 60
+      #   periodSeconds: 10
+      # livenessProbe:
+      #   httpGet:
+      #     port: 6767
+      #     path: /api/system/status
+      #     httpHeaders:
+      #       - name: "x-api-key"
+      #         value: "<secret:kv/data/services~bazarr_api-key>"
+      #   initialDelaySeconds: 60
+      #   periodSeconds: 10
       securityContext:
         fsGroup: 1000
       volumes:

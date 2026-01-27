@@ -104,7 +104,7 @@ metadata:
   name: ombi-ingress
   namespace: services
 spec:
-  entryPoints: 
+  entryPoints:
     - web
   routes:
   - kind: Rule
@@ -122,8 +122,8 @@ metadata:
   name: ombi-ingress-secure
   namespace: services
 spec:
-  entryPoints: 
-    - websecure 
+  entryPoints:
+    - websecure
   routes:
   - kind: Rule
     match: host(`ombi.<secret:kv/data/domains~domain>`)
@@ -143,8 +143,8 @@ metadata:
   annotations:
     kubernetes.io/ingress.class: traefik-external
 spec:
-  entryPoints: 
-    - websecure  
+  entryPoints:
+    - websecure
   routes:
   - kind: Rule
     match: host(`ombi.<secret:kv/data/domains~domain>`)

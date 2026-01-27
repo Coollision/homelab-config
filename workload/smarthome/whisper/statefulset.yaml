@@ -17,7 +17,7 @@ spec:
         - name: whisper
           image: rhasspy/wyoming-whisper:3.0.2
           args:
-          # https://github.com/rhasspy/wyoming-faster-whisper/blob/master/wyoming_faster_whisper/__main__.py
+            # https://github.com/rhasspy/wyoming-faster-whisper/blob/master/wyoming_faster_whisper/__main__.py
             - --data-dir
             - /data
             - --download-dir
@@ -47,9 +47,9 @@ spec:
             - name: whisper-download
               mountPath: /download
       volumes:
-          - name: whisper-data
-            persistentVolumeClaim:
-              claimName: whisper-data
-          - name: whisper-download
-            persistentVolumeClaim:
-              claimName: whisper-download
+        - name: whisper-data
+          persistentVolumeClaim:
+            claimName: whisper-data
+        - name: whisper-download
+          persistentVolumeClaim:
+            claimName: whisper-download

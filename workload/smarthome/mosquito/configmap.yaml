@@ -12,7 +12,7 @@ data:
     persistence true
     persistence_location /mosquitto/data
     autosave_interval 1800
-    # log_dest file /mosquitto/logs/mosquitto.log 
+    # log_dest file /mosquitto/logs/mosquitto.log
     password_file /mosquitto/creds/credentials
 
 

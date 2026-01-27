@@ -38,10 +38,9 @@ node-feature-discovery:
             matchFeatures:
               - feature: usb.device
                 matchExpressions:
-                  vendor: { op: In, value: ["10c4"] }
-                  device: { op: In, value: ["ea60"] }
-                  serial:
-                    { op: In, value: ["54d39955bc39ec118f02e3680aac08d5"] }
+                  vendor: {op: In, value: ["10c4"]}
+                  device: {op: In, value: ["ea60"]}
+                  serial: {op: In, value: ["54d39955bc39ec118f02e3680aac08d5"]}
 
 descheduler:
   fullnameOverride: descheduler
@@ -105,10 +104,10 @@ descheduler:
   serviceMonitor:
     enabled: true
 
-  # resources:
-  #   requests:
-  #     cpu: 200m
-  #     memory: 30Mi
-  #   limits:
-  #     cpu: 300m
-  #     memory: 40Mi
+# resources:
+#   requests:
+#     cpu: 200m
+#     memory: 30Mi
+#   limits:
+#     cpu: 300m
+#     memory: 40Mi

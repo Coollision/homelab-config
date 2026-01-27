@@ -13,18 +13,18 @@ postgresql:
       fsync = off
       synchronous_commit = off
       wal_sync_method = fdatasync
-      
+
       # Performance tuning for NFS environments
       effective_cache_size = 256MB
       shared_buffers = 64MB
       work_mem = 4MB
       maintenance_work_mem = 16MB
       max_connections = 100
-      
+
       # Checkpoint settings to reduce fsync operations
       checkpoint_timeout = 10min
       checkpoint_completion_target = 0.9
-      
+
       # WAL settings for better performance
       wal_buffers = 16MB
       default_statistics_target = 100
