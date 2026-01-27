@@ -28,8 +28,15 @@ jobs:
           echo "=== Validating YAML syntax and formatting ==="
           yamllint --version
           # Run yamllint with custom config for ArgoCD compatibility
-          # Warnings only - non-blocking
-          yamllint -c .yamllint.yml . || echo "⚠️  YAML linting found issues (non-blocking)"
+          set +e
+          yamllint -c .yamllint.yml . 
+          YAMLLINT_EXIT=$?
+          set -e
+          
+          if [ $YAMLLINT_EXIT -ne 0 ]; then
+            echo ""
+            echo "⚠️  YAML linting found issues (warnings only - non-blocking)"
+          fi
           echo "✅ YAML validation complete"
   
   helm-validate:
@@ -59,7 +66,13 @@ jobs:
       - name: Find and validate all Helm charts
         run: |
           echo "=== Discovering Helm charts in repository ==="
-          CHART_DIRS=$(find . -name "Chart.yaml" -type f -not -path "*/charts/*" -not -path "*/.git/*" -exec dirname {} \;)
+          CHART_DIRS=$(find . -name "Chart.yaml" -type f -not -path "*/charts/*" -not -path "*/.git/*" -exec dirname {} \; | sort)
+          
+          if [ -z "$CHART_DIRS" ]; then
+            echo "No Helm charts found in repository"
+            exit 0
+          fi
+          
           CHART_COUNT=$(echo "$CHART_DIRS" | wc -l)
           echo "Found $CHART_COUNT Helm charts to validate"
           echo ""
@@ -73,35 +86,46 @@ jobs:
             echo "📦 Validating: $chart_dir"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             
+            CHART_FAILED=false
+            
             # Check if chart has dependencies
             if [ -f "$chart_dir/Chart.yaml" ]; then
               if grep -q "dependencies:" "$chart_dir/Chart.yaml"; then
                 echo "📥 Updating dependencies..."
-                (cd "$chart_dir" && helm dependency update) || {
-                  echo "⚠️  Warning: Failed to update dependencies for $chart_dir"
-                }
+                if ! (cd "$chart_dir" && helm dependency update 2>&1); then
+                  echo "❌ Failed to update dependencies for $chart_dir"
+                  FAILED_CHARTS+=("$chart_dir (dependency update failed)")
+                  CHART_FAILED=true
+                fi
               fi
             fi
             
             # Run helm lint
             echo "🔍 Running helm lint..."
-            if helm lint "$chart_dir"; then
+            if helm lint "$chart_dir" 2>&1; then
               echo "✅ Lint passed for $chart_dir"
             else
               echo "❌ Lint failed for $chart_dir"
-              FAILED_CHARTS+=("$chart_dir (lint)")
+              FAILED_CHARTS+=("$chart_dir (lint failed)")
+              CHART_FAILED=true
             fi
             
             # Run helm template to validate rendering
             echo "🔧 Running helm template..."
-            if helm template "$chart_name" "$chart_dir" > /dev/null 2>&1; then
+            TEMPLATE_OUTPUT=$(helm template "$chart_name" "$chart_dir" 2>&1)
+            if [ $? -eq 0 ]; then
               echo "✅ Template rendering passed for $chart_dir"
-              SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
             else
               echo "❌ Template rendering failed for $chart_dir"
-              echo "Attempting with --debug for more details..."
-              helm template "$chart_name" "$chart_dir" --debug || true
-              FAILED_CHARTS+=("$chart_dir (template)")
+              echo "Error output:"
+              echo "$TEMPLATE_OUTPUT"
+              FAILED_CHARTS+=("$chart_dir (template failed)")
+              CHART_FAILED=true
+            fi
+            
+            # Count successful charts (passed all validations)
+            if [ "$CHART_FAILED" = false ]; then
+              SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
             fi
             
             echo ""
@@ -112,11 +136,11 @@ jobs:
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "Total charts: $CHART_COUNT"
           echo "Successful: $SUCCESS_COUNT"
-          echo "Failed: ${#FAILED_CHARTS[@]}"
+          echo "Failed: $((CHART_COUNT - SUCCESS_COUNT))"
           
           if [ ${#FAILED_CHARTS[@]} -gt 0 ]; then
             echo ""
-            echo "❌ Failed charts:"
+            echo "❌ Failed validations:"
             printf '%s\n' "${FAILED_CHARTS[@]}"
             echo ""
             echo "⚠️  Some charts failed validation. Please review the errors above."
