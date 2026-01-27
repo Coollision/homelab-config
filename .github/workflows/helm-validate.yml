@@ -6,6 +6,9 @@ on:
   push:
     branches: ['**']
 
+permissions:
+  contents: read
+
 jobs:
   yaml-lint:
     name: YAML Lint
