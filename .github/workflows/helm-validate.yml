@@ -10,9 +10,128 @@ permissions:
   contents: read
 
 jobs:
+  detect-changes:
+    name: Detect Changed Charts
+    runs-on: ubuntu-latest
+    outputs:
+      charts: ${{ steps.detect.outputs.charts }}
+      chart-count: ${{ steps.detect.outputs.chart-count }}
+      yaml-changed: ${{ steps.detect.outputs.yaml-changed }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for accurate diff
+      
+      - name: Detect changed charts and YAML files
+        id: detect
+        run: |
+          # Determine the base ref for comparison
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_REF="${{ github.event.pull_request.base.sha }}"
+          else
+            # For push events, compare with previous commit
+            BASE_REF="${{ github.event.before }}"
+            # If it's the first commit or base ref is all zeros, compare with HEAD~1
+            if [ "$BASE_REF" = "0000000000000000000000000000000000000000" ] || [ -z "$BASE_REF" ]; then
+              BASE_REF="HEAD~1"
+            fi
+          fi
+          
+          echo "Comparing against base: $BASE_REF"
+          
+          # Get all changed files
+          CHANGED_FILES=$(git diff --name-only "$BASE_REF" HEAD 2>/dev/null || echo "")
+          
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "No changes detected, will validate all charts"
+            CHANGED_FILES=$(find . -name "Chart.yaml" -o -name "values.yaml" -o -name "*.yml" -o -name "*.yaml" | sed 's|^\./||')
+          fi
+          
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+          echo ""
+          
+          # Find all chart directories that have changes
+          CHANGED_CHART_DIRS=""
+          
+          # Check for any YAML changes for yaml-lint job
+          YAML_CHANGED="false"
+          if echo "$CHANGED_FILES" | grep -qE '\.(yaml|yml)$'; then
+            YAML_CHANGED="true"
+          fi
+          
+          # Find charts with changes
+          while IFS= read -r changed_file; do
+            [ -z "$changed_file" ] && continue
+            
+            # Check if this file belongs to a chart directory
+            file_dir=$(dirname "$changed_file")
+            
+            # Walk up the directory tree to find Chart.yaml
+            current_dir="$file_dir"
+            while [ "$current_dir" != "." ] && [ "$current_dir" != "/" ]; do
+              if [ -f "$current_dir/Chart.yaml" ]; then
+                # Exclude charts in the charts/ subdirectory (dependencies)
+                if ! echo "$current_dir" | grep -q "/charts/"; then
+                  CHANGED_CHART_DIRS="$CHANGED_CHART_DIRS$current_dir"$'\n'
+                fi
+                break
+              fi
+              current_dir=$(dirname "$current_dir")
+            done
+            
+            # Also check if the changed file itself is Chart.yaml
+            if [ "$(basename "$changed_file")" = "Chart.yaml" ] && [ -f "$changed_file" ]; then
+              chart_dir=$(dirname "$changed_file")
+              if ! echo "$chart_dir" | grep -q "/charts/"; then
+                CHANGED_CHART_DIRS="$CHANGED_CHART_DIRS$chart_dir"$'\n'
+              fi
+            fi
+          done <<< "$CHANGED_FILES"
+          
+          # Remove duplicates and empty lines
+          CHANGED_CHART_DIRS=$(echo "$CHANGED_CHART_DIRS" | sort -u | grep -v '^$' || true)
+          
+          if [ -z "$CHANGED_CHART_DIRS" ]; then
+            echo "No chart changes detected"
+            echo "charts=[]" >> $GITHUB_OUTPUT
+            echo "chart-count=0" >> $GITHUB_OUTPUT
+            echo "yaml-changed=$YAML_CHANGED" >> $GITHUB_OUTPUT
+          else
+            echo "Changed charts detected:"
+            echo "$CHANGED_CHART_DIRS"
+            
+            # Convert to JSON array
+            CHARTS_JSON="["
+            FIRST=true
+            while IFS= read -r chart_dir; do
+              [ -z "$chart_dir" ] && continue
+              if [ "$FIRST" = true ]; then
+                FIRST=false
+              else
+                CHARTS_JSON="$CHARTS_JSON,"
+              fi
+              CHARTS_JSON="$CHARTS_JSON\"$chart_dir\""
+            done <<< "$CHANGED_CHART_DIRS"
+            CHARTS_JSON="$CHARTS_JSON]"
+            
+            CHART_COUNT=$(echo "$CHANGED_CHART_DIRS" | wc -l)
+            
+            echo "charts=$CHARTS_JSON" >> $GITHUB_OUTPUT
+            echo "chart-count=$CHART_COUNT" >> $GITHUB_OUTPUT
+            echo "yaml-changed=$YAML_CHANGED" >> $GITHUB_OUTPUT
+            
+            echo ""
+            echo "Will validate $CHART_COUNT chart(s)"
+          fi
+
   yaml-lint:
     name: YAML Lint
     runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.yaml-changed == 'true'
     
     steps:
       - name: Checkout code
@@ -22,6 +141,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
+      
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-yamllint-${{ hashFiles('.github/workflows/helm-validate.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-yamllint-
       
       - name: Install yamllint
         run: pip install yamllint
@@ -43,8 +170,10 @@ jobs:
           echo "✅ YAML validation complete"
   
   helm-validate:
-    name: Helm Charts Validation
+    name: Validate Charts
     runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.chart-count != '0'
     
     steps:
       - name: Checkout code
@@ -55,19 +184,49 @@ jobs:
         with:
           version: 'v3.19.5'
       
+      - name: Cache Helm repositories
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/helm/repository
+          key: ${{ runner.os }}-helm-repo-${{ hashFiles('**/Chart.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-helm-repo-
+      
+      - name: Cache Helm charts
+        uses: actions/cache@v4
+        with:
+          path: |
+            **/charts/*.tgz
+            **/Chart.lock
+          key: ${{ runner.os }}-helm-charts-${{ hashFiles('**/Chart.yaml', '**/Chart.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-helm-charts-
+      
       - name: Auto-discover and add Helm repositories
         run: |
-          echo "=== Auto-discovering Helm repositories from Chart.yaml files ==="
+          echo "=== Auto-discovering Helm repositories from changed charts ==="
           
-          # Find all unique repository URLs from Chart.yaml files
-          REPO_URLS=$(find . -name "Chart.yaml" -not -path "*/charts/*" -not -path "*/.git/*" -exec grep -h "repository:" {} \; | \
-            grep -E "https?://" | \
-            sed 's/.*repository: *//g' | \
-            sed 's/ *#.*//g' | \
-            sort -u)
+          CHARTS='${{ needs.detect-changes.outputs.charts }}'
+          
+          # Extract repository URLs only from changed charts
+          REPO_URLS=""
+          for chart_dir in $(echo "$CHARTS" | jq -r '.[]'); do
+            if [ -f "$chart_dir/Chart.yaml" ]; then
+              chart_repos=$(grep -h "repository:" "$chart_dir/Chart.yaml" | \
+                grep -E "https?://" | \
+                sed 's/.*repository: *//g' | \
+                sed 's/ *#.*//g' || true)
+              if [ -n "$chart_repos" ]; then
+                REPO_URLS="$REPO_URLS"$'\n'"$chart_repos"
+              fi
+            fi
+          done
+          
+          # Get unique repositories
+          REPO_URLS=$(echo "$REPO_URLS" | sort -u | grep -v '^$' || true)
           
           if [ -z "$REPO_URLS" ]; then
-            echo "No external Helm repositories found"
+            echo "No external Helm repositories needed for changed charts"
           else
             echo "Found repositories to add:"
             echo "$REPO_URLS"
@@ -100,18 +259,20 @@ jobs:
             echo "✅ Successfully added $REPO_COUNT Helm repositories"
           fi
       
-      - name: Find and validate all Helm charts
+      - name: Validate changed Helm charts
         run: |
-          echo "=== Discovering Helm charts in repository ==="
-          CHART_DIRS=$(find . -name "Chart.yaml" -type f -not -path "*/charts/*" -not -path "*/.git/*" -exec dirname {} \; | sort)
+          echo "=== Validating changed Helm charts ==="
+          
+          CHARTS='${{ needs.detect-changes.outputs.charts }}'
+          CHART_DIRS=$(echo "$CHARTS" | jq -r '.[]' | sort)
           
           if [ -z "$CHART_DIRS" ]; then
-            echo "No Helm charts found in repository"
+            echo "No Helm charts to validate"
             exit 0
           fi
           
-          CHART_COUNT=$(echo "$CHART_DIRS" | wc -l)
-          echo "Found $CHART_COUNT Helm charts to validate"
+          CHART_COUNT=${{ needs.detect-changes.outputs.chart-count }}
+          echo "Validating $CHART_COUNT changed chart(s)"
           echo ""
           
           FAILED_CHARTS=()
@@ -199,5 +360,5 @@ jobs:
             exit 1
           else
             echo ""
-            echo "✅ All Helm charts validated successfully!"
+            echo "✅ All changed Helm charts validated successfully!"
           fi
