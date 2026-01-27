@@ -7,22 +7,21 @@ traefik:
     enabled: true
   ports:
     web:
-      redirections:
-        entryPoint:
-          to: websecure
-          scheme: https
-          permanent: true
-          priority: 10
+      http:
+        redirections:
+          entryPoint:
+            to: websecure
+            scheme: https
+            permanent: true
+            priority: 10
     websecure:
-      tls:
-        enabled: true
+      http:
+        tls:
+          enabled: true
 
   service:
     spec:
       externalTrafficPolicy: Local
-      
-  ssl:
-    insecureSkipVerify: true
 
   providers:
     kubernetesCRD:
@@ -50,6 +49,7 @@ traefik:
     - '--entryPoints.web.forwardedHeaders.trustedIPs=<secret:kv/data/kube-system/traefik~trusted-ips>'
     - '--entryPoints.websecure.forwardedHeaders.trustedIPs=<secret:kv/data/kube-system/traefik~trusted-ips>'
     - --providers.kubernetesingress.ingressclass=traefik-external
+    - --serversTransport.insecureSkipVerify=true
 
   deployment:
     replicas: 2
