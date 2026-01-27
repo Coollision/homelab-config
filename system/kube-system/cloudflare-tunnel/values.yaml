@@ -1,4 +1,8 @@
 traefik:
+  # Resources will be named "cloudflare-tunnel-traefik"
+  # Use instanceLabelOverride to distinguish this instance in labels
+  instanceLabelOverride: "traefik-external"
+  
   commonLabels: 
     app: traefik-external
   rbac:
