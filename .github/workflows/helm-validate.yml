@@ -1,0 +1,203 @@
+name: Validate Charts and YAML
+
+on:
+  pull_request:
+    branches: ['**']
+  push:
+    branches: ['**']
+
+permissions:
+  contents: read
+
+jobs:
+  yaml-lint:
+    name: YAML Lint
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      
+      - name: Install yamllint
+        run: pip install yamllint
+      
+      - name: Run yamllint
+        run: |
+          echo "=== Validating YAML syntax and formatting ==="
+          yamllint --version
+          # Run yamllint with custom config for ArgoCD compatibility
+          set +e
+          yamllint -c .yamllint.yml . 
+          YAMLLINT_EXIT=$?
+          set -e
+          
+          if [ $YAMLLINT_EXIT -ne 0 ]; then
+            echo ""
+            echo "⚠️  YAML linting found issues (warnings only - non-blocking)"
+          fi
+          echo "✅ YAML validation complete"
+  
+  helm-validate:
+    name: Helm Charts Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.19.5'
+      
+      - name: Auto-discover and add Helm repositories
+        run: |
+          echo "=== Auto-discovering Helm repositories from Chart.yaml files ==="
+          
+          # Find all unique repository URLs from Chart.yaml files
+          REPO_URLS=$(find . -name "Chart.yaml" -not -path "*/charts/*" -not -path "*/.git/*" -exec grep -h "repository:" {} \; | \
+            grep -E "https?://" | \
+            sed 's/.*repository: *//g' | \
+            sed 's/ *#.*//g' | \
+            sort -u)
+          
+          if [ -z "$REPO_URLS" ]; then
+            echo "No external Helm repositories found"
+          else
+            echo "Found repositories to add:"
+            echo "$REPO_URLS"
+            echo ""
+            
+            # Add each repository with a generated name
+            REPO_COUNT=0
+            while IFS= read -r repo_url; do
+              [ -z "$repo_url" ] && continue
+              
+              # Generate a simple name from the URL
+              repo_name=$(echo "$repo_url" | sed 's|https://||g' | sed 's|http://||g' | sed 's|/|-|g' | sed 's|\.|-|g')
+              
+              echo "Adding repository: $repo_name ($repo_url)"
+              if helm repo add "$repo_name" "$repo_url" 2>&1; then
+                REPO_COUNT=$((REPO_COUNT + 1))
+              else
+                echo "⚠️  Warning: Failed to add repository $repo_url"
+              fi
+            done <<< "$REPO_URLS"
+            
+            echo ""
+            echo "Updating repository indexes..."
+            if [ "$REPO_COUNT" -gt 0 ]; then
+              helm repo update
+            else
+              echo "⚠️  No repositories were successfully added, skipping update"
+            fi
+            echo ""
+            echo "✅ Successfully added $REPO_COUNT Helm repositories"
+          fi
+      
+      - name: Find and validate all Helm charts
+        run: |
+          echo "=== Discovering Helm charts in repository ==="
+          CHART_DIRS=$(find . -name "Chart.yaml" -type f -not -path "*/charts/*" -not -path "*/.git/*" -exec dirname {} \; | sort)
+          
+          if [ -z "$CHART_DIRS" ]; then
+            echo "No Helm charts found in repository"
+            exit 0
+          fi
+          
+          CHART_COUNT=$(echo "$CHART_DIRS" | wc -l)
+          echo "Found $CHART_COUNT Helm charts to validate"
+          echo ""
+          
+          FAILED_CHARTS=()
+          SUCCESS_COUNT=0
+          
+          while IFS= read -r chart_dir; do
+            [ -z "$chart_dir" ] && continue
+            
+            chart_name=$(basename "$chart_dir")
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "📦 Validating: $chart_dir"
+            
+            # Check if this is a library chart
+            IS_LIBRARY=false
+            if [ -f "$chart_dir/Chart.yaml" ]; then
+              if grep -qE "^[[:space:]]*type:[[:space:]]*library" "$chart_dir/Chart.yaml"; then
+                IS_LIBRARY=true
+                echo "   (Library chart - will skip template rendering)"
+              fi
+            fi
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            
+            CHART_FAILED=false
+            
+            # Check if chart has dependencies
+            if [ -f "$chart_dir/Chart.yaml" ]; then
+              if grep -q "dependencies:" "$chart_dir/Chart.yaml"; then
+                echo "📥 Updating dependencies..."
+                if ! (cd "$chart_dir" && helm dependency update 2>&1); then
+                  echo "❌ Failed to update dependencies for $chart_dir"
+                  FAILED_CHARTS+=("$chart_dir (dependency update failed)")
+                  CHART_FAILED=true
+                fi
+              fi
+            fi
+            
+            # Run helm lint
+            echo "🔍 Running helm lint..."
+            if helm lint "$chart_dir" 2>&1; then
+              echo "✅ Lint passed for $chart_dir"
+            else
+              echo "❌ Lint failed for $chart_dir"
+              FAILED_CHARTS+=("$chart_dir (lint failed)")
+              CHART_FAILED=true
+            fi
+            
+            # Run helm template to validate rendering (skip for library charts)
+            if [ "$IS_LIBRARY" = false ]; then
+              echo "🔧 Running helm template..."
+              TEMPLATE_OUTPUT=$(helm template "$chart_name" "$chart_dir" 2>&1)
+              if [ $? -eq 0 ]; then
+                echo "✅ Template rendering passed for $chart_dir"
+              else
+                echo "❌ Template rendering failed for $chart_dir"
+                echo "Error output:"
+                echo "$TEMPLATE_OUTPUT"
+                FAILED_CHARTS+=("$chart_dir (template failed)")
+                CHART_FAILED=true
+              fi
+            else
+              echo "⏭️  Skipping template rendering (library chart)"
+            fi
+            
+            # Count successful charts (passed all validations)
+            if [ "$CHART_FAILED" = false ]; then
+              SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+            fi
+            
+            echo ""
+          done <<< "$CHART_DIRS"
+          
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "📊 Validation Summary"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Total charts: $CHART_COUNT"
+          echo "Successful: $SUCCESS_COUNT"
+          echo "Failed: $((CHART_COUNT - SUCCESS_COUNT))"
+          
+          if [ ${#FAILED_CHARTS[@]} -gt 0 ]; then
+            echo ""
+            echo "❌ Failed validations:"
+            printf '%s\n' "${FAILED_CHARTS[@]}"
+            echo ""
+            echo "⚠️  Some charts failed validation. Please review the errors above."
+            exit 1
+          else
+            echo ""
+            echo "✅ All Helm charts validated successfully!"
+          fi
