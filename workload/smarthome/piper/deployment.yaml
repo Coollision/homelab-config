@@ -32,6 +32,6 @@ spec:
             - name: piper-data
               mountPath: /data
       volumes:
-          - name: piper-data
-            persistentVolumeClaim:
-              claimName: piper-data
+        - name: piper-data
+          persistentVolumeClaim:
+            claimName: piper-data

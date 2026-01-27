@@ -34,7 +34,7 @@ spec:
       initContainers:
         - name: prowlarr-init
           image: alpine
-          command: 
+          command:
             - "/bin/sh"
             - "-c"
             - cp /init/script.sh /tmp && chmod +x /tmp/script.sh && /tmp/script.sh

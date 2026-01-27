@@ -1,7 +1,6 @@
 traefik:
   commonLabels:
     app: traefik
-
   rbac:
     enabled: true
   ports:
@@ -9,74 +8,64 @@ traefik:
       http:
         tls:
           enabled: true
-
   ingressRoute:
     dashboard:
       enabled: true
       matchRule: Host(`traefik.<secret:kv/data/domains~local>`) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))
       entryPoints:
         - web
-
   service:
     spec:
       externalTrafficPolicy: Local
       loadBalancerIP: <secret:kv/data/kube-system/traefik~ip>
-
   providers:
     kubernetesCRD:
       enabled: true
     kubernetesIngress:
       publishedService:
         enabled: true
-
   priorityClassName: "system-cluster-critical"
   tolerations:
-  - key: "CriticalAddonsOnly"
-    operator: "Exists"
-  - key: "node-role.kubernetes.io/control-plane"
-    operator: "Exists"
-    effect: "NoSchedule"
-  - key: "node-role.kubernetes.io/master"
-    operator: "Exists"
-    effect: "NoSchedule"
-
- 
-
+    - key: "CriticalAddonsOnly"
+      operator: "Exists"
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
+    - key: "node-role.kubernetes.io/master"
+      operator: "Exists"
+      effect: "NoSchedule"
   additionalArguments:
-    - '--entryPoints.web.forwardedHeaders.trustedIPs=<secret:kv/data/kube-system/traefik~trusted-ips>'
-    - '--entryPoints.websecure.forwardedHeaders.trustedIPs=<secret:kv/data/kube-system/traefik~trusted-ips>'
-
+    - "--entryPoints.web.forwardedHeaders.trustedIPs=<secret:kv/data/kube-system/traefik~trusted-ips>"
+    - "--entryPoints.websecure.forwardedHeaders.trustedIPs=<secret:kv/data/kube-system/traefik~trusted-ips>"
   deployment:
     replicas: 2
-
   affinity:
     podAntiAffinity:
       preferredDuringSchedulingIgnoredDuringExecution:
-      # Avoid running internal Traefik replicas on the same node
-      - weight: 100
-        podAffinityTerm:
-          labelSelector:
-            matchLabels:
-              app.kubernetes.io/name: traefik
-          topologyKey: kubernetes.io/hostname
+        # Avoid running internal Traefik replicas on the same node
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: traefik
+            topologyKey: kubernetes.io/hostname
     nodeAffinity:
       preferredDuringSchedulingIgnoredDuringExecution:
-      # Prefer non-Pi nodes for better performance
-      - weight: 50
-        preference:
-          matchExpressions:
-          - key: type
-            operator: NotIn
-            values:
-            - rpi
-
+        # Prefer non-Pi nodes for better performance
+        - weight: 50
+          preference:
+            matchExpressions:
+              - key: type
+                operator: NotIn
+                values:
+                  - rpi
   metrics:
     prometheus: {}
 
-  # resources:
-  #   requests:
-  #     cpu: 100m
-  #     memory: 70Mi
-  #   limits:
-  #     cpu: 130m
-  #     memory: 80Mi
+# resources:
+#   requests:
+#     cpu: 100m
+#     memory: 70Mi
+#   limits:
+#     cpu: 130m
+#     memory: 80Mi

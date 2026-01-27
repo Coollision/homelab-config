@@ -11,4 +11,3 @@ dependencies:
     alias: metallb
     version: 0.15.3
     repository: https://metallb.github.io/metallb
-

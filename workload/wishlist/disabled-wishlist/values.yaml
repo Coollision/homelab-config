@@ -33,7 +33,7 @@ wishlistdb:
       periodSeconds: 10
       timeoutSeconds: 5
       failureThreshold: 3
-  # resources: 
+  # resources:
   #   requests:
   #     memory: "500Mi"
   #     cpu: "500m"
@@ -82,7 +82,7 @@ wishlist:
         path: /health
         port: web
       initialDelaySeconds: 30
-      periodSeconds: 10 
+      periodSeconds: 10
   labels:
     app.kubernetes.io/component: wishlist
   keel:

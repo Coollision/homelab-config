@@ -4,11 +4,9 @@ ansible_user: user
 dns_record_name: node-s.pi
 dns_record_value: "{{ host_ip_address }}"
 ansible_python_interpreter: /usr/bin/python3
-
 k3s_node_name: master-s
 k3s_flannel_iface: ens3
 k3s_node_label:
   - type=vm
 k3s_node_taint:
   - dedicated=master:NoSchedule
-

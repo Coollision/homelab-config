@@ -28,6 +28,6 @@ spec:
             - name: openwakeword-data
               mountPath: /data
       volumes:
-          - name: openwakeword-data
-            persistentVolumeClaim:
-              claimName: openwakeword-data
+        - name: openwakeword-data
+          persistentVolumeClaim:
+            claimName: openwakeword-data

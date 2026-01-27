@@ -17,9 +17,9 @@ keel:
     type: ClusterIP
 
   resources:
-    # requests:
-    #   cpu: 30m
-    #   memory: 40Mi
-    # limits:
-    #   cpu: 50m
-    #   memory: 45Mi
+  # requests:
+  #   cpu: 30m
+  #   memory: 40Mi
+  # limits:
+  #   cpu: 50m
+  #   memory: 45Mi

@@ -26,7 +26,7 @@ probes:
       path: /
       port: web
     initialDelaySeconds: 30
-    periodSeconds: 10 
+    periodSeconds: 10
 
 
 keel:
