@@ -75,7 +75,9 @@ jobs:
             
             # Add each repository with a generated name
             REPO_COUNT=0
-            for repo_url in $REPO_URLS; do
+            while IFS= read -r repo_url; do
+              [ -z "$repo_url" ] && continue
+              
               # Generate a simple name from the URL
               repo_name=$(echo "$repo_url" | sed 's|https://||g' | sed 's|http://||g' | sed 's|/|-|g' | sed 's|\.|-|g')
               
@@ -85,11 +87,15 @@ jobs:
               else
                 echo "⚠️  Warning: Failed to add repository $repo_url"
               fi
-            done
+            done <<< "$REPO_URLS"
             
             echo ""
             echo "Updating repository indexes..."
-            helm repo update
+            if [ "$REPO_COUNT" -gt 0 ]; then
+              helm repo update
+            else
+              echo "⚠️  No repositories were successfully added, skipping update"
+            fi
             echo ""
             echo "✅ Successfully added $REPO_COUNT Helm repositories"
           fi
@@ -111,7 +117,9 @@ jobs:
           FAILED_CHARTS=()
           SUCCESS_COUNT=0
           
-          for chart_dir in $CHART_DIRS; do
+          while IFS= read -r chart_dir; do
+            [ -z "$chart_dir" ] && continue
+            
             chart_name=$(basename "$chart_dir")
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "📦 Validating: $chart_dir"
@@ -119,7 +127,7 @@ jobs:
             # Check if this is a library chart
             IS_LIBRARY=false
             if [ -f "$chart_dir/Chart.yaml" ]; then
-              if grep -q "^type: library" "$chart_dir/Chart.yaml"; then
+              if grep -qE "^[[:space:]]*type:[[:space:]]*library" "$chart_dir/Chart.yaml"; then
                 IS_LIBRARY=true
                 echo "   (Library chart - will skip template rendering)"
               fi
@@ -173,7 +181,7 @@ jobs:
             fi
             
             echo ""
-          done
+          done <<< "$CHART_DIRS"
           
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "📊 Validation Summary"
