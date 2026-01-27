@@ -1,6 +1,4 @@
 traefik:
-  fullnameOverride: traefik
-
   commonLabels:
     app: traefik
 
@@ -8,8 +6,9 @@ traefik:
     enabled: true
   ports:
     websecure:
-      tls:
-        enabled: true
+      http:
+        tls:
+          enabled: true
 
   ingressRoute:
     dashboard:
