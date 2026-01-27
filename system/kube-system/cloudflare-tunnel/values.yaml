@@ -1,6 +1,4 @@
 traefik:
-  fullnameOverride: traefik-external
-
   commonLabels: 
     app: traefik-external
   rbac:

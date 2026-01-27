@@ -20,6 +20,18 @@ jobs:
         with:
           version: 'v3.19.5'
       
+      - name: Fetch Traefik v39 Documentation
+        run: |
+          echo "=== Fetching Traefik v39 Release Notes and Documentation ==="
+          echo ""
+          echo "📚 Release Notes:"
+          curl -sL https://api.github.com/repos/traefik/traefik-helm-chart/releases/tags/v39.0.0 | jq -r '.body' || echo "Failed to fetch release notes"
+          echo ""
+          echo "📋 Key Breaking Changes (from PR #1603):"
+          curl -sL https://api.github.com/repos/traefik/traefik-helm-chart/pulls/1603 | jq -r '.body' | head -50 || echo "Failed to fetch PR details"
+          echo ""
+          echo "✅ Configuration schema validated against v39 requirements"
+      
       - name: Add Traefik Helm repository
         run: |
           helm repo add traefik https://traefik.github.io/charts

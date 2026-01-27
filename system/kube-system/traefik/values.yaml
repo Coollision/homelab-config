@@ -1,6 +1,4 @@
 traefik:
-  fullnameOverride: traefik
-
   commonLabels:
     app: traefik
 
