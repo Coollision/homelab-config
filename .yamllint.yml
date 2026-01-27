@@ -15,9 +15,9 @@ rules:
     spaces: consistent
     indent-sequences: whatever
   
-  # Allow duplicate keys (sometimes needed for helm templates)
+  # Duplicate keys are errors (can cause unexpected behavior)
   key-duplicates:
-    level: warning
+    level: error
   
   # Comments - be lenient
   comments:
@@ -42,7 +42,7 @@ rules:
     forbid-in-block-mappings: false
     forbid-in-flow-mappings: false
   
-  # Trailing spaces
+  # Trailing spaces - warning for now
   trailing-spaces:
     level: warning
 
