@@ -1,0 +1,54 @@
+---
+extends: default
+
+rules:
+  # Line length is often exceeded in k8s manifests
+  line-length:
+    max: 200
+    level: warning
+  
+  # Allow multiple documents in one file (common in k8s)
+  document-start: disable
+  
+  # Indentation - be lenient for existing code
+  indentation:
+    spaces: consistent
+    indent-sequences: whatever
+  
+  # Allow duplicate keys (sometimes needed for helm templates)
+  key-duplicates:
+    level: warning
+  
+  # Comments - be lenient
+  comments:
+    min-spaces-from-content: 1
+    level: warning
+  
+  comments-indentation:
+    level: warning
+  
+  # Truthy values (yes/no, true/false, on/off)
+  truthy:
+    allowed-values: ['true', 'false', 'yes', 'no', 'on', 'off']
+    check-keys: false
+    level: warning
+  
+  # Brackets
+  brackets:
+    max-spaces-inside: 1
+  
+  # Empty values
+  empty-values:
+    forbid-in-block-mappings: false
+    forbid-in-flow-mappings: false
+  
+  # Trailing spaces
+  trailing-spaces:
+    level: warning
+
+ignore: |
+  .git/
+  **/charts/
+  **/Chart.lock
+  node_modules/
+  .vscode/

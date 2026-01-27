@@ -1,4 +1,4 @@
-name: Helm Validate
+name: Validate Charts and YAML
 
 on:
   pull_request:
@@ -7,8 +7,33 @@ on:
     branches: ['**']
 
 jobs:
-  helm-template:
-    name: Validate Helm Templates
+  yaml-lint:
+    name: YAML Lint
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      
+      - name: Install yamllint
+        run: pip install yamllint
+      
+      - name: Run yamllint
+        run: |
+          echo "=== Validating YAML syntax and formatting ==="
+          yamllint --version
+          # Run yamllint with custom config for ArgoCD compatibility
+          # Warnings only - non-blocking
+          yamllint -c .yamllint.yml . || echo "⚠️  YAML linting found issues (non-blocking)"
+          echo "✅ YAML validation complete"
+  
+  helm-validate:
+    name: Helm Charts Validation
     runs-on: ubuntu-latest
     
     steps:
@@ -20,41 +45,83 @@ jobs:
         with:
           version: 'v3.19.5'
       
-      - name: Fetch Traefik v39 Documentation
+      - name: Add Helm repositories
         run: |
-          echo "=== Fetching Traefik v39 Release Notes and Documentation ==="
-          echo ""
-          echo "📚 Release Notes:"
-          curl -sL https://api.github.com/repos/traefik/traefik-helm-chart/releases/tags/v39.0.0 | jq -r '.body' || echo "Failed to fetch release notes"
-          echo ""
-          echo "📋 Key Breaking Changes (from PR #1603):"
-          curl -sL https://api.github.com/repos/traefik/traefik-helm-chart/pulls/1603 | jq -r '.body' | head -50 || echo "Failed to fetch PR details"
-          echo ""
-          echo "✅ Configuration schema validated against v39 requirements"
-      
-      - name: Add Traefik Helm repository
-        run: |
+          echo "=== Adding common Helm repositories ==="
           helm repo add traefik https://traefik.github.io/charts
+          helm repo add jetstack https://charts.jetstack.io
+          helm repo add metallb https://metallb.github.io/metallb
+          helm repo add grafana https://grafana.github.io/helm-charts
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
           helm repo update
+          echo "✅ Repositories added"
       
-      - name: Update Helm dependencies - Internal Traefik
+      - name: Find and validate all Helm charts
         run: |
-          cd system/kube-system/traefik
-          helm dependency update
-      
-      - name: Helm template - Internal Traefik
-        run: |
-          cd system/kube-system/traefik
-          echo "=== Testing Internal Traefik (system/kube-system/traefik) ==="
-          helm template traefik . --debug
-      
-      - name: Update Helm dependencies - External Traefik
-        run: |
-          cd system/kube-system/cloudflare-tunnel
-          helm dependency update
-      
-      - name: Helm template - External Traefik
-        run: |
-          cd system/kube-system/cloudflare-tunnel
-          echo "=== Testing External Traefik (system/kube-system/cloudflare-tunnel) ==="
-          helm template traefik-external . --debug
+          echo "=== Discovering Helm charts in repository ==="
+          CHART_DIRS=$(find . -name "Chart.yaml" -type f -not -path "*/charts/*" -not -path "*/.git/*" -exec dirname {} \;)
+          CHART_COUNT=$(echo "$CHART_DIRS" | wc -l)
+          echo "Found $CHART_COUNT Helm charts to validate"
+          echo ""
+          
+          FAILED_CHARTS=()
+          SUCCESS_COUNT=0
+          
+          for chart_dir in $CHART_DIRS; do
+            chart_name=$(basename "$chart_dir")
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "📦 Validating: $chart_dir"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            
+            # Check if chart has dependencies
+            if [ -f "$chart_dir/Chart.yaml" ]; then
+              if grep -q "dependencies:" "$chart_dir/Chart.yaml"; then
+                echo "📥 Updating dependencies..."
+                (cd "$chart_dir" && helm dependency update) || {
+                  echo "⚠️  Warning: Failed to update dependencies for $chart_dir"
+                }
+              fi
+            fi
+            
+            # Run helm lint
+            echo "🔍 Running helm lint..."
+            if helm lint "$chart_dir"; then
+              echo "✅ Lint passed for $chart_dir"
+            else
+              echo "❌ Lint failed for $chart_dir"
+              FAILED_CHARTS+=("$chart_dir (lint)")
+            fi
+            
+            # Run helm template to validate rendering
+            echo "🔧 Running helm template..."
+            if helm template "$chart_name" "$chart_dir" > /dev/null 2>&1; then
+              echo "✅ Template rendering passed for $chart_dir"
+              SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+            else
+              echo "❌ Template rendering failed for $chart_dir"
+              echo "Attempting with --debug for more details..."
+              helm template "$chart_name" "$chart_dir" --debug || true
+              FAILED_CHARTS+=("$chart_dir (template)")
+            fi
+            
+            echo ""
+          done
+          
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "📊 Validation Summary"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Total charts: $CHART_COUNT"
+          echo "Successful: $SUCCESS_COUNT"
+          echo "Failed: ${#FAILED_CHARTS[@]}"
+          
+          if [ ${#FAILED_CHARTS[@]} -gt 0 ]; then
+            echo ""
+            echo "❌ Failed charts:"
+            printf '%s\n' "${FAILED_CHARTS[@]}"
+            echo ""
+            echo "⚠️  Some charts failed validation. Please review the errors above."
+            exit 1
+          else
+            echo ""
+            echo "✅ All Helm charts validated successfully!"
+          fi
