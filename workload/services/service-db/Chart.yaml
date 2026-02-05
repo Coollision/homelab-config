@@ -3,5 +3,5 @@ name: service-db
 version: 0.1.0
 dependencies:
   - name: postgresql
-    version: 18.2.3
+    version: 18.2.4
     repository: https://charts.bitnami.com/bitnami
