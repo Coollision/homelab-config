@@ -10,6 +10,7 @@ resources:
 {{- else }}
 resources: {}
 {{- end }}
+{{- include "shared-lib.containerSecurityContext" . | nindent 0 -}}
 ports:
   {{- if (include "shared-lib.getPorts" . | fromYaml) }}
   {{- range $key, $value := (include "shared-lib.getPorts" . | fromYaml) }}
