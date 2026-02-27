@@ -37,7 +37,7 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
-      {{- include "shared-lib.securityContext" . | nindent 6 -}}
+      {{- include "shared-lib.podSecurityContext" . | nindent 6 -}}
       {{- include "shared-lib.hostNetwork" . | nindent 6 -}}
       {{- include "shared-lib.dnsPolicy" . | nindent 6 }}
       {{- include "shared-lib.affinity" . | nindent 6 }}

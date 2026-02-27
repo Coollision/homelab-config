@@ -1,10 +1,28 @@
 fullnameOverride: jellyseerr
 deployment:
   image:
-    repository: fallenbagel/jellyseerr
-    tag: 2.7.3
+    repository: ghcr.io/seerr-team/seerr
+    tag: v3.1.0
   ports:
     ingress: 5055
+
+podSecurityContext:
+  fsGroup: 1000
+  fsGroupChangePolicy: OnRootMismatch
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  privileged: false
+  runAsUser: 1000
+  runAsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
 config:
   TZ: Europe/Brussels
   LOG_LEVEL: debug
