@@ -50,7 +50,14 @@ env:
 {{- end }}
 
 
-{{- define "shared-lib.securityContext" -}}
+{{- define "shared-lib.podSecurityContext" -}}
+{{- if .Values.podSecurityContext -}}
+securityContext:
+  {{- toYaml .Values.podSecurityContext | nindent 2 -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "shared-lib.containerSecurityContext" -}}
 {{- if .Values.securityContext -}}
 securityContext:
   {{- toYaml .Values.securityContext | nindent 2 -}}

@@ -10,6 +10,10 @@ resources:
 {{- else }}
 resources: {}
 {{- end }}
+{{- if .Values.securityContext }}
+securityContext:
+  {{- toYaml .Values.securityContext | nindent 2 }}
+{{- end }}
 ports:
   {{- if (include "shared-lib.getPorts" . | fromYaml) }}
   {{- range $key, $value := (include "shared-lib.getPorts" . | fromYaml) }}
