@@ -1,17 +1,14 @@
 ---
-# 30-min Snapshot RecurringJob
-# Creates local snapshots every 30 minutes, keeps only the last 2
-# (rolling ~1hr window — snapshots are cheap local data, not NFS transfers)
 apiVersion: longhorn.io/v1beta2
 kind: RecurringJob
 metadata:
   name: snapshot-30min
   namespace: storage
 spec:
-  # Cron schedule: every 30 minutes
-  cron: "*/30 * * * *"
+  # Cron schedule: every 2 hours
+  cron: "0 */2 * * *"
   task: snapshot
-  retain: 2   # Keep only the 2 most recent snapshots
+  retain: 24   # Keep 24 snapshots (~2 days of 2-hour interval)
   concurrency: 2
   # Volumes must opt-in by adding label: recurring-job.longhorn.io/snapshot-30min=enabled
   groups: []

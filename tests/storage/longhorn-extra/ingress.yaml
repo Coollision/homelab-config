@@ -7,7 +7,7 @@ spec:
   entryPoints:
     - websecure
   routes:
-    - match: Host(`longhorn.<secret:kv/data/domains~domain>`) && PathPrefix(`/`)
+    - match: Host(`longhorn.<secret:kv/data/domains~domain>`)
       kind: Rule
       services:
         - name: longhorn-frontend
