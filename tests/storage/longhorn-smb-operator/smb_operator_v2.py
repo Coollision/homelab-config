@@ -929,12 +929,16 @@ class SMBOperator:
 
 
 if __name__ == '__main__':
-    # Load configuration
-    core_v1 = client.CoreV1Api()
+    # Load Kubernetes configuration FIRST
     try:
         config.load_incluster_config()
-    except:
+        logger.info("Loaded in-cluster Kubernetes config")
+    except config.ConfigException:
         config.load_kube_config()
+        logger.info("Loaded local Kubernetes config")
+    
+    # Now create API client (after config is loaded)
+    core_v1 = client.CoreV1Api()
     
     cfg = Config.load_from_configmap(
         core_v1,
