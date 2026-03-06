@@ -21,17 +21,18 @@ spec:
         resources: ["volumes"]
   matchConditions:
     # Only apply to volumes that have the protect=true label
+    # On DELETE, the resource is in oldObject, not object
     - name: has-protect-label
       expression: >-
-        has(object.metadata.labels) &&
-        'protect' in object.metadata.labels &&
-        object.metadata.labels['protect'] == 'true'
+        has(oldObject.metadata.labels) &&
+        'protect' in oldObject.metadata.labels &&
+        oldObject.metadata.labels['protect'] == 'true'
   validations:
     - expression: "false"
       messageExpression: >-
-        'Deletion of Longhorn volume ' + object.metadata.name +
+        'Deletion of Longhorn volume ' + oldObject.metadata.name +
         ' is blocked by protection policy. Remove the protect=true label first: ' +
-        'kubectl -n ' + object.metadata.namespace + ' label volume ' + object.metadata.name + ' protect-'
+        'kubectl -n ' + oldObject.metadata.namespace + ' label volume ' + oldObject.metadata.name + ' protect-'
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
