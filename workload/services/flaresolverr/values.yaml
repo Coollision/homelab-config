@@ -10,7 +10,7 @@ config:
   PUID: 1000
   PGID: 1000
 
-securityContext:
+podSecurityContext:
   fsGroup: 1000
 probes:
   liveness:

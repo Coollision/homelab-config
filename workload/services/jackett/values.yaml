@@ -17,7 +17,7 @@ storage:
     storagePath: jackett/config
     size: 10Gi
     type: nfs-client
-securityContext:
+podSecurityContext:
   fsGroup: 1000
 probes:
   liveness:
