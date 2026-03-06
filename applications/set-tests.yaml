@@ -1,0 +1,44 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: tests
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: https://github.com/Coollision/homelab-config.git
+        revision: tests
+        directories:
+          - path: tests/*/*
+          - path: tests/*/disabled-*
+            exclude: true
+  template:
+    metadata:
+      name: "{{.path.basename}}"
+    spec:
+      project: tests
+      source:
+        repoURL: https://github.com/Coollision/homelab-config.git
+        targetRevision: tests
+        path: "{{.path.path}}"
+        plugin:
+          name: argocd-lovely-plugin
+      destination:
+        namespace: "{{index .path.segments 1}}"
+        server: https://kubernetes.default.svc
+      syncPolicy:
+        automated:
+          selfHeal: false
+          prune: true
+        syncOptions:
+          - CreateNamespace=true
+          - PruneLast=true
+          - RespectIgnoreDifferences=true
+      revisionHistoryLimit: 1
+      ignoreDifferences:
+        - group: admissionregistration.k8s.io
+          kind: MutatingWebhookConfiguration
+          jqPathExpressions:
+            - .webhooks[]?.clientConfig.caBundle
