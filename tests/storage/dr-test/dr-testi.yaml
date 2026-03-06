@@ -11,10 +11,13 @@ kind: Volume
 metadata:
   name: dr-test-volume
   namespace: storage
+  annotations:
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false
   labels:
     recurring-job-group.longhorn.io/default: enabled
     backup-type: daily
     recurring-job.longhorn.io/backup-daily: enabled
+    protect: "true"
 
 spec:
   accessMode: rwo

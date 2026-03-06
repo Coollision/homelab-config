@@ -1,0 +1,39 @@
+{{- if .Values.storageClasses.retain.enabled }}
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ .Values.storageClasses.retain.name }}
+  annotations:
+    storageclass.kubernetes.io/description: "RWO block storage with data protection (Retain)"
+provisioner: driver.longhorn.io
+allowVolumeExpansion: true
+reclaimPolicy: {{ .Values.storageClasses.retain.reclaimPolicy }}
+volumeBindingMode: Immediate
+parameters:
+  numberOfReplicas: {{ .Values.storageClasses.retain.replicas | quote }}
+  staleReplicaTimeout: {{ .Values.storageClasses.retain.staleReplicaTimeout | quote }}
+  dataLocality: {{ .Values.storageClasses.retain.dataLocality | quote }}
+  fsType: {{ .Values.storageClasses.retain.fsType | quote }}
+  fromBackup: ""
+  unmapMarkSnapChainRemoved: "ignored"
+  disableRevisionCounter: {{ .Values.storageClasses.retain.disableRevisionCounter | quote }}
+  dataEngine: "v1"
+{{- end }}
+---
+{{- if .Values.storageClasses.shared.enabled }}
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ .Values.storageClasses.shared.name }}
+provisioner: driver.longhorn.io
+allowVolumeExpansion: true
+reclaimPolicy: {{ .Values.storageClasses.shared.reclaimPolicy }}
+volumeBindingMode: Immediate
+parameters:
+  numberOfReplicas: {{ .Values.storageClasses.shared.replicas | quote }}
+  staleReplicaTimeout: {{ .Values.storageClasses.shared.staleReplicaTimeout | quote }}
+  fromBackup: ""
+  fsType: {{ .Values.storageClasses.shared.fsType | quote }}
+  dataLocality: {{ .Values.storageClasses.shared.dataLocality | quote }}
+  nfsOptions: {{ .Values.storageClasses.shared.nfsOptions | quote }}
+{{- end }}

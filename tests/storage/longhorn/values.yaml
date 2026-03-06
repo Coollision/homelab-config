@@ -1,0 +1,93 @@
+# ──────────────────────────────────────────────
+# Longhorn upstream chart values
+# ──────────────────────────────────────────────
+longhorn:
+  preUpgradeChecker:
+    jobEnabled: false
+
+  defaultSettings:
+    taintToleration: "node-role.kubernetes.io/control-plane:NoSchedule;dedicated=master:NoSchedule"
+    createDefaultDiskLabeledNodes: true
+
+  defaultBackupStore:
+    backupTarget: "nfs://<secret:kv/data/storage/nfs~server-ip>:/volume4/k3s-volumes/storage/longhorn-backups"
+
+  longhornManager:
+    nodeSelector:
+      longhorn: "true"
+    tolerations:
+      - key: "node-role.kubernetes.io/control-plane"
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "dedicated"
+        operator: "Equal"
+        value: "master"
+        effect: "NoSchedule"
+
+  longhornUI:
+    replicas: 1
+
+# ──────────────────────────────────────────────
+# Longhorn Extras (managed by this chart)
+# ──────────────────────────────────────────────
+
+# Ingress for Longhorn UI
+ingress:
+  enabled: true
+  host: "longhorn.<secret:kv/data/domains~domain>"
+
+# StorageClasses
+storageClasses:
+  retain:
+    enabled: true
+    name: longhorn-retain
+    reclaimPolicy: Retain
+    replicas: 3
+    staleReplicaTimeout: "2880"
+    dataLocality: disabled
+    fsType: ext4
+    disableRevisionCounter: "true"
+
+  shared:
+    enabled: true
+    name: longhorn-shared
+    reclaimPolicy: Retain
+    replicas: 3
+    staleReplicaTimeout: "2880"
+    dataLocality: disabled
+    fsType: ext4
+    nfsOptions: "vers=4.2,noresvport"
+
+# RecurringJobs
+recurringJobs:
+  snapshot:
+    enabled: true
+    name: snapshot-2h
+    cron: "0 */2 * * *"
+    task: snapshot
+    retain: 24
+    concurrency: 2
+
+  backupDaily:
+    enabled: true
+    name: backup-daily
+    cron: "0 2 * * *"
+    task: backup
+    retain: 7
+    concurrency: 2
+    labels:
+      backup-type: daily
+
+  systemBackupDaily:
+    enabled: true
+    name: system-backup-daily
+    cron: "0 3 * * *"
+    task: system-backup
+    retain: 7
+    parameters:
+      volume-backup-policy: if-not-present
+
+# Volume protection policy
+# Blocks deletion of Longhorn volumes with label: protect=true
+volumeProtection:
+  enabled: true
