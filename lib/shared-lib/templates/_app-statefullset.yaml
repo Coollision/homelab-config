@@ -7,6 +7,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "helm.labels" . | nindent 4 }}
+  {{- if or .Values.syncWave .Values.keel }}
   annotations:
     {{- if .Values.syncWave }}
     argocd.argoproj.io/sync-wave: {{ .Values.syncWave | default 0 | quote }}
@@ -19,6 +20,7 @@ metadata:
     keel.sh/pollSchedule: {{ .Values.keel.pollSchedule | default "@hourly" | quote }}
     keel.sh/trigger: poll
     {{- end }}
+  {{- end }}
 spec:
   serviceName: {{ include "helm.fullname" . }}
   replicas: {{ .Values.replicaCount | default "1" }}
@@ -39,12 +41,20 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
-      {{- include "shared-lib.podSecurityContext" . | nindent 6 -}}
-      {{- include "shared-lib.hostNetwork" . | nindent 6 -}}
-      {{- include "shared-lib.dnsPolicy" . | nindent 6 }}
-      {{- include "shared-lib.affinity" . | nindent 6 }}
+      {{- with (include "shared-lib.podSecurityContext" .) }}
+      {{- . | nindent 6 }}
+      {{- end }}
+      {{- with (include "shared-lib.hostNetwork" .) }}
+      {{- . | nindent 6 }}
+      {{- end }}
+      {{- with (include "shared-lib.dnsPolicy" .) }}
+      {{- . | nindent 6 }}
+      {{- end }}
+      {{- with (include "shared-lib.affinity" .) }}
+      {{- . | nindent 6 }}
+      {{- end }}
       containers:
-        - {{- include "shared-lib.container" . | nindent 10 -}}
+        - {{ include "shared-lib.container" . | indent 10 | trim }}
       {{- if .Values.storage }}
       volumes:
         {{- range .Values.storage }}

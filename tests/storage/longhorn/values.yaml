@@ -71,8 +71,7 @@ recurringJobs:
   backupDaily:
     enabled: true
     name: backup-daily
-    # cron: "0 2 * * *"
-    cron: "0 */1 * * *"
+    cron: "0 2 * * *"
     task: backup
     retain: 7
     concurrency: 2
@@ -82,8 +81,7 @@ recurringJobs:
   systemBackupDaily:
     enabled: true
     name: system-backup-daily
-    # cron: "0 3 * * *"
-    cron: "0 */1 * * *"
+    cron: "0 3 * * *"
     task: system-backup
     retain: 7
     parameters:

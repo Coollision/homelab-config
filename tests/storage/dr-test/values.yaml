@@ -1,0 +1,78 @@
+# ──────────────────────────────────────────────
+# DR Test — validates Longhorn volume survival
+# ──────────────────────────────────────────────
+
+deployment:
+  image:
+    repository: busybox
+    tag: latest
+
+  # Override the default entrypoint
+  command:
+    - sh
+    - -c
+  args:
+    - |
+      FILE=/data/timestamp.txt
+
+      if [ -f "$FILE" ]; then
+        echo "========================================="
+        echo "RECOVERY RUN — file found on volume"
+        echo "========================================="
+        echo "Original write timestamp:"
+        cat "$FILE"
+        echo ""
+        echo "✅ DR TEST PASSED — data survived deletion"
+        echo ""
+        echo "Appending recovery timestamp..."
+        echo "Recovered at: $(date)" >> "$FILE"
+        echo ""
+        echo "Final file state:"
+        cat "$FILE"
+      else
+        echo "========================================="
+        echo "FRESH RUN — no file found, writing now"
+        echo "========================================="
+        echo "Written at: $(date)" > "$FILE"
+        echo "✅ Timestamp written:"
+        cat "$FILE"
+        echo ""
+        echo "Now delete everything and re-apply to test recovery:"
+        echo "  kubectl delete -f dr-test.yaml"
+        echo "  kubectl delete pv dr-test-volume"
+        echo "  kubectl apply -f dr-test.yaml"
+      fi
+      
+      # Keep the container running indefinitely so the pod doesn't exit after 1 hour.
+      # Use exec so tail replaces the shell (PID 1) and cleanly keeps the container alive.
+      exec tail -f /dev/null
+
+  # No ports needed for this test pod
+  ports: {}
+
+# No service needed
+disableService: true
+
+# ──────────────────────────────────────────────
+# Longhorn volume storage
+# ──────────────────────────────────────────────
+storage:
+  - type: longhorn
+    mountPath: /data
+    size: 1Gi
+    nameSuffix: data
+
+    # Longhorn-specific options
+    # volumeName: dr-test-volume       # defaults to <release>-<chart>-<nameSuffix>
+    # volumeNamespace: storage          # defaults to "storage"
+    # storageClass: longhorn-retain     # defaults to "longhorn-retain" — use "longhorn-smb" for SMB operator
+    # reclaimPolicy: Retain             # defaults to "Retain"
+    # replicas: 3                       # defaults to 3
+    # dataLocality: disabled            # defaults to "disabled"
+    # fsType: ext4                      # defaults to "ext4"
+    protect: true                       # adds ArgoCD Delete=false,Prune=false + protect label for VAP
+
+    # Extra labels on the Longhorn Volume CR (overrides default backup labels)
+    # labels:
+    #   backup-type: daily
+    #   recurring-job.longhorn.io/backup-daily: enabled
