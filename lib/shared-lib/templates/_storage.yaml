@@ -1,6 +1,9 @@
 {{- define "shared-lib.storage" }}
 {{- $root := . }}
-  {{- range $storage := .Values.storage }}
+  {{- range $i, $storage := .Values.storage }}
+    {{- if gt $i 0 }}
+---
+    {{- end }}
     {{- if and (eq $storage.type "nfs-client") (hasKey $storage "storagePath") }}
 {{ include "shared-lib.nfs-client-path" (dict "root" $root "storage" $storage) }}
     {{- else if eq $storage.type "nfs-client" }}
@@ -17,7 +20,13 @@
 
 {{/* ── Helper: PVC name ── */}}
 {{- define "shared-lib.storage.pvcName" -}}
-{{- printf "%s-%s" (include "helm.fullname" .root) (default "" .storage.nameSuffix) | trunc 63 | trimSuffix "-" -}}
+{{- /*
+  PVC/PV name should be globally unique because PVs are cluster-scoped.
+  `helm.fullname` already includes the release name, but charts installed
+  into different namespaces with the same release name would collide.
+  Append the namespace so multiple installations don't stomp each other.
+*/ -}}
+{{- printf "%s-%s-%s" .Release.Namespace (include "helm.fullname" .root) (default "" .storage.nameSuffix) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/* ── Helper: Access modes (default ReadWriteOnce) ── */}}
@@ -50,6 +59,7 @@ spec:
   resources:
     requests:
       storage: {{ .storage.size }}
+---
 {{- end }}
 
 {{/* ── NFS-client with name-based path ── */}}
@@ -75,16 +85,22 @@ spec:
 
 {{/* ── Longhorn: Volume CR + static PV + PVC ── */}}
 {{- define "shared-lib.longhorn" }}
+# computed names and defaults
 {{- $pvcName    := include "shared-lib.storage.pvcName" . -}}
 {{- $volumeName := .storage.volumeName | default $pvcName -}}
-{{- /*
-  Determine the namespace to create Longhorn Volume CRs in.
-  Priority: per-storage .storage.volumeNamespace > root-level .Values.longhornVolumeNamespace > "storage"
+{{/*
+  All Longhorn volumes are created in the centralized "storage" namespace.
+  This keeps them independent of any application namespace and simplifies
+  provisioning.  We no longer support per-volume or global namespace overrides.
 */ -}}
-{{- $volNs := .storage.volumeNamespace | default (.root.Values.longhornVolumeNamespace | default "storage") -}}
-{{- $sc         := .storage.storageClass | default "longhorn-retain" -}}
-{{- $replicas   := .storage.replicas | default 3 -}}
-{{- $sizeBytes  := include "shared-lib.storage.sizeToBytes" .storage }}
+{{- $volNs := "storage" -}}
+{{- $sc := .storage.storageClass | default "longhorn-retain" -}}
+{{- $replicas := .storage.replicas | default 3 -}}
+# no additional namespaces; everything goes to storage
+{{ $sizeBytes := include "shared-lib.storage.sizeToBytes" .storage }}
+# document start for longhorn volume (explicit comment aids readability)
+---
+# longhorn volume {{ $volumeName }}
 apiVersion: longhorn.io/v1beta2
 kind: Volume
 metadata:
@@ -128,7 +144,6 @@ spec:
   snapshotDataIntegrity: ignored
   Standby: false
   migratable: false
----
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -150,7 +165,6 @@ spec:
     driver: driver.longhorn.io
     fsType: {{ .storage.fsType | default "ext4" }}
     volumeHandle: {{ $volumeName }}
----
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
