@@ -26,7 +26,7 @@
   into different namespaces with the same release name would collide.
   Append the namespace so multiple installations don't stomp each other.
 */ -}}
-{{- printf "%s-%s-%s" .Release.Namespace (include "helm.fullname" .root) (default "" .storage.nameSuffix) | trunc 63 | trimSuffix "-" -}}
+{{- printf "%s-%s-%s" .root.Release.Namespace (include "helm.fullname" .root) (default "" .storage.nameSuffix) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/* ── Helper: Access modes (default ReadWriteOnce) ── */}}
@@ -86,7 +86,7 @@ spec:
 {{/* ── Longhorn: Volume CR + static PV + PVC ── */}}
 {{- define "shared-lib.longhorn" }}
 # computed names and defaults
-{{- $pvcName    := include "shared-lib.storage.pvcName" . -}}
+{{- $pvcName    := include "shared-lib.storage.pvcName" (dict "root" .root "storage" .storage "Release" .root.Release) -}}
 {{- $volumeName := .storage.volumeName | default $pvcName -}}
 {{/*
   All Longhorn volumes are created in the centralized "storage" namespace.
