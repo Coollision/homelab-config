@@ -2,6 +2,11 @@
 # DR Test — validates Longhorn volume survival
 # ──────────────────────────────────────────────
 
+# Root override for where to create Longhorn Volume CRs.  Using a centralized
+# namespace keeps them independent of the application namespace.  Defaults to
+# "storage" if omitted; we set it explicitly here for clarity.
+longhornVolumeNamespace: storage
+
 deployment:
   image:
     repository: busybox
@@ -76,3 +81,15 @@ storage:
     # labels:
     #   backup-type: daily
     #   recurring-job.longhorn.io/backup-daily: enabled
+
+  # demonstrate a second volume created in a different namespace than the
+  # global default; useful when moving applications between namespaces.
+  - type: longhorn
+    mountPath: /other
+    size: 1Gi
+    nameSuffix: other
+    # force this volume's CR into a different namespace than the root value
+    volumeNamespace: other-storage
+    # use explicit name to avoid collision
+    volumeName: dr-test-other
+    protect: true

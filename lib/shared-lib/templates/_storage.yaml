@@ -77,7 +77,11 @@ spec:
 {{- define "shared-lib.longhorn" }}
 {{- $pvcName    := include "shared-lib.storage.pvcName" . -}}
 {{- $volumeName := .storage.volumeName | default $pvcName -}}
-{{- $volNs      := .storage.volumeNamespace | default "storage" -}}
+{{- /*
+  Determine the namespace to create Longhorn Volume CRs in.
+  Priority: per-storage .storage.volumeNamespace > root-level .Values.longhornVolumeNamespace > "storage"
+*/ -}}
+{{- $volNs := .storage.volumeNamespace | default (.root.Values.longhornVolumeNamespace | default "storage") -}}
 {{- $sc         := .storage.storageClass | default "longhorn-retain" -}}
 {{- $replicas   := .storage.replicas | default 3 -}}
 {{- $sizeBytes  := include "shared-lib.storage.sizeToBytes" .storage }}
@@ -129,10 +133,11 @@ apiVersion: v1
 kind: PersistentVolume
 metadata:
   name: {{ $volumeName }}
-  {{- if .root.Values.syncWave }}
   annotations:
+    longhorn.io/volume-name: {{ $volumeName }}
+    {{- if .root.Values.syncWave }}
     argocd.argoproj.io/sync-wave: {{ .root.Values.syncWave | default 0 | quote }}
-  {{- end }}
+    {{- end }}
 spec:
   capacity:
     storage: {{ .storage.size }}
