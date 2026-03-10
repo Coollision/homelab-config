@@ -1,16 +1,11 @@
-{{/* Service 1: Writer */}}
+{{/* Service 1: Writer (creates and owns shared volume) */}}
 {{ $writerv := deepCopy . }}
 {{ $_ := unset $writerv ".Values" }}
 {{ $_ := set $writerv "Values" .Values.writer }}
 {{ include "shared-lib.all" $writerv }}
 
-{{/* Service 2: Reader */}}
+{{/* Service 2: Reader (references writer's PVC via existingClaim) */}}
 {{ $readerv := deepCopy . }}
 {{ $_ := unset $readerv ".Values" }}
 {{ $_ := set $readerv "Values" .Values.reader }}
 {{ include "shared-lib.all" $readerv }}
-
-{{/* Legacy single-service config (kept for reference) */}}
-{{ if .Values.deployment }}
-{{ include "shared-lib.all" . }}
-{{ end }}

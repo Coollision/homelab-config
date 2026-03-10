@@ -5,10 +5,12 @@
 # 1. Longhorn volume persistence across pod recreation
 # 2. Multi-service architecture with shared volumes (like HomeAssistant + DB)
 # 3. RWX shared volume access via longhorn-shared storage class
+# 
+# Pattern: Writer service creates volume, reader service references it (existingClaim)
 
 # ──────────────────────────────────────────────
-# Service 1: Data Writer
-# Writes timestamp to /shared volume, persists across restarts
+# Service 1: Data Writer (volume creator)
+# Checks original /data volume, writes timestamp to /shared volume (for reader)
 # ──────────────────────────────────────────────
 writer:
   fullnameOverride: dr-test-writer
@@ -23,37 +25,72 @@ writer:
       - -c
     args:
       - |
-        FILE=/shared/timestamp.txt
+        echo "========================================="
+        echo "WRITER: Check original /data volume"
+        echo "========================================="
         
+        # Check if original /data volume has data from previous test
+        FILE=/data/timestamp.txt
         if [ -f "$FILE" ]; then
-          echo "✅ WRITER: Found existing file, appending timestamp"
-          echo "Written at: $(date)" >> "$FILE"
+          echo "✅ RECOVERY: Found original file"
+          echo "Original timestamp:"
+          cat "$FILE"
+          echo ""
+          echo "✅ DR TEST PASSED — data survived deletion"
+          echo ""
+          echo "Appending recovery timestamp..."
+          echo "Recovered at: $(date)" >> "$FILE"
+          echo ""
+          echo "Final file state:"
+          cat "$FILE"
         else
-          echo "✅ WRITER: Creating new file"
+          echo "========================================="
+          echo "FRESH RUN — no file found, writing now"
+          echo "========================================="
           echo "Written at: $(date)" > "$FILE"
+          echo "✅ Original timestamp written:"
+          cat "$FILE"
         fi
         
-        echo "File contents:"
-        cat "$FILE"
+        echo ""
+        echo "========================================="
+        echo "WRITER: Creating timestamped files in /shared"
+        echo "========================================="
         
-        # Keep running
-        exec tail -f /dev/null
+        # Create a timestamped file for this run
+        TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+        LOGFILE="/shared/log-${TIMESTAMP}.txt"
+        
+        echo "✅ WRITER: Creating $LOGFILE"
+        echo "Run started at: $(date)" > "$LOGFILE"
+        echo ""
+        
+        # Write heartbeat to the current log file every hour
+        while true; do
+          sleep 3600
+          echo "Heartbeat at: $(date)" >> "$LOGFILE"
+        done
   
   disableService: true
   
-  # Share the RWX volume
+  # Writer creates TWO volumes: legacy /data and new shared /shared
   storage:
+    - type: longhorn
+      mountPath: /data
+      size: 1Gi
+      volumeName: dr-test-data  # Original volume from first test run
+      protect: true
+    
     - type: longhorn
       mountPath: /shared
       size: 1Gi
-      nameSuffix: shared
-      volumeName: dr-test-shared  # Explicit name for easy reference
+      volumeName: dr-test-shared  # Shared with reader
       storageClass: longhorn-shared  # RWX via SMB
       protect: true
 
 # ──────────────────────────────────────────────
-# Service 2: Data Reader
-# Reads and validates file from /shared volume
+# Service 2: Data Reader (volume consumer)
+# Reads and validates file from /shared volume (via existingClaim)
 # ──────────────────────────────────────────────
 reader:
   fullnameOverride: dr-test-reader
@@ -68,110 +105,40 @@ reader:
       - -c
     args:
       - |
-        FILE=/shared/timestamp.txt
+        echo "✅ READER: Monitoring /shared volume (checking every minute)"
+        echo ""
         
-        echo "✅ READER: Checking shared volume"
+        # Show file list once on startup
+        echo "========================================="
+        echo "Files in /shared:"
+        echo "========================================="
+        ls -lh /shared/log-*.txt 2>/dev/null || echo "⚠️ No log files yet"
+        echo ""
         
-        if [ -f "$FILE" ]; then
-          echo "✅ READER: File exists! Contents:"
-          cat "$FILE"
-        else
-          echo "⚠️ READER: File not found yet (writer may not have run)"
-          echo "Waiting for writer..."
-        fi
-        
-        # Keep running
-        exec tail -f /dev/null
+        # Continuous monitoring: check the latest file every minute
+        while true; do
+          # Get the most recent timestamped file
+          LATEST=$(ls -1 /shared/log-*.txt 2>/dev/null | sort -r | head -1)
+          
+          if [ -z "$LATEST" ]; then
+            echo "$(date): ⚠️ No log files found (writer may be starting...)"
+          else
+            echo "========================================="
+            echo "$(date) — Latest file: $LATEST"
+            echo "========================================="
+            cat "$LATEST"
+            echo ""
+          fi
+          
+          sleep 60
+        done
   
   disableService: true
   
-  # Share the same RWX volume
+  # Reader just mounts the existing PVC created by writer
   storage:
-    - type: longhorn
+    - type: existingClaim
       mountPath: /shared
-      size: 1Gi
-      nameSuffix: shared
-      volumeName: dr-test-shared  # Same volume as writer
-      storageClass: longhorn-shared  # RWX
-      protect: true
+      claimName: dr-test-shared  # PVC created by writer service
 
-# ──────────────────────────────────────────────
-# Longhorn volume storage (legacy single-service config)
-# Kept for reference; new services use values above
-# ──────────────────────────────────────────────
-deployment:
-  image:
-    repository: busybox
-    tag: latest
 
-  # Override the default entrypoint
-  command:
-    - sh
-    - -c
-  args:
-    - |
-      FILE=/data/timestamp.txt
-
-      if [ -f "$FILE" ]; then
-        echo "========================================="
-        echo "RECOVERY RUN — file found on volume"
-        echo "========================================="
-        echo "Original write timestamp:"
-        cat "$FILE"
-        echo ""
-        echo "✅ DR TEST PASSED — data survived deletion"
-        echo ""
-        echo "Appending recovery timestamp..."
-        echo "Recovered at: $(date)" >> "$FILE"
-        echo ""
-        echo "Final file state:"
-        cat "$FILE"
-      else
-        echo "========================================="
-        echo "FRESH RUN — no file found, writing now"
-        echo "========================================="
-        echo "Written at: $(date)" > "$FILE"
-        echo "✅ Timestamp written:"
-        cat "$FILE"
-        echo ""
-        echo "Now delete everything and re-apply to test recovery:"
-        echo "  kubectl delete -f dr-test.yaml"
-        echo "  kubectl delete pv dr-test-volume"
-        echo "  kubectl apply -f dr-test.yaml"
-      fi
-      
-      # Keep the container running indefinitely so the pod doesn't exit after 1 hour.
-      # Use exec so tail replaces the shell (PID 1) and cleanly keeps the container alive.
-      exec tail -f /dev/null
-
-  # No ports needed for this test pod
-  ports: {}
-
-# No service needed
-disableService: true
-
-# ──────────────────────────────────────────────
-# Longhorn volume storage
-# ──────────────────────────────────────────────
-storage:
-  - type: longhorn
-    mountPath: /data
-    size: 1Gi
-    nameSuffix: data
-
-    # Longhorn-specific options
-    # volumeName: dr-test-volume       # defaults to <release>-<chart>-<nameSuffix>
-    # volumeNamespace: storage          # defaults to "storage"
-    # storageClass: longhorn-shared     # defaults to "longhorn" (Retain) — use "longhorn-shared" for SMB operator
-    # reclaimPolicy: Retain             # defaults to "Retain"
-    # replicas: 3                       # defaults to 3
-    # fsType: ext4                      # defaults to "ext4"
-    protect: true                       # adds ArgoCD Delete=false,Prune=false + protect label for VAP
-
-  - type: longhorn
-    mountPath: /other
-    size: 1Gi
-    nameSuffix: other
-    volumeName: dr-test-other
-    protect: true
-    storageClass: longhorn-shared
