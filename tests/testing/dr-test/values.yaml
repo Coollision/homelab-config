@@ -1,11 +1,104 @@
 # ──────────────────────────────────────────────
 # DR Test — validates Longhorn volume survival
 # ──────────────────────────────────────────────
+# This chart demonstrates:
+# 1. Longhorn volume persistence across pod recreation
+# 2. Multi-service architecture with shared volumes (like HomeAssistant + DB)
+# 3. RWX shared volume access via longhorn-shared storage class
 
-# Root override for where to create Longhorn Volume CRs.  Using a centralized
-# namespace keeps them independent of the application namespace.  Defaults to
-# "storage" if omitted; we set it explicitly here for clarity.
+# ──────────────────────────────────────────────
+# Service 1: Data Writer
+# Writes timestamp to /shared volume, persists across restarts
+# ──────────────────────────────────────────────
+writer:
+  fullnameOverride: dr-test-writer
+  deployment:
+    image:
+      repository: busybox
+      tag: latest
+    ports: {}
+    
+    command:
+      - sh
+      - -c
+    args:
+      - |
+        FILE=/shared/timestamp.txt
+        
+        if [ -f "$FILE" ]; then
+          echo "✅ WRITER: Found existing file, appending timestamp"
+          echo "Written at: $(date)" >> "$FILE"
+        else
+          echo "✅ WRITER: Creating new file"
+          echo "Written at: $(date)" > "$FILE"
+        fi
+        
+        echo "File contents:"
+        cat "$FILE"
+        
+        # Keep running
+        exec tail -f /dev/null
+  
+  disableService: true
+  
+  # Share the RWX volume
+  storage:
+    - type: longhorn
+      mountPath: /shared
+      size: 1Gi
+      nameSuffix: shared
+      volumeName: dr-test-shared  # Explicit name for easy reference
+      storageClass: longhorn-shared  # RWX via SMB
+      protect: true
 
+# ──────────────────────────────────────────────
+# Service 2: Data Reader
+# Reads and validates file from /shared volume
+# ──────────────────────────────────────────────
+reader:
+  fullnameOverride: dr-test-reader
+  deployment:
+    image:
+      repository: busybox
+      tag: latest
+    ports: {}
+    
+    command:
+      - sh
+      - -c
+    args:
+      - |
+        FILE=/shared/timestamp.txt
+        
+        echo "✅ READER: Checking shared volume"
+        
+        if [ -f "$FILE" ]; then
+          echo "✅ READER: File exists! Contents:"
+          cat "$FILE"
+        else
+          echo "⚠️ READER: File not found yet (writer may not have run)"
+          echo "Waiting for writer..."
+        fi
+        
+        # Keep running
+        exec tail -f /dev/null
+  
+  disableService: true
+  
+  # Share the same RWX volume
+  storage:
+    - type: longhorn
+      mountPath: /shared
+      size: 1Gi
+      nameSuffix: shared
+      volumeName: dr-test-shared  # Same volume as writer
+      storageClass: longhorn-shared  # RWX
+      protect: true
+
+# ──────────────────────────────────────────────
+# Longhorn volume storage (legacy single-service config)
+# Kept for reference; new services use values above
+# ──────────────────────────────────────────────
 deployment:
   image:
     repository: busybox
@@ -69,22 +162,16 @@ storage:
     # Longhorn-specific options
     # volumeName: dr-test-volume       # defaults to <release>-<chart>-<nameSuffix>
     # volumeNamespace: storage          # defaults to "storage"
-    # storageClass: longhorn-retain     # defaults to "longhorn-retain" — use "longhorn-smb" for SMB operator
+    # storageClass: longhorn-shared     # defaults to "longhorn" (Retain) — use "longhorn-shared" for SMB operator
     # reclaimPolicy: Retain             # defaults to "Retain"
     # replicas: 3                       # defaults to 3
-    # dataLocality: disabled            # defaults to "disabled"
     # fsType: ext4                      # defaults to "ext4"
     protect: true                       # adds ArgoCD Delete=false,Prune=false + protect label for VAP
 
-    # Extra labels on the Longhorn Volume CR (overrides default backup labels)
-    # labels:
-    #   backup-type: daily
-    #   recurring-job.longhorn.io/backup-daily: enabled
-
-  # second volume – also stored in the single `storage` namespace
   - type: longhorn
     mountPath: /other
     size: 1Gi
     nameSuffix: other
     volumeName: dr-test-other
     protect: true
+    storageClass: longhorn-shared

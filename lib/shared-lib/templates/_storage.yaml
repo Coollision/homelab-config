@@ -88,7 +88,7 @@ spec:
   provisioning.  We no longer support per-volume or global namespace overrides.
 */ -}}
 {{- $volNs := "storage" -}}
-{{- $sc := .storage.storageClass | default "longhorn-retain" -}}
+{{- $sc := .storage.storageClass | default "longhorn" -}}
 {{- $replicas := .storage.replicas | default 3 -}}
 # no additional namespaces; everything goes to storage
 {{ $sizeBytes := include "shared-lib.storage.sizeToBytes" .storage }}
@@ -127,7 +127,7 @@ metadata:
 spec:
   accessMode: rwo
   dataEngine: v1
-  dataLocality: {{ .storage.dataLocality | default "disabled" }}
+  dataLocality: {{ .storage.dataLocality | default "best-effort" }}
   frontend: blockdev
   numberOfReplicas: {{ $replicas }}
   size: {{ $sizeBytes | quote }}

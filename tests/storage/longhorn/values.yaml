@@ -6,8 +6,21 @@ longhorn:
     jobEnabled: false
 
   defaultSettings:
+    # Tolerate control-plane taints for redundancy
     taintToleration: "node-role.kubernetes.io/control-plane:NoSchedule;dedicated=master:NoSchedule"
+    # Auto-create default disk on labeled nodes
     createDefaultDiskLabeledNodes: true
+    # Quick replica stale detection (30 min) for fast failure recovery in homelab
+    replicaSoftAntiAffinity: true
+    replicaAutoBalance: "least-effort"
+    # Allow volumes on any node/disk when no selectors specified (homelab flexibility)
+    allowEmptyNodeSelectorVolume: true
+    allowEmptyDiskSelectorVolume: true
+    # Engine settings
+    defaultDataEngine: v1
+    # Snapshot & backup settings
+    snapshotDataIntegrity: ignored
+    unmapMarkSnapChainRemoved: ignored
 
   defaultBackupStore:
     backupTarget: "nfs://<secret:kv/data/storage/nfs~server-ip>:/volume4/k3s-volumes/storage/longhorn-backups"
@@ -27,6 +40,22 @@ longhorn:
   longhornUI:
     replicas: 1
 
+  # Default Longhorn StorageClass configuration
+  persistence:
+    defaultClass: true
+    defaultClassReplicaCount: 3
+    # best-effort: prefer replicas on same node as pod (better read performance, no scheduling impact)
+    defaultDataLocality: best-effort
+    defaultFsType: ext4
+    disableRevisionCounter: "true"
+    # Quick stale replica detection (30 min) — faster recovery for homelab
+    staleReplicaTimeout: "30"
+    # Retain volumes after PVC deletion (manual cleanup required)
+    reclaimPolicy: Retain
+    volumeBindingMode: Immediate
+    # Settings for snapshot/backup reliability
+    unmapMarkSnapChainRemoved: ignored
+
 # ──────────────────────────────────────────────
 # Longhorn Extras (managed by this chart)
 # ──────────────────────────────────────────────
@@ -37,26 +66,23 @@ ingress:
   host: "longhorn.<secret:kv/data/domains~domain>"
 
 # StorageClasses
+# Note: The default "longhorn" storage class is created by the upstream Longhorn chart.
+# Only manage additional custom storage classes here.
 storageClasses:
-  retain:
-    enabled: true
-    name: longhorn-retain
-    reclaimPolicy: Retain
-    replicas: 3
-    staleReplicaTimeout: "2880"
-    dataLocality: disabled
-    fsType: ext4
-    disableRevisionCounter: "true"
-
   shared:
     enabled: true
     name: longhorn-shared
+    isDefault: false
     reclaimPolicy: Retain
     replicas: 3
-    staleReplicaTimeout: "2880"
-    dataLocality: disabled
+    # Quick stale replica detection (30 min) — matches default class
+    staleReplicaTimeout: "30"
+    # best-effort data locality for better performance
+    dataLocality: best-effort
     fsType: ext4
+    # NFS options for SMB operator compatibility
     nfsOptions: "vers=4.2,noresvport"
+    description: "RWX shared storage via Longhorn SMB operator"
 
 # RecurringJobs
 recurringJobs:
