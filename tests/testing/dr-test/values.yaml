@@ -78,12 +78,14 @@ writer:
     - type: longhorn
       mountPath: /data
       size: 1Gi
+      nameSuffix: data
       volumeName: dr-test-data  # Original volume from first test run
       protect: true
     
     - type: longhorn
       mountPath: /shared
       size: 1Gi
+      nameSuffix: shared
       volumeName: dr-test-shared  # Shared with reader
       storageClass: longhorn-shared  # RWX via SMB
       protect: true
