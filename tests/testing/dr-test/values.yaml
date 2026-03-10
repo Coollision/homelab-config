@@ -141,6 +141,6 @@ reader:
   storage:
     - type: existingClaim
       mountPath: /shared
-      claimName: dr-test-shared  # PVC created by writer service
+      claimName: dr-test-writer-shared  # PVC created by writer service
 
 
