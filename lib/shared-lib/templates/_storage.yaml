@@ -20,13 +20,7 @@
 
 {{/* ── Helper: PVC name ── */}}
 {{- define "shared-lib.storage.pvcName" -}}
-{{- /*
-  PVC/PV name should be globally unique because PVs are cluster-scoped.
-  `helm.fullname` already includes the release name, but charts installed
-  into different namespaces with the same release name would collide.
-  Append the namespace so multiple installations don't stomp each other.
-*/ -}}
-{{- printf "%s-%s-%s" .root.Release.Namespace (include "helm.fullname" .root) (default "" .storage.nameSuffix) | trunc 63 | trimSuffix "-" -}}
+{{- printf "%s-%s" (include "helm.fullname" .root) (default "" .storage.nameSuffix) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/* ── Helper: Access modes (default ReadWriteOnce) ── */}}
