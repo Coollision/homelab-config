@@ -87,7 +87,7 @@ writer:
       size: 1Gi
       nameSuffix: shared
       volumeName: dr-test-shared  # Shared with reader
-      storageClass: longhorn-shared  # RWX via SMB
+      storageClass: longhorn-shared  # Automatically: rwx + ReadWriteMany + smb-access labels
       protect: true
 
 # ──────────────────────────────────────────────

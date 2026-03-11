@@ -1,3 +1,4 @@
+{{/* ── Main storage orchestrator ── */}}
 {{- define "shared-lib.storage" }}
 {{- $root := . }}
   {{- range $i, $storage := .Values.storage }}
@@ -23,163 +24,22 @@
 {{- printf "%s-%s" (include "helm.fullname" .root) (default "" .storage.nameSuffix) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
-{{/* ── Helper: Access modes (default ReadWriteOnce) ── */}}
+{{/* ── Helper: Access modes (smart defaults based on storage class) ── */}}
 {{- define "shared-lib.storage.accessModes" -}}
-{{- $modes := .storage.accessModes | default (list "ReadWriteOnce") -}}
-{{- range $i, $mode := $modes }}
+{{- if .storage.accessModes -}}
+  {{- $modes := .storage.accessModes -}}
+  {{- range $i, $mode := $modes }}
 {{- if $i }}
 {{ end -}}
 - {{ $mode }}
+  {{- end -}}
+{{- else if eq .storage.storageClass "longhorn-shared" -}}
+- ReadWriteMany
+{{- else -}}
+- ReadWriteOnce
 {{- end -}}
 {{- end -}}
 
-{{/* ── NFS-client with storage-path annotation ── */}}
-{{- define "shared-lib.nfs-client-path" }}
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: {{ include "shared-lib.storage.pvcName" . }}
-  annotations:
-    nfs.io/storage-path: {{ .storage.storagePath }}
-    {{- if .root.Values.syncWave }}
-    argocd.argoproj.io/sync-wave: {{ .root.Values.syncWave | default 0 | quote }}
-    {{- end }}
-  labels:
-    {{- include "helm.labels" .root | nindent 4 }}
-spec:
-  storageClassName: {{ .storage.storageClass | default "nfs-client" }}
-  accessModes:
-    {{- include "shared-lib.storage.accessModes" . | nindent 4 }}
-  resources:
-    requests:
-      storage: {{ .storage.size }}
----
-{{- end }}
-
-{{/* ── NFS-client with name-based path ── */}}
-{{- define "shared-lib.nfs-client-name" }}
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: {{ include "shared-lib.storage.pvcName" . }}
-  labels:
-    {{- include "helm.labels" .root | nindent 4 }}
-  annotations:
-    {{- if .root.Values.syncWave }}
-    argocd.argoproj.io/sync-wave: {{ .root.Values.syncWave | default 0 | quote }}
-    {{- end }}
-spec:
-  storageClassName: {{ .storage.storageClass | default "nfs-client-name-path" }}
-  accessModes:
-    {{- include "shared-lib.storage.accessModes" . | nindent 4 }}
-  resources:
-    requests:
-      storage: {{ .storage.size }}
-{{- end }}
-
-{{/* ── Longhorn: Volume CR + static PV + PVC ── */}}
-{{- define "shared-lib.longhorn" }}
-# computed names and defaults
-{{- $pvcName    := include "shared-lib.storage.pvcName" (dict "root" .root "storage" .storage "Release" .root.Release) -}}
-{{- $volumeName := .storage.volumeName | default $pvcName -}}
-{{/*
-  All Longhorn volumes are created in the centralized "storage" namespace.
-  This keeps them independent of any application namespace and simplifies
-  provisioning.  We no longer support per-volume or global namespace overrides.
-*/ -}}
-{{- $volNs := "storage" -}}
-{{- $sc := .storage.storageClass | default "longhorn" -}}
-{{- $replicas := .storage.replicas | default 3 -}}
-# no additional namespaces; everything goes to storage
-{{ $sizeBytes := include "shared-lib.storage.sizeToBytes" .storage }}
-# document start for longhorn volume (explicit comment aids readability)
----
-# longhorn volume {{ $volumeName }}
-apiVersion: longhorn.io/v1beta2
-kind: Volume
-metadata:
-  name: {{ $volumeName }}
-  namespace: {{ $volNs }}
-  {{- if or .root.Values.syncWave .storage.annotations .storage.protect }}
-  annotations:
-    {{- if .root.Values.syncWave }}
-    argocd.argoproj.io/sync-wave: {{ .root.Values.syncWave | default 0 | quote }}
-    {{- end }}
-    {{- if .storage.protect }}
-    argocd.argoproj.io/sync-options: Delete=false,Prune=false
-    {{- end }}
-    {{- with .storage.annotations }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
-  {{- end }}
-  labels:
-    {{- include "helm.labels" .root | nindent 4 }}
-    recurring-job-group.longhorn.io/default: enabled
-    {{- if .storage.protect }}
-    protect: "true"
-    {{- end }}
-    {{- if .storage.labels }}
-    {{- toYaml .storage.labels | nindent 4 }}
-    {{- else }}
-    backup-type: daily
-    recurring-job.longhorn.io/backup-daily: enabled
-    {{- end }}
-spec:
-  accessMode: rwo
-  dataEngine: v1
-  dataLocality: {{ .storage.dataLocality | default "best-effort" }}
-  frontend: blockdev
-  numberOfReplicas: {{ $replicas }}
-  size: {{ $sizeBytes | quote }}
-  diskSelector: []
-  nodeSelector: []
-  replicaAutoBalance: ignored
-  revisionCounterDisabled: true
-  snapshotDataIntegrity: ignored
-  Standby: false
-  migratable: false
----
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: {{ $volumeName }}
-  annotations:
-    longhorn.io/volume-name: {{ $volumeName }}
-    {{- if .root.Values.syncWave }}
-    argocd.argoproj.io/sync-wave: {{ .root.Values.syncWave | default 0 | quote }}
-    {{- end }}
-spec:
-  capacity:
-    storage: {{ .storage.size }}
-  volumeMode: Filesystem
-  accessModes:
-    {{- include "shared-lib.storage.accessModes" . | nindent 4 }}
-  persistentVolumeReclaimPolicy: {{ .storage.reclaimPolicy | default "Retain" }}
-  storageClassName: {{ $sc }}
-  csi:
-    driver: driver.longhorn.io
-    fsType: {{ .storage.fsType | default "ext4" }}
-    volumeHandle: {{ $volumeName }}
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: {{ $pvcName }}
-  labels:
-    {{- include "helm.labels" .root | nindent 4 }}
-  {{- if .root.Values.syncWave }}
-  annotations:
-    argocd.argoproj.io/sync-wave: {{ .root.Values.syncWave | default 0 | quote }}
-  {{- end }}
-spec:
-  storageClassName: {{ $sc }}
-  volumeName: {{ $volumeName }}
-  accessModes:
-    {{- include "shared-lib.storage.accessModes" . | nindent 4 }}
-  resources:
-    requests:
-      storage: {{ .storage.size }}
-{{- end }}
 {{/* ── Convert human-readable size (1Gi, 500Mi) to bytes for Longhorn Volume CR ── */}}
 {{- define "shared-lib.storage.sizeToBytes" -}}
   {{- $size := .size | toString -}}
