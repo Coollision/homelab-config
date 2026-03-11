@@ -11,9 +11,9 @@ config:
   PUID: "1000"
   PGID: "1000"
   TZ: Europe/Brussels
-  CSRF_TRUSTED_ORIGINS: http://babybuddy.<secret:kv/data/domains~local>
+  CSRF_TRUSTED_ORIGINS: https://babybuddy.<secret:kv/data/domains~local>
 
-ingress_internal:
+ingress_internal_secure:
   host: babybuddy.<secret:kv/data/domains~local>
   port: http
 
