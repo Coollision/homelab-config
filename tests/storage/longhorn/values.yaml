@@ -40,6 +40,12 @@ longhorn:
   longhornUI:
     replicas: 1
 
+  metrics:
+    serviceMonitor:
+      # Enables Prometheus ServiceMonitor so kube-prometheus-stack automatically
+      # discovers and scrapes Longhorn metrics
+      enabled: true
+
   # Default Longhorn StorageClass configuration
   persistence:
     defaultClass: true
