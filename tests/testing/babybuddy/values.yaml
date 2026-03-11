@@ -1,0 +1,26 @@
+fullnameOverride: babybuddy
+
+deployment:
+  image:
+    repository: lscr.io/linuxserver/babybuddy
+    tag: latest
+  ports:
+    http: 8000
+
+config:
+  PUID: "1000"
+  PGID: "1000"
+  TZ: Europe/Brussels
+  ALLOWED_HOSTS: babybuddy.<secret:kv/data/domains~local>
+  CSRF_TRUSTED_ORIGINS: https://babybuddy.<secret:kv/data/domains~local>
+  SECURE_PROXY_SSL_HEADER: "True"
+
+ingress_internal_secure:
+  host: babybuddy.<secret:kv/data/domains~local>
+  port: http
+
+storage:
+  - mountPath: /config
+    size: 2Gi
+    type: longhorn
+    replicas: 2
