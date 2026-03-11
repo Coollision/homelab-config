@@ -12,6 +12,7 @@ config:
   PGID: "1000"
   TZ: Europe/Brussels
   CSRF_TRUSTED_ORIGINS: https://babybuddy.<secret:kv/data/domains~local>
+  SECURE_PROXY_SSL_HEADER: "True"
 
 ingress_internal_secure:
   host: babybuddy.<secret:kv/data/domains~local>
