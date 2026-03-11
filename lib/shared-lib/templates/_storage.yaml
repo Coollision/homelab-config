@@ -180,7 +180,6 @@ spec:
     requests:
       storage: {{ .storage.size }}
 {{- end }}
-
 {{/* ── Convert human-readable size (1Gi, 500Mi) to bytes for Longhorn Volume CR ── */}}
 {{- define "shared-lib.storage.sizeToBytes" -}}
   {{- $size := .size | toString -}}
