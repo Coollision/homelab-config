@@ -1,0 +1,27 @@
+---
+# Apply node annotations after K3s registration
+# Node labels are applied during registration via config.yaml node-label
+# But annotations must be applied post-registration as K3s doesn't support --register-with-annotations
+
+- name: Wait for node to be registered
+  ansible.builtin.command:
+    cmd: kubectl get node {{ k3s_node_name }} --no-headers
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  register: node_check
+  until: node_check.rc == 0
+  retries: 30
+  delay: 2
+  changed_when: false
+
+- name: Apply node annotations for Longhorn disk configuration
+  ansible.builtin.command:
+    cmd: >
+      kubectl annotate node {{ k3s_node_name }}
+      node.longhorn.io/default-disks-config='{{ k3s_node_annotations["node.longhorn.io/default-disks-config"] }}'
+      --overwrite
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  when: k3s_node_annotations is defined and k3s_node_annotations["node.longhorn.io/default-disks-config"] is defined
+  register: annotation_result
+  changed_when: "'annotated' in annotation_result.stdout or 'configured' in annotation_result.stdout"

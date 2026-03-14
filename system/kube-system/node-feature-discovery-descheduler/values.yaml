@@ -55,6 +55,9 @@ descheduler:
           - name: "DefaultEvictor"
             args:
               evictLocalStoragePods: true
+              namespaces:
+                exclude:
+                  - "storage"
               labelSelector:
                 matchExpressions:
                 - key: "preventDeschedule"

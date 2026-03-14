@@ -1,0 +1,21 @@
+{{/* Only manage longhorn-shared; default "longhorn" is created by upstream chart */}}
+{{- if .Values.storageClasses.shared.enabled }}
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ .Values.storageClasses.shared.name }}
+  annotations:
+    storageclass.kubernetes.io/description: {{ .Values.storageClasses.shared.description | quote }}
+provisioner: driver.longhorn.io
+allowVolumeExpansion: true
+reclaimPolicy: {{ .Values.storageClasses.shared.reclaimPolicy }}
+volumeBindingMode: Immediate
+parameters:
+  numberOfReplicas: {{ .Values.storageClasses.shared.replicas | quote }}
+  staleReplicaTimeout: {{ .Values.storageClasses.shared.staleReplicaTimeout | quote }}
+  fromBackup: ""
+  fsType: {{ .Values.storageClasses.shared.fsType | quote }}
+  dataLocality: {{ .Values.storageClasses.shared.dataLocality | quote }}
+  nfsOptions: {{ .Values.storageClasses.shared.nfsOptions | quote }}
+  dataEngine: "v1"
+{{- end }}

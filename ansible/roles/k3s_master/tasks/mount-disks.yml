@@ -1,0 +1,29 @@
+- name: Ensure mount directory exists
+  become: true
+  file:
+    path: /mnt/longhorn
+    state: directory
+    mode: '0755'
+
+- name: Check if disk is already formatted
+  become: true
+  command: blkid -o value -s TYPE "{{ longhorn_disk_device }}"
+  register: disk_format_check
+  failed_when: false
+  changed_when: false
+
+- name: Format disk with ext4 filesystem
+  become: true
+  filesystem:
+    fstype: ext4
+    dev: "{{ longhorn_disk_device }}"
+  when: disk_format_check.rc != 0 or disk_format_check.stdout == ""
+
+- name: Mount disk and add to fstab
+  become: true
+  mount:
+    path: /mnt/longhorn
+    src: "{{ longhorn_disk_device }}"
+    fstype: ext4
+    opts: defaults,nofail
+    state: mounted

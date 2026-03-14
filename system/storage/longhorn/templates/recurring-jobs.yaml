@@ -1,0 +1,51 @@
+{{- if .Values.recurringJobs.snapshot.enabled }}
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: {{ .Values.recurringJobs.snapshot.name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  cron: {{ .Values.recurringJobs.snapshot.cron | quote }}
+  task: {{ .Values.recurringJobs.snapshot.task }}
+  retain: {{ .Values.recurringJobs.snapshot.retain }}
+  concurrency: {{ .Values.recurringJobs.snapshot.concurrency }}
+  groups: []
+  {{- if .Values.recurringJobs.snapshot.labels }}
+  labels:
+    {{- toYaml .Values.recurringJobs.snapshot.labels | nindent 4 }}
+  {{- end }}
+{{- end }}
+---
+{{- if .Values.recurringJobs.backupDaily.enabled }}
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: {{ .Values.recurringJobs.backupDaily.name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  cron: {{ .Values.recurringJobs.backupDaily.cron | quote }}
+  task: {{ .Values.recurringJobs.backupDaily.task }}
+  retain: {{ .Values.recurringJobs.backupDaily.retain }}
+  concurrency: {{ .Values.recurringJobs.backupDaily.concurrency }}
+  groups: []
+  {{- if .Values.recurringJobs.backupDaily.labels }}
+  labels:
+    {{- toYaml .Values.recurringJobs.backupDaily.labels | nindent 4 }}
+  {{- end }}
+{{- end }}
+---
+{{- if .Values.recurringJobs.systemBackupDaily.enabled }}
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: {{ .Values.recurringJobs.systemBackupDaily.name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  cron: {{ .Values.recurringJobs.systemBackupDaily.cron | quote }}
+  task: {{ .Values.recurringJobs.systemBackupDaily.task }}
+  retain: {{ .Values.recurringJobs.systemBackupDaily.retain }}
+  {{- if .Values.recurringJobs.systemBackupDaily.parameters }}
+  parameters:
+    {{- toYaml .Values.recurringJobs.systemBackupDaily.parameters | nindent 4 }}
+  {{- end }}
+{{- end }}

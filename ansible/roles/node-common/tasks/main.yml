@@ -38,6 +38,20 @@
       - vim
       - systemd-timesyncd
       - lm-sensors
+      - nfs-common
+      - open-iscsi
+      - cryptsetup
+      - dmsetup
+
+- name: Load NFS kernel modules
+  become: true
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+    persistent: present
+  loop:
+    - nfs
+    - nfsd
 
 - name: Configure journald log retention
   ansible.builtin.include_role:

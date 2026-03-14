@@ -1,8 +1,17 @@
 {{- define "shared-lib.container" -}}
 {{- $root := . -}}
+{{- $config := .Values.deployment | default .Values.statefullset -}}
 name: {{ .Chart.Name }}
 image: {{ include "shared-lib.image" . }}
 imagePullPolicy: {{ include "shared-lib.imagePullPolicy" . }}
+{{- if $config.command }}
+command:
+  {{- toYaml $config.command | nindent 2 }}
+{{- end }}
+{{- if $config.args }}
+args:
+  {{- toYaml $config.args | nindent 2 }}
+{{- end }}
 {{- include "shared-lib.env" . -}}
 {{- if .Values.resources }}
 resources:
@@ -14,18 +23,18 @@ resources: {}
 securityContext:
   {{- toYaml .Values.securityContext | nindent 2 }}
 {{- end }}
+{{- if (include "shared-lib.getPorts" . | fromYaml) }}
 ports:
-  {{- if (include "shared-lib.getPorts" . | fromYaml) }}
   {{- range $key, $value := (include "shared-lib.getPorts" . | fromYaml) }}
   - name: {{ $key }}
     containerPort: {{ $value }}
     protocol: TCP
   {{- end }}
-  {{- end }}
+{{- end }}
 {{- if .Values.storage }}
 volumeMounts:
   {{- range .Values.storage }}
-  - name: {{ printf "%s-%s" (include "helm.fullname" $root ) ( default  "" .nameSuffix )| trunc 63 | trimSuffix "-" }} 
+  - name: {{ printf "%s-%s" (include "helm.fullname" $root) (default "" .nameSuffix) | trunc 63 | trimSuffix "-" }}
     mountPath: {{ .mountPath }}
   {{- end }}
 {{- end }}

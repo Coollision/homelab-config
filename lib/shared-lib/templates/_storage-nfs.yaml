@@ -1,0 +1,43 @@
+{{/* ── NFS-client with storage-path annotation ── */}}
+{{- define "shared-lib.nfs-client-path" }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "shared-lib.storage.pvcName" . }}
+  annotations:
+    nfs.io/storage-path: {{ .storage.storagePath }}
+    {{- if .root.Values.syncWave }}
+    argocd.argoproj.io/sync-wave: {{ .root.Values.syncWave | default 0 | quote }}
+    {{- end }}
+  labels:
+    {{- include "helm.labels" .root | nindent 4 }}
+spec:
+  storageClassName: {{ .storage.storageClass | default "nfs-client" }}
+  accessModes:
+    {{- include "shared-lib.storage.accessModes" . | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .storage.size }}
+---
+{{- end }}
+
+{{/* ── NFS-client with name-based path ── */}}
+{{- define "shared-lib.nfs-client-name" }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "shared-lib.storage.pvcName" . }}
+  labels:
+    {{- include "helm.labels" .root | nindent 4 }}
+  annotations:
+    {{- if .root.Values.syncWave }}
+    argocd.argoproj.io/sync-wave: {{ .root.Values.syncWave | default 0 | quote }}
+    {{- end }}
+spec:
+  storageClassName: {{ .storage.storageClass | default "nfs-client-name-path" }}
+  accessModes:
+    {{- include "shared-lib.storage.accessModes" . | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .storage.size }}
+{{- end }}
