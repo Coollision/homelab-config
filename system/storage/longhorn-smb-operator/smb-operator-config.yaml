@@ -1,0 +1,54 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: smb-operator-config
+  namespace: storage
+data:
+  config.yaml: |
+    operator:
+      namespace: storage
+      reconcileInterval: 30
+      useWatchAPI: true
+      logLevel: INFO
+      healthPort: 8080
+
+    smb:
+      deploymentName: smb-server
+      serviceName: smb-server
+      image: dperson/samba:latest
+      workgroup: WORKGROUP
+      serverString: Homelab Storage Server
+      security:
+        encryptionLevel: default
+        ntlmAuth: yes
+        restrictAnonymous: "1"
+        disableGuestAccess: true
+
+    longhorn:
+      namespace: storage
+      group: longhorn.io
+      version: v1beta2
+      plural: volumes
+
+    resources:
+      smbServer:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+      operator:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          cpu: 200m
+          memory: 256Mi
+
+    retry:
+      maxRetries: 3
+      initialDelay: 1
+      backoffMultiplier: 2
+      retryableStatusCodes: [409, 429, 500, 503, 504]

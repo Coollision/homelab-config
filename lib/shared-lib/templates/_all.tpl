@@ -9,42 +9,41 @@ Main entrypoint for the shared library chart. It will render all underlying temp
 {{- define "shared-lib.all" -}}
 {{- if .Values.secrets }}
 {{ include "shared-lib.secrets" . }}
-{{- end }}
 ---
+{{- end }}
 {{- if .Values.deployment }}
 {{ include "shared-lib.deployment" . }}
-{{ else if .Values.statefullset }}
+{{- else if .Values.statefullset }}
 {{ include "shared-lib.statefullset" . }}
-{{ else}}
+{{- else }}
 {{- "need to have a deployment or statefullset" | fail -}}
-{{- end}}
----
+{{- end }}
 {{- if not .Values.disableService }}
+---
 {{ include "shared-lib.service" . }}
 {{- end }}
----
 {{- if .Values.ingress_internal }}
-{{ include "shared-lib.ingress_internal" . }}
 ---
+{{ include "shared-lib.ingress_internal" . }}
 {{- end }}
 {{- if .Values.ingress_internal_secure }}
-{{ include "shared-lib.ingress_internal_secure" . }}
 ---
+{{ include "shared-lib.ingress_internal_secure" . }}
 {{- end }}
 {{- if .Values.ingress_external_secure }}
+---
 {{ include "shared-lib.ingress_external_secure" . }}
----
 {{- end }}
-{{- if .Values.servicemonitor -}}
+{{- if .Values.servicemonitor }}
+---
 {{ include "shared-lib.servicemonitor" . }}
+{{- end }}
+{{- if .Values.storage }}
 ---
-{{- end -}}
-{{- if .Values.storage -}}
 {{ include "shared-lib.storage" . }}
+{{- end }}
+{{- if .Values.imagePreSync }}
 ---
-{{- end -}}
-{{- if .Values.imagePreSync -}}
 {{ include "shared-lib.imagePreSync" . }}
----
-{{- end -}}
-{{ end }}
+{{- end }}
+{{- end }}
