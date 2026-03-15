@@ -80,6 +80,8 @@ argo-cd:
       server.insecure: true
       server.disable.auth: false
       server.repo.server.timeout.seconds: "180"
+      # Limit concurrent manifest generation to prevent OOM during cache invalidation (e.g. force push)
+      reposerver.parallelism.limit: "3"
 
     cmp:
       create: true
@@ -170,6 +172,13 @@ argo-cd:
             value: "180"
           - name: VAULT_CLIENT_TIMEOUT
             value: "180s"
+        # resources:
+        #   requests:
+        #     memory: 512Mi
+        #     cpu: 250m
+        #   limits:
+        #     memory: 2Gi
+        #     cpu: 1000m
         securityContext:
           runAsNonRoot: true
           runAsUser: 999
