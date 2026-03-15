@@ -6,6 +6,9 @@ metadata:
 spec:
   goTemplate: true
   goTemplateOptions: ["missingkey=error"]
+  ignoreApplicationDifferences:
+    - jqPathExpressions:
+        - .spec.syncPolicy
   generators:
     - git:
         repoURL: https://github.com/Coollision/homelab-config.git
@@ -30,8 +33,7 @@ spec:
         server: https://kubernetes.default.svc
       syncPolicy:
         automated:
-          enabled: false
-          selfHeal: false
+          selfHeal: true
           prune: true
         syncOptions:
           - CreateNamespace=true
