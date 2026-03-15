@@ -49,10 +49,12 @@ promstack:
       storage:
         volumeClaimTemplate:
           metadata:
-            annotations:
-              nfs.io/storage-path: alertmanager
+            name: monitoring-alertmanager
           spec:
-            storageClassName: nfs-client
+            storageClassName: longhorn
+            volumeName: monitoring-alertmanager
+            accessModes:
+              - ReadWriteOnce
             resources:
               requests:
                 storage: 10Gi
@@ -92,10 +94,12 @@ promstack:
       storageSpec:
         volumeClaimTemplate:
           metadata:
-            annotations:
-              nfs.io/storage-path: prometheus
+            name: monitoring-prometheus
           spec:
-            storageClassName: nfs-client
+            storageClassName: longhorn
+            volumeName: monitoring-prometheus
+            accessModes:
+              - ReadWriteOnce
             resources:
               requests:
                 storage: 30Gi
@@ -205,9 +209,8 @@ promstack:
           allowUiUpdates: true
     persistence:
       enabled: true
-      storageClassName: nfs-client
-      annotations:
-        nfs.io/storage-path: grafana
+      storageClassName: longhorn
+      volumeName: monitoring-grafana
       accessModes:
         - ReadWriteOnce
       size: 10Gi
@@ -240,3 +243,29 @@ promstack:
       etcd: false
   kubeEtcd:
     enabled: false
+
+storage:
+  - nameSuffix: alertmanager
+    mountPath: /data/alertmanager
+      storagePath: alertmanager-alertmanager-monitoring-promstack-0
+    volumeName: monitoring-alertmanager
+    size: 10Gi
+    type: longhorn
+    accessModes:
+      - ReadWriteOnce
+  - nameSuffix: prometheus
+    mountPath: /data/prometheus
+      storagePath: prometheus-prometheus-monitoring-promstack-0
+    volumeName: monitoring-prometheus
+    size: 30Gi
+    type: longhorn
+    accessModes:
+      - ReadWriteOnce
+  - nameSuffix: grafana
+    mountPath: /var/lib/grafana
+    storagePath: grafana
+    volumeName: monitoring-grafana
+    size: 10Gi
+    type: longhorn
+    accessModes:
+      - ReadWriteOnce

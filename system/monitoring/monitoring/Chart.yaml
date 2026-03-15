@@ -12,3 +12,6 @@ dependencies:
     alias: promstack
     version: 82.10.3
     repository: https://prometheus-community.github.io/helm-charts
+  - name: shared-lib
+    version: 0.1.0
+    repository: file://../../../lib/shared-lib
