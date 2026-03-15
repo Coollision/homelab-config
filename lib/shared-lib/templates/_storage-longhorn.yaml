@@ -1,0 +1,120 @@
+{{/* ── Helper: Build Longhorn labels (Volume CR) ── */}}
+{{- define "shared-lib.longhorn.volumeLabels" -}}
+{{- $labels := dict -}}
+{{/* Default protect to true unless explicitly disabled */}}
+{{- if ne .storage.protect false -}}
+  {{- $_ := set $labels "protect" "true" -}}
+{{- end -}}
+{{/* Always add backup + snapshot labels unless explicitly disabled */}}
+{{- if ne .storage.backup false -}}
+  {{- $_ := set $labels "backup-type" "daily" -}}
+  {{- $_ := set $labels "recurring-job.longhorn.io/backup-daily" "enabled" -}}
+  {{- $_ := set $labels "recurring-job.longhorn.io/snapshot-2h" "enabled" -}}
+  {{- $_ := set $labels "recurring-job-group.longhorn.io/default" "enabled" -}}
+{{- end -}}
+{{- if .storage.labels -}}
+  {{- range $key, $value := .storage.labels -}}
+    {{- $_ := set $labels $key $value -}}
+  {{- end -}}
+{{- end -}}
+{{- if eq .sc "longhorn-shared" -}}
+  {{- if not (hasKey $labels "smb-access") -}}
+    {{- $_ := set $labels "smb-access" "shared" -}}
+  {{- end -}}
+  {{- if not (hasKey $labels "smb-share-name") -}}
+    {{- $_ := set $labels "smb-share-name" .volumeName -}}
+  {{- end -}}
+{{- end -}}
+{{- toYaml $labels -}}
+{{- end -}}
+
+{{/* ── Longhorn: Volume CR + static PV + PVC ── */}}
+{{- define "shared-lib.longhorn" }}
+{{- $pvcName    := include "shared-lib.storage.pvcName" (dict "root" .root "storage" .storage "Release" .root.Release) -}}
+{{- $volumeName := .storage.volumeName | default $pvcName -}}
+{{- $volNs := "storage" -}}
+{{- $sc := .storage.storageClass | default "longhorn" -}}
+{{- $replicas := .storage.replicas | default 3 -}}
+{{- $accessMode := .storage.volumeAccessMode | default (ternary "rwx" "rwo" (eq $sc "longhorn-shared")) -}}
+{{ $sizeBytes := include "shared-lib.storage.sizeToBytes" .storage }}
+---
+apiVersion: longhorn.io/v1beta2
+kind: Volume
+metadata:
+  name: {{ $volumeName }}
+  namespace: {{ $volNs }}
+  {{- if or .root.Values.syncWave .storage.annotations .storage.protect }}
+  annotations:
+    {{- if .root.Values.syncWave }}
+    argocd.argoproj.io/sync-wave: {{ .root.Values.syncWave | default 0 | quote }}
+    {{- end }}
+    {{- if .storage.protect }}
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false
+    {{- end }}
+    {{- with .storage.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+  labels:
+    {{- include "helm.labels" .root | nindent 4 }}
+    {{- include "shared-lib.longhorn.volumeLabels" (dict "storage" .storage "sc" $sc "volumeName" $volumeName) | nindent 4 }}
+spec:
+  accessMode: {{ $accessMode }}
+  dataEngine: v1
+  dataLocality: {{ .storage.dataLocality | default "best-effort" }}
+  frontend: blockdev
+  numberOfReplicas: {{ $replicas }}
+  size: {{ $sizeBytes | quote }}
+  diskSelector: []
+  nodeSelector: []
+  replicaAutoBalance: ignored
+  revisionCounterDisabled: true
+  snapshotDataIntegrity: ignored
+  Standby: false
+  migratable: false
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ $volumeName }}
+  annotations:
+    longhorn.io/volume-name: {{ $volumeName }}
+    {{- if .root.Values.syncWave }}
+    argocd.argoproj.io/sync-wave: {{ .root.Values.syncWave | default 0 | quote }}
+    {{- end }}
+spec:
+  capacity:
+    storage: {{ .storage.size }}
+  volumeMode: Filesystem
+  accessModes:
+    {{- include "shared-lib.storage.accessModes" . | nindent 4 }}
+  persistentVolumeReclaimPolicy: {{ .storage.reclaimPolicy | default "Retain" }}
+  storageClassName: {{ $sc }}
+  csi:
+    driver: driver.longhorn.io
+    fsType: {{ .storage.fsType | default "ext4" }}
+    volumeHandle: {{ $volumeName }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $pvcName }}
+  labels:
+    {{- include "helm.labels" .root | nindent 4 }}
+    {{- if eq $sc "longhorn-shared" }}
+    smb-access: shared
+    smb-share-name: {{ $volumeName }}
+    {{- end }}
+  {{- if .root.Values.syncWave }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .root.Values.syncWave | default 0 | quote }}
+  {{- end }}
+spec:
+  storageClassName: {{ $sc }}
+  volumeName: {{ $volumeName }}
+  accessModes:
+    {{- include "shared-lib.storage.accessModes" . | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .storage.size }}
+{{- end }}
