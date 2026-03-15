@@ -6,6 +6,9 @@ metadata:
 spec:
   goTemplate: true
   goTemplateOptions: ["missingkey=error"]
+  ignoreApplicationDifferences:
+    - jqPathExpressions:
+        - .spec.syncPolicy
   generators:
     - git:
         repoURL: https://github.com/Coollision/homelab-config.git
