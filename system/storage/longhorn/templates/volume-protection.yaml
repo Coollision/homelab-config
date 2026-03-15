@@ -1,0 +1,45 @@
+{{- if .Values.volumeProtection.enabled }}
+# ──────────────────────────────────────────────
+# Volume Protection Policy
+# Rejects DELETE requests on Longhorn volumes labelled: protect=true
+# To protect a volume:
+#   kubectl -n storage label volume <name> protect=true
+# To allow deletion (remove the label first):
+#   kubectl -n storage label volume <name> protect-
+# ──────────────────────────────────────────────
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: longhorn-volume-delete-protection
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["longhorn.io"]
+        apiVersions: ["*"]
+        operations: ["DELETE"]
+        resources: ["volumes"]
+  matchConditions:
+    # Only apply to volumes that have the protect=true label
+    # On DELETE, the resource is in oldObject, not object
+    - name: has-protect-label
+      expression: >-
+        has(oldObject.metadata.labels) &&
+        'protect' in oldObject.metadata.labels &&
+        oldObject.metadata.labels['protect'] == 'true'
+  validations:
+    - expression: "false"
+      messageExpression: >-
+        'Deletion of Longhorn volume ' + oldObject.metadata.name +
+        ' is blocked by protection policy. Remove the protect=true label first: ' +
+        'kubectl -n ' + oldObject.metadata.namespace + ' label volume ' + oldObject.metadata.name + ' protect-'
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: longhorn-volume-delete-protection
+spec:
+  policyName: longhorn-volume-delete-protection
+  validationActions:
+    - Deny
+{{- end }}
