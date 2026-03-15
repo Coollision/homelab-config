@@ -1,0 +1,146 @@
+# ──────────────────────────────────────────────
+# DR Test — validates Longhorn volume survival
+# ──────────────────────────────────────────────
+# This chart demonstrates:
+# 1. Longhorn volume persistence across pod recreation
+# 2. Multi-service architecture with shared volumes (like HomeAssistant + DB)
+# 3. RWX shared volume access via longhorn-shared storage class
+# 
+# Pattern: Writer service creates volume, reader service references it (existingClaim)
+
+# ──────────────────────────────────────────────
+# Service 1: Data Writer (volume creator)
+# Checks original /data volume, writes timestamp to /shared volume (for reader)
+# ──────────────────────────────────────────────
+writer:
+  fullnameOverride: dr-test-writer
+  deployment:
+    image:
+      repository: busybox
+      tag: latest
+    ports: {}
+    
+    command:
+      - sh
+      - -c
+    args:
+      - |
+        echo "========================================="
+        echo "WRITER: Check original /data volume"
+        echo "========================================="
+        
+        # Check if original /data volume has data from previous test
+        FILE=/data/timestamp.txt
+        if [ -f "$FILE" ]; then
+          echo "✅ RECOVERY: Found original file"
+          echo "Original timestamp:"
+          cat "$FILE"
+          echo ""
+          echo "✅ DR TEST PASSED — data survived deletion"
+          echo ""
+          echo "Appending recovery timestamp..."
+          echo "Recovered at: $(date)" >> "$FILE"
+          echo ""
+          echo "Final file state:"
+          cat "$FILE"
+        else
+          echo "========================================="
+          echo "FRESH RUN — no file found, writing now"
+          echo "========================================="
+          echo "Written at: $(date)" > "$FILE"
+          echo "✅ Original timestamp written:"
+          cat "$FILE"
+        fi
+        
+        echo ""
+        echo "========================================="
+        echo "WRITER: Creating timestamped files in /shared"
+        echo "========================================="
+        
+        # Create a timestamped file for this run
+        TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+        LOGFILE="/shared/log-${TIMESTAMP}.txt"
+        
+        echo "✅ WRITER: Creating $LOGFILE"
+        echo "Run started at: $(date)" > "$LOGFILE"
+        echo ""
+        
+        # Write heartbeat to the current log file every hour
+        while true; do
+          sleep 3600
+          echo "Heartbeat at: $(date)" >> "$LOGFILE"
+        done
+  
+  disableService: true
+  
+  # Writer creates TWO volumes: legacy /data and new shared /shared
+  storage:
+    - type: longhorn
+      mountPath: /data
+      size: 1Gi
+      nameSuffix: data
+      volumeName: dr-test-data  # Original volume from first test run
+      protect: true
+    
+    - type: longhorn
+      mountPath: /shared
+      size: 1Gi
+      nameSuffix: shared
+      volumeName: dr-test-shared  # Shared with reader
+      storageClass: longhorn-shared  # Automatically: rwx + ReadWriteMany + smb-access labels
+      protect: true
+
+# ──────────────────────────────────────────────
+# Service 2: Data Reader (volume consumer)
+# Reads and validates file from /shared volume (via existingClaim)
+# ──────────────────────────────────────────────
+reader:
+  fullnameOverride: dr-test-reader
+  deployment:
+    image:
+      repository: busybox
+      tag: latest
+    ports: {}
+    
+    command:
+      - sh
+      - -c
+    args:
+      - |
+        echo "✅ READER: Monitoring /shared volume (checking every minute)"
+        echo ""
+        
+        # Show file list once on startup
+        echo "========================================="
+        echo "Files in /shared:"
+        echo "========================================="
+        ls -lh /shared/log-*.txt 2>/dev/null || echo "⚠️ No log files yet"
+        echo ""
+        
+        # Continuous monitoring: check the latest file every minute
+        while true; do
+          # Get the most recent timestamped file
+          LATEST=$(ls -1 /shared/log-*.txt 2>/dev/null | sort -r | head -1)
+          
+          if [ -z "$LATEST" ]; then
+            echo "$(date): ⚠️ No log files found (writer may be starting...)"
+          else
+            echo "========================================="
+            echo "$(date) — Latest file: $LATEST"
+            echo "========================================="
+            cat "$LATEST"
+            echo ""
+          fi
+          
+          sleep 60
+        done
+  
+  disableService: true
+  
+  # Reader just mounts the existing PVC created by writer
+  storage:
+    - type: existingClaim
+      mountPath: /shared
+      claimName: dr-test-writer-shared  # PVC created by writer service
+
+
