@@ -49,13 +49,15 @@ promstack:
       storage:
         volumeClaimTemplate:
           metadata:
-            annotations:
-              nfs.io/storage-path: alertmanager
+            name: monitoring-alertmanager
           spec:
-            storageClassName: nfs-client
+            storageClassName: longhorn
+            volumeName: monitoring-alertmanager
+            accessModes:
+              - ReadWriteOnce
             resources:
               requests:
-                storage: 10Gi
+                storage: 2Gi
   # resources:
   #   limits:
   #     cpu: 60m
@@ -92,13 +94,15 @@ promstack:
       storageSpec:
         volumeClaimTemplate:
           metadata:
-            annotations:
-              nfs.io/storage-path: prometheus
+            name: monitoring-prometheus
           spec:
-            storageClassName: nfs-client
+            storageClassName: longhorn
+            volumeName: monitoring-prometheus
+            accessModes:
+              - ReadWriteOnce
             resources:
               requests:
-                storage: 30Gi
+                storage: 10Gi
       ruleSelectorNilUsesHelmValues: false
       serviceMonitorSelectorNilUsesHelmValues: false
       serviceMonitorSelector:
@@ -205,12 +209,11 @@ promstack:
           allowUiUpdates: true
     persistence:
       enabled: true
-      storageClassName: nfs-client
-      annotations:
-        nfs.io/storage-path: grafana
+      storageClassName: longhorn
+      volumeName: monitoring-grafana
       accessModes:
         - ReadWriteOnce
-      size: 10Gi
+      size: 2Gi
     additionalDataSources:
       - name: Loki
         type: loki
@@ -240,3 +243,26 @@ promstack:
       etcd: false
   kubeEtcd:
     enabled: false
+
+storage:
+  - nameSuffix: alertmanager
+    mountPath: /data/alertmanager
+    storagePath: alertmanager-alertmanager-monitoring-promstack-0
+    volumeName: monitoring-alertmanager
+    size: "2Gi"
+    type: longhorn
+    accessMode: ReadWriteOnce
+  - nameSuffix: prometheus
+    mountPath: /data/prometheus
+    storagePath: prometheus-prometheus-monitoring-promstack-0
+    volumeName: monitoring-prometheus
+    size: "10Gi"
+    type: longhorn
+    accessMode: ReadWriteOnce
+  - nameSuffix: grafana
+    mountPath: /var/lib/grafana
+    storagePath: grafana
+    volumeName: monitoring-grafana
+    size: "2Gi"
+    type: longhorn
+    accessMode: ReadWriteOnce
