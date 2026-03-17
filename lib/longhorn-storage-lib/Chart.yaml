@@ -1,0 +1,9 @@
+apiVersion: v2
+name: longhorn-storage-lib
+description: >
+  Library chart that renders Longhorn Volume CRs and static PersistentVolumes.
+  The volume name prefix, Longhorn namespace, and PVC claim namespace are all
+  configurable, making it reusable across any chart that provisions Longhorn
+  volumes with static PVs.
+type: library
+version: 0.1.0
