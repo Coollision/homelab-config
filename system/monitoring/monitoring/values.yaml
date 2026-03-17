@@ -43,6 +43,87 @@ promstack:
       enabled: true
       port: 10249
       targetPort: 10249
+
+  # ── API-server metric dropping ────────────────────────────────────────────
+  # The Kubernetes API server exports very large histograms (request durations,
+  # response sizes, watch event sizes). Each histogram has dozens of "bucket"
+  # series per label combination (verb × resource × version × …) which makes
+  # them the single biggest storage consumer in most clusters.
+  #
+  # metricRelabelings works like a filter applied *after* Prometheus scrapes the
+  # target but *before* it writes anything to disk. The rule below says:
+  #   "if the metric name matches this regex → drop it entirely".
+  #
+  # We keep the simpler _total / _count / _sum variants because those are used
+  # by the default kube-prometheus-stack alert rules.
+  kubeApiServer:
+    serviceMonitor:
+      metricRelabelings:
+        # Drop all _bucket series from the API server histogram metrics.
+        # Example dropped: apiserver_request_duration_seconds_bucket{verb="GET",resource="pods",…}
+        # Example kept:    apiserver_request_duration_seconds_count{…}
+        - sourceLabels: [__name__]
+          regex: "apiserver_request_duration_seconds_bucket|apiserver_request_sli_duration_seconds_bucket|apiserver_request_body_size_bytes_bucket|apiserver_response_sizes_bucket|apiserver_watch_events_sizes_bucket"
+          action: drop
+        # go_* and process_* are internal runtime metrics of the API-server Go
+        # binary. They are almost never queried in homelab dashboards.
+        - sourceLabels: [__name__]
+          regex: "go_.*|process_.*"
+          action: drop
+
+  # ── Kubelet + cAdvisor metric dropping ───────────────────────────────────
+  # The kubelet exposes two sets of metrics:
+  #   /metrics          – kubelet internal timing histograms
+  #   /metrics/cadvisor – container resource usage (CPU, memory, network, …)
+  #
+  # metricRelabelings and cAdvisorMetricRelabelings apply to each endpoint
+  # separately so we can be precise about what gets dropped.
+  kubelet:
+    serviceMonitor:
+      # Applied to /metrics (kubelet internals):
+      metricRelabelings:
+        # These are per-operation timing histograms for kubelet internals
+        # (container runtime calls, pod lifecycle, cgroup management, …).
+        # They are high-cardinality and rarely needed in homelab dashboards.
+        - sourceLabels: [__name__]
+          regex: "storage_operation_duration_seconds_bucket|kubelet_runtime_operations_duration_seconds_bucket|kubelet_pod_start_duration_seconds_bucket|kubelet_pod_worker_duration_seconds_bucket|kubelet_cgroup_manager_duration_seconds_bucket|kubelet_pleg_relist_duration_seconds_bucket|kubelet_http_requests_duration_seconds_bucket"
+          action: drop
+        - sourceLabels: [__name__]
+          regex: "go_.*|process_.*"
+          action: drop
+      # Applied to /metrics/cadvisor (per-container resource usage):
+      cAdvisorMetricRelabelings:
+        # container_blkio_device_usage_total: one series per container × disk device × operation.
+        # This creates enormous cardinality (especially with many containers and
+        # multiple block devices). Disk I/O per container is rarely shown in
+        # basic homelab dashboards.
+        - sourceLabels: [__name__]
+          regex: "container_blkio_device_usage_total"
+          action: drop
+        # Internal cgroup task-state counts and OOM memory failure counters.
+        # These are low-level and not used in standard dashboards.
+        - sourceLabels: [__name__]
+          regex: "container_tasks_state|container_memory_failures_total|container_file_descriptors"
+          action: drop
+
+  # ── kube-state-metrics metric dropping ───────────────────────────────────
+  # kube-state-metrics mirrors Kubernetes object metadata as Prometheus metrics.
+  # The kube_*_annotations metrics copy every annotation on every k8s object as
+  # label values. Annotations often contain timestamps, hashes, or long strings
+  # which creates very high cardinality. Drop them because they are not used in
+  # dashboards and are the largest kube-state-metrics contributor to storage.
+  kube-state-metrics:
+    prometheus:
+      monitor:
+        metricRelabelings:
+          # Drops e.g. kube_pod_annotations, kube_deployment_annotations, etc.
+          - sourceLabels: [__name__]
+            regex: "kube_.*_annotations"
+            action: drop
+          - sourceLabels: [__name__]
+            regex: "go_.*|process_.*"
+            action: drop
+
   alertmanager:
     alertmanagerSpec:
       externalUrl: http://alertmanager.<secret:kv/data/domains~local>/
@@ -108,12 +189,10 @@ promstack:
       serviceMonitorSelector:
         matchLabels: null
       additionalScrapeConfigs:
-        - job_name: memory_saver
-          metric_relabel_configs:
-            - source_labels: [__name__]
-              regex: "apiserver_request_duration_seconds_bucket|etcd_request_duration_seconds_bucket|apiserver_request_sli_duration_seconds_bucket|apiserver_request_body_size_bytes_bucket" # Drop all apiserver and etcd metrics
-              action: drop
-
+        # ── Pod endpoint auto-discovery ───────────────────────────────────────
+        # Scrapes any pod that has the annotation prometheus.io/scrape: "true"
+        # and prometheus.io/port set.  This covers workloads like UPS exporters,
+        # Synology SNMP exporters, or any custom app that exposes /metrics.
         - job_name: kubernetes-pod-endpoints
           kubernetes_sd_configs:
             - role: pod
@@ -157,6 +236,13 @@ promstack:
               source_labels:
                 - __meta_kubernetes_service_name
               target_label: kubernetes_name
+          # Drop Go runtime and process metrics from auto-discovered targets.
+          # These are emitted by every Go binary (Traefik, exporters, …) and are
+          # not useful for homelab dashboards.
+          metric_relabel_configs:
+            - source_labels: [__name__]
+              regex: "go_.*|process_.*"
+              action: drop
         - job_name: kubernetes-service-endpoints
           kubernetes_sd_configs:
             - role: service
@@ -200,6 +286,11 @@ promstack:
               source_labels:
                 - __meta_kubernetes_service_name
               target_label: kubernetes_name
+          # Drop Go runtime and process metrics from auto-discovered service targets.
+          metric_relabel_configs:
+            - source_labels: [__name__]
+              regex: "go_.*|process_.*"
+              action: drop
   grafana:
     externalUrl: http://grafana.<secret:kv/data/domains~local>/
     adminPassword: <secret:kv/data/monitoring/grafana~adminPassword>
@@ -225,6 +316,10 @@ promstack:
           httpHeaderName1: X-Scope-OrgID
         secureJsonData:
           httpHeaderValue1: 1
+  # ── Node-exporter metric dropping ────────────────────────────────────────
+  # prometheus-node-exporter is already configured above (relabelings that set
+  # the instance label from the Kubernetes node name). We extend it here with
+  # metricRelabelings to drop metrics that are not useful in homelab dashboards.
   prometheus-node-exporter:
     prometheus:
       monitor:
@@ -235,6 +330,17 @@ promstack:
             sourceLabels:
               - __meta_kubernetes_pod_node_name
             targetLabel: instance
+        metricRelabelings:
+          # node_scrape_collector_* are internal node_exporter meta-metrics about
+          # how long each of its own collectors took to run. Not useful for node
+          # monitoring itself.
+          - sourceLabels: [__name__]
+            regex: "node_scrape_collector_duration_seconds|node_scrape_collector_success"
+            action: drop
+          # Go runtime and process metrics of the node_exporter binary itself.
+          - sourceLabels: [__name__]
+            regex: "go_.*|process_.*"
+            action: drop
     nameOverride: node-exporter
   nameOverride: promstack
   cleanPrometheusOperatorObjectNames: true
