@@ -25,7 +25,6 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "id": 6864,
   "links": [],
   "panels": [
     {
@@ -52,7 +51,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "rgba(50, 172, 45, 0.97)"
+                "color": "rgba(50, 172, 45, 0.97)",
+                "value": 0
               },
               {
                 "color": "rgba(237, 129, 40, 0.89)",
@@ -90,7 +90,7 @@
         "sizing": "auto",
         "text": {}
       },
-      "pluginVersion": "12.0.2",
+      "pluginVersion": "12.4.1",
       "targets": [
         {
           "datasource": {
@@ -136,7 +136,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "rgba(0, 0, 0, 0)"
+                "color": "rgba(0, 0, 0, 0)",
+                "value": 0
               },
               {
                 "color": "rgb(210, 1, 1)",
@@ -175,7 +176,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.0.2",
+      "pluginVersion": "12.4.1",
       "targets": [
         {
           "datasource": {
@@ -219,7 +220,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "rgba(50, 172, 45, 0.97)"
+                "color": "rgba(50, 172, 45, 0.97)",
+                "value": 0
               },
               {
                 "color": "rgba(237, 129, 40, 0.89)",
@@ -257,7 +259,7 @@
         "sizing": "auto",
         "text": {}
       },
-      "pluginVersion": "12.0.2",
+      "pluginVersion": "12.4.1",
       "targets": [
         {
           "datasource": {
@@ -293,6 +295,9 @@
             "cellOptions": {
               "type": "auto"
             },
+            "footer": {
+              "reducers": []
+            },
             "inspect": false
           },
           "mappings": [],
@@ -300,7 +305,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": 0
               },
               {
                 "color": "red",
@@ -401,15 +407,9 @@
       "id": 25,
       "options": {
         "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": ["sum"],
-          "show": false
-        },
         "showHeader": true
       },
-      "pluginVersion": "12.0.2",
+      "pluginVersion": "12.4.1",
       "targets": [
         {
           "datasource": {
@@ -483,7 +483,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "rgb(0, 0, 0)"
+                "color": "rgb(0, 0, 0)",
+                "value": 0
               },
               {
                 "color": "red",
@@ -521,7 +522,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.0.2",
+      "pluginVersion": "12.4.1",
       "targets": [
         {
           "datasource": {
@@ -587,6 +588,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -602,7 +604,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "transparent"
+                "color": "transparent",
+                "value": 0
               },
               {
                 "color": "red",
@@ -634,7 +637,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.0.2",
+      "pluginVersion": "12.4.1",
       "targets": [
         {
           "datasource": {
@@ -644,7 +647,6 @@
           "editorMode": "code",
           "expr": "sum without(pod)(node_memory_MemTotal_bytes{instance!~\".*node-exporter.*\"} - (node_memory_MemFree_bytes{instance!~\".*node-exporter.*\"}+node_memory_Buffers_bytes{instance!~\".*node-exporter.*\"}+node_memory_Cached_bytes{instance!~\".*node-exporter.*\"}))",
           "format": "time_series",
-          "hide": false,
           "interval": "",
           "intervalFactor": 2,
           "legendFormat": "{{ instance }}",
@@ -700,6 +702,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -716,7 +719,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "transparent"
+                "color": "transparent",
+                "value": 0
               },
               {
                 "color": "red",
@@ -748,7 +752,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.0.2",
+      "pluginVersion": "12.4.1",
       "targets": [
         {
           "datasource": {
@@ -780,6 +784,9 @@
             "cellOptions": {
               "type": "auto"
             },
+            "footer": {
+              "reducers": []
+            },
             "inspect": false
           },
           "decimals": 2,
@@ -789,7 +796,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": 0
               },
               {
                 "color": "red",
@@ -849,15 +857,9 @@
       "id": 31,
       "options": {
         "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": ["sum"],
-          "show": false
-        },
         "showHeader": true
       },
-      "pluginVersion": "12.0.2",
+      "pluginVersion": "12.4.1",
       "targets": [
         {
           "datasource": {
@@ -934,7 +936,7 @@
         "tags": [],
         "viewMode": "list"
       },
-      "pluginVersion": "12.0.2",
+      "pluginVersion": "12.4.1",
       "title": "Alarms",
       "type": "alertlist"
     },
@@ -962,7 +964,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "rgba(50, 172, 45, 0.97)"
+                "color": "rgba(50, 172, 45, 0.97)",
+                "value": 0
               },
               {
                 "color": "rgba(237, 129, 40, 0.89)",
@@ -1000,7 +1003,7 @@
         "sizing": "auto",
         "text": {}
       },
-      "pluginVersion": "12.0.2",
+      "pluginVersion": "12.4.1",
       "targets": [
         {
           "datasource": {
@@ -1111,7 +1114,6 @@
           },
           "expr": "avg(up{job=\"kubelet\",metrics_path=\"/metrics\"}) BY (job, node)",
           "format": "time_series",
-          "hide": false,
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
@@ -1212,7 +1214,6 @@
           },
           "expr": "sum without(pod) (rpi_cpu_temperature_celsius)",
           "format": "time_series",
-          "hide": false,
           "interval": "",
           "intervalFactor": 1,
           "legendFormat": "cpu: {{instance}}",
@@ -1237,7 +1238,6 @@
           },
           "editorMode": "code",
           "expr": "avg by (instance) (node_hwmon_temp_celsius{chip=\"platform_coretemp_0\", service=\"monitoring-node-exporter\"})",
-          "hide": false,
           "instant": false,
           "legendFormat": "cpu: {{instance}}",
           "range": true,
@@ -1839,7 +1839,7 @@
   ],
   "preload": false,
   "refresh": "5s",
-  "schemaVersion": 41,
+  "schemaVersion": 42,
   "tags": ["additional", "overview"],
   "templating": {
     "list": []
@@ -1852,5 +1852,6 @@
   "timezone": "browser",
   "title": "k3s Monitoring Overvieuw",
   "uid": "82pBZCmRkasd",
-  "version": 9
+  "version": 1,
+  "weekStart": ""
 }
