@@ -14,3 +14,6 @@ dependencies:
   - name: promtail
     version: 6.17.1
     repository: https://grafana.github.io/helm-charts
+  - name: longhorn-storage-lib
+    version: 0.1.0
+    repository: file://../../../lib/longhorn-storage-lib

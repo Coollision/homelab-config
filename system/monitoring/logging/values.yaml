@@ -104,7 +104,9 @@ loki:
   singleBinary:
     replicas: 1
     persistence:
-      storageClass: nfs-client-name-path
+      storageClass: longhorn
+      size: 10Gi
+      volumeName: monitoring-loki
   read:
     replicas: 0
   backend:
@@ -118,3 +120,18 @@ loki:
 #     memory: 200Mi
 #   limits:
 #     memory: 200Mi
+
+storage:
+  - nameSuffix: loki
+    pvcName: storage-logging-loki-0
+    mountPath: /var/loki
+    storagePath: loki
+    volumeName: monitoring-loki
+    size: "10Gi"
+    type: longhorn
+    accessMode: ReadWriteOnce
+
+storageConfig:
+  prefix: "monitoring"
+  claimNamespace: "monitoring"
+  # longhornNamespace: "storage"  # default, override if needed

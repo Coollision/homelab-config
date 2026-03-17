@@ -304,3 +304,8 @@ storage:
     size: "2Gi"
     type: longhorn
     accessMode: ReadWriteOnce
+
+storageConfig:
+  prefix: "monitoring"
+  claimNamespace: "monitoring"
+  # longhornNamespace: "storage"  # default, override if needed
