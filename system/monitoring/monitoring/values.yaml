@@ -19,6 +19,10 @@ promstack:
       enabled: true
       https: true
       insecureSkipVerify: true
+      metricRelabelings: &drop-highcard-buckets
+        - sourceLabels: [__name__]
+          regex: "apiserver_request_duration_seconds_bucket|apiserver_request_sli_duration_seconds_bucket|etcd_request_duration_seconds_bucket|apiserver_request_body_size_bytes_bucket|apiserver_watch_list_duration_seconds_bucket|apiserver_response_sizes_bucket|apiserver_watch_cache_read_wait_seconds_bucket|apiserver_watch_events_sizes_bucket|apiserver_admission_controller_admission_duration_seconds_bucket|apiserver_flowcontrol_request_execution_seconds_bucket|storage_operation_duration_seconds_bucket|workqueue_queue_duration_seconds_bucket|workqueue_work_duration_seconds_bucket"
+          action: drop
   kubeScheduler:
     endpoints:
       - <secret:kv/data/config/master~ip-0>
@@ -33,6 +37,7 @@ promstack:
       enabled: true
       https: true
       insecureSkipVerify: true
+      metricRelabelings: *drop-highcard-buckets
   kubeProxy:
     endpoints:
       - <secret:kv/data/config/master~ip-0>
@@ -43,87 +48,15 @@ promstack:
       enabled: true
       port: 10249
       targetPort: 10249
-
-  # ── API-server metric dropping ────────────────────────────────────────────
-  # The Kubernetes API server exports very large histograms (request durations,
-  # response sizes, watch event sizes). Each histogram has dozens of "bucket"
-  # series per label combination (verb × resource × version × …) which makes
-  # them the single biggest storage consumer in most clusters.
-  #
-  # metricRelabelings works like a filter applied *after* Prometheus scrapes the
-  # target but *before* it writes anything to disk. The rule below says:
-  #   "if the metric name matches this regex → drop it entirely".
-  #
-  # We keep the simpler _total / _count / _sum variants because those are used
-  # by the default kube-prometheus-stack alert rules.
+    serviceMonitor:
+      metricRelabelings: *drop-highcard-buckets
   kubeApiServer:
     serviceMonitor:
-      metricRelabelings:
-        # Drop all _bucket series from the API server histogram metrics.
-        # Example dropped: apiserver_request_duration_seconds_bucket{verb="GET",resource="pods",…}
-        # Example kept:    apiserver_request_duration_seconds_count{…}
-        - sourceLabels: [__name__]
-          regex: "apiserver_request_duration_seconds_bucket|apiserver_request_sli_duration_seconds_bucket|apiserver_request_body_size_bytes_bucket|apiserver_response_sizes_bucket|apiserver_watch_events_sizes_bucket"
-          action: drop
-        # go_* and process_* are internal runtime metrics of the API-server Go
-        # binary. They are almost never queried in homelab dashboards.
-        - sourceLabels: [__name__]
-          regex: "go_.*|process_.*"
-          action: drop
-
-  # ── Kubelet + cAdvisor metric dropping ───────────────────────────────────
-  # The kubelet exposes two sets of metrics:
-  #   /metrics          – kubelet internal timing histograms
-  #   /metrics/cadvisor – container resource usage (CPU, memory, network, …)
-  #
-  # metricRelabelings and cAdvisorMetricRelabelings apply to each endpoint
-  # separately so we can be precise about what gets dropped.
+      metricRelabelings: *drop-highcard-buckets
   kubelet:
     serviceMonitor:
-      # Applied to /metrics (kubelet internals):
-      metricRelabelings:
-        # These are per-operation timing histograms for kubelet internals
-        # (container runtime calls, pod lifecycle, cgroup management, …).
-        # They are high-cardinality and rarely needed in homelab dashboards.
-        - sourceLabels: [__name__]
-          regex: "storage_operation_duration_seconds_bucket|kubelet_runtime_operations_duration_seconds_bucket|kubelet_pod_start_duration_seconds_bucket|kubelet_pod_worker_duration_seconds_bucket|kubelet_cgroup_manager_duration_seconds_bucket|kubelet_pleg_relist_duration_seconds_bucket|kubelet_http_requests_duration_seconds_bucket"
-          action: drop
-        - sourceLabels: [__name__]
-          regex: "go_.*|process_.*"
-          action: drop
-      # Applied to /metrics/cadvisor (per-container resource usage):
-      cAdvisorMetricRelabelings:
-        # container_blkio_device_usage_total: one series per container × disk device × operation.
-        # This creates enormous cardinality (especially with many containers and
-        # multiple block devices). Disk I/O per container is rarely shown in
-        # basic homelab dashboards.
-        - sourceLabels: [__name__]
-          regex: "container_blkio_device_usage_total"
-          action: drop
-        # Internal cgroup task-state counts and OOM memory failure counters.
-        # These are low-level and not used in standard dashboards.
-        - sourceLabels: [__name__]
-          regex: "container_tasks_state|container_memory_failures_total|container_file_descriptors"
-          action: drop
-
-  # ── kube-state-metrics metric dropping ───────────────────────────────────
-  # kube-state-metrics mirrors Kubernetes object metadata as Prometheus metrics.
-  # The kube_*_annotations metrics copy every annotation on every k8s object as
-  # label values. Annotations often contain timestamps, hashes, or long strings
-  # which creates very high cardinality. Drop them because they are not used in
-  # dashboards and are the largest kube-state-metrics contributor to storage.
-  kube-state-metrics:
-    prometheus:
-      monitor:
-        metricRelabelings:
-          # Drops e.g. kube_pod_annotations, kube_deployment_annotations, etc.
-          - sourceLabels: [__name__]
-            regex: "kube_.*_annotations"
-            action: drop
-          - sourceLabels: [__name__]
-            regex: "go_.*|process_.*"
-            action: drop
-
+      metricRelabelings: *drop-highcard-buckets
+      cAdvisorMetricRelabelings: *drop-highcard-buckets
   alertmanager:
     alertmanagerSpec:
       externalUrl: http://alertmanager.<secret:kv/data/domains~local>/
@@ -149,12 +82,15 @@ promstack:
   prometheus:
     prometheusSpec:
       externalUrl: http://prometheus.<secret:kv/data/domains~local>/
-      retention: 40d
+      retention: 120d
+      retentionSize: 9GB
       # enableAdminAPI: true
-      scrapeInterval: 45s
+      scrapeInterval: 30s
       additionalArgs:
         - name: "storage.tsdb.max-block-duration"
-          value: "1h"
+          value: "2h"
+        - name: "query.max-samples"
+          value: "50000000"
       livenessProbe:
         initialDelaySeconds: 30
         periodSeconds: 15
@@ -189,10 +125,6 @@ promstack:
       serviceMonitorSelector:
         matchLabels: null
       additionalScrapeConfigs:
-        # ── Pod endpoint auto-discovery ───────────────────────────────────────
-        # Scrapes any pod that has the annotation prometheus.io/scrape: "true"
-        # and prometheus.io/port set.  This covers workloads like UPS exporters,
-        # Synology SNMP exporters, or any custom app that exposes /metrics.
         - job_name: kubernetes-pod-endpoints
           kubernetes_sd_configs:
             - role: pod

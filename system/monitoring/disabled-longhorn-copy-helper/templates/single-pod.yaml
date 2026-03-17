@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: longhorn-copy-helper
+  labels:
+    app.kubernetes.io/name: longhorn-copy-helper
+    app.kubernetes.io/instance: longhorn-copy-helper
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  restartPolicy: Never
+  containers:
+    - name: copy-helper
+      image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      command:
+        - sh
+        - -c
+      args:
+        - "sleep 86400"
+      volumeMounts:
+{{- range .Values.volumes }}
+        - name: {{ .name }}
+          mountPath: {{ .mountPath }}
+{{- end }}
+  volumes:
+{{- range .Values.volumes }}
+    - name: {{ .name }}
+      persistentVolumeClaim:
+        claimName: {{ .claimName }}
+{{- end }}

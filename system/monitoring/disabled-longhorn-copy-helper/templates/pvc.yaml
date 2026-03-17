@@ -1,0 +1,17 @@
+{{- range .Values.volumes }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .claimName }}
+  labels:
+    app.kubernetes.io/name: longhorn-copy-helper
+spec:
+  storageClassName: longhorn
+  volumeName: {{ .name }}
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .size | default "1Gi" }}
+{{- end }}

@@ -1,0 +1,566 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 9,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "/.*/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 14,
+          "valueSize": 14
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "synology_upsDeviceManufacturer",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "builder",
+          "exemplar": false,
+          "expr": "synology_upsBatteryMfrDate",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "synology_upsInputTransferReason",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "synology_upsDeviceModel",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "synology_upsBatteryType",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "synology_upsDeviceSerial",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "F"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "synology_upsDeviceType",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "G"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "synology_upsDriverVersion",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "H"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "synology_upsInfoBeeperStatus",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "I"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "synology_upsInfoStatus",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "J"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "synology_upsInfoTestResult",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "K"
+        }
+      ],
+      "title": "Panel Title",
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "Time",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value #A": true,
+              "Value #B": true,
+              "Value #C": true,
+              "Value #D": true,
+              "Value #E": true,
+              "Value #F": true,
+              "Value #G": true,
+              "Value #H": true,
+              "Value #I": true,
+              "Value #J": true,
+              "Value #K": true,
+              "__name__": true,
+              "__name__ 1": true,
+              "__name__ 3": true,
+              "__name__ 6": true,
+              "__name__ 7": true,
+              "container": true,
+              "container 1": true,
+              "container 2": true,
+              "container 3": true,
+              "container 6": true,
+              "container 7": true,
+              "container 8": true,
+              "endpoint": true,
+              "endpoint 1": true,
+              "endpoint 2": true,
+              "endpoint 3": true,
+              "endpoint 6": true,
+              "endpoint 7": true,
+              "endpoint 8": true,
+              "instance": true,
+              "instance 1": true,
+              "instance 2": true,
+              "instance 3": true,
+              "instance 6": true,
+              "instance 7": true,
+              "job": true,
+              "job 1": true,
+              "job 2": true,
+              "job 3": true,
+              "job 6": true,
+              "job 7": true,
+              "namespace": true,
+              "namespace 1": true,
+              "namespace 2": true,
+              "namespace 3": true,
+              "namespace 5": true,
+              "namespace 6": true,
+              "namespace 7": true,
+              "pod": true,
+              "pod 1": true,
+              "pod 2": true,
+              "pod 3": true,
+              "pod 5": true,
+              "pod 6": true,
+              "pod 7": true,
+              "service": true,
+              "service 1": true,
+              "service 2": true,
+              "service 3": true,
+              "service 5": true,
+              "service 6": true,
+              "service 7": true,
+              "service 8": true,
+              "synology_upsBatteryMfrDate": true,
+              "synology_upsDeviceManufacturer": false,
+              "{__name__=\"synology_upsDriverName\", container=\"snmp-exporter\", endpoint=\"snmp-exporter-metrics\", instance=\"Gobelijn\", job=\"snmp-exporter\", namespace=\"monitoring\", pod=\"snmp-exporter-6bc5d9d79f-jksq7\", service=\"snmp-exporter\", synology_upsDriverName=\"usbhid-ups\"}": false,
+              "{__name__=\"synology_upsInfoBeeperStatus\", container=\"snmp-exporter\", endpoint=\"snmp-exporter-metrics\", instance=\"Gobelijn\", job=\"snmp-exporter\", namespace=\"monitoring\", pod=\"snmp-exporter-6bc5d9d79f-jksq7\", service=\"snmp-exporter\", synology_upsInfoBeeperStatus=\"disabled\"}": false
+            },
+            "indexByName": {
+              "Time": 11,
+              "Value #A": 29,
+              "Value #B": 38,
+              "Value #C": 47,
+              "Value #D": 56,
+              "Value #E": 20,
+              "Value #F": 65,
+              "Value #G": 74,
+              "Value #H": 83,
+              "Value #I": 92,
+              "Value #J": 101,
+              "Value #K": 110,
+              "__name__ 1": 12,
+              "__name__ 10": 93,
+              "__name__ 11": 102,
+              "__name__ 2": 21,
+              "__name__ 3": 30,
+              "__name__ 4": 39,
+              "__name__ 5": 48,
+              "__name__ 6": 57,
+              "__name__ 7": 66,
+              "__name__ 8": 75,
+              "__name__ 9": 84,
+              "container 1": 13,
+              "container 10": 94,
+              "container 11": 103,
+              "container 2": 22,
+              "container 3": 31,
+              "container 4": 40,
+              "container 5": 49,
+              "container 6": 58,
+              "container 7": 67,
+              "container 8": 76,
+              "container 9": 85,
+              "endpoint 1": 14,
+              "endpoint 10": 95,
+              "endpoint 11": 104,
+              "endpoint 2": 23,
+              "endpoint 3": 32,
+              "endpoint 4": 41,
+              "endpoint 5": 50,
+              "endpoint 6": 59,
+              "endpoint 7": 68,
+              "endpoint 8": 77,
+              "endpoint 9": 86,
+              "instance 1": 15,
+              "instance 10": 96,
+              "instance 11": 105,
+              "instance 2": 24,
+              "instance 3": 33,
+              "instance 4": 42,
+              "instance 5": 51,
+              "instance 6": 60,
+              "instance 7": 69,
+              "instance 8": 78,
+              "instance 9": 87,
+              "job 1": 16,
+              "job 10": 97,
+              "job 11": 106,
+              "job 2": 25,
+              "job 3": 34,
+              "job 4": 43,
+              "job 5": 52,
+              "job 6": 61,
+              "job 7": 70,
+              "job 8": 79,
+              "job 9": 88,
+              "namespace 1": 17,
+              "namespace 10": 98,
+              "namespace 11": 107,
+              "namespace 2": 26,
+              "namespace 3": 35,
+              "namespace 4": 44,
+              "namespace 5": 53,
+              "namespace 6": 62,
+              "namespace 7": 71,
+              "namespace 8": 80,
+              "namespace 9": 89,
+              "pod 1": 18,
+              "pod 10": 99,
+              "pod 11": 108,
+              "pod 2": 27,
+              "pod 3": 36,
+              "pod 4": 45,
+              "pod 5": 54,
+              "pod 6": 63,
+              "pod 7": 72,
+              "pod 8": 81,
+              "pod 9": 90,
+              "service 1": 19,
+              "service 10": 100,
+              "service 11": 109,
+              "service 2": 28,
+              "service 3": 37,
+              "service 4": 46,
+              "service 5": 55,
+              "service 6": 64,
+              "service 7": 73,
+              "service 8": 82,
+              "service 9": 91,
+              "synology_upsBatteryMfrDate": 10,
+              "synology_upsBatteryType": 4,
+              "synology_upsDeviceManufacturer": 1,
+              "synology_upsDeviceModel": 2,
+              "synology_upsDeviceSerial": 3,
+              "synology_upsDeviceType": 0,
+              "synology_upsDriverVersion": 5,
+              "synology_upsInfoBeeperStatus": 7,
+              "synology_upsInfoStatus": 6,
+              "synology_upsInfoTestResult": 8,
+              "synology_upsInputTransferReason": 9
+            },
+            "renameByName": {
+              "{__name__=\"synology_upsBatteryMfrDate\", container=\"snmp-exporter\", endpoint=\"snmp-exporter-metrics\", instance=\"Gobelijn\", job=\"snmp-exporter\", namespace=\"monitoring\", pod=\"snmp-exporter-6bc5d9d79f-jksq7\", service=\"snmp-exporter\", synology_upsBatteryMfrDate=\"2001/01/01\"}": "",
+              "{__name__=\"synology_upsInfoBeeperStatus\", container=\"snmp-exporter\", endpoint=\"snmp-exporter-metrics\", instance=\"Gobelijn\", job=\"snmp-exporter\", namespace=\"monitoring\", pod=\"snmp-exporter-6bc5d9d79f-jksq7\", service=\"snmp-exporter\", synology_upsInfoBeeperStatus=\"disabled\"}": ""
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "m"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 15,
+        "x": 9,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum without(pod)(synology_upsBatteryRuntimeValue) / 60",
+          "legendFormat": "{{__name__}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Panel Title",
+      "type": "timeseries"
+    }
+  ],
+  "preload": false,
+  "refresh": "30s",
+  "schemaVersion": 42,
+  "tags": [],
+  "templating": {
+    "list": [
+      {
+        "baseFilters": [],
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "filters": [],
+        "name": "Filters",
+        "type": "adhoc"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "ups",
+  "uid": "e0029e2a-6284-43a4-8a6f-483208b16d47",
+  "version": 17,
+  "weekStart": ""
+}

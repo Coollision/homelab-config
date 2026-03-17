@@ -1,0 +1,21 @@
+{{- range .Values.volumes }}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ .name }}
+  labels:
+    app.kubernetes.io/name: longhorn-copy-helper
+spec:
+  capacity:
+    storage: {{ .size | default "1Gi" }}
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: longhorn
+  csi:
+    driver: driver.longhorn.io
+    fsType: ext4
+    volumeHandle: {{ .name }}
+{{- end }}
