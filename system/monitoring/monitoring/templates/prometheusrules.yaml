@@ -1,0 +1,109 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "k3s-monitoring.fullname" . }}-recording-rules
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "k3s-monitoring.labels" . | nindent 4 }}
+spec:
+  groups:
+    # ─────────────────────────────────────────────────────────────────────────
+    # Node-level recording rules
+    #
+    # What is a recording rule?
+    # Prometheus normally stores every raw metric it scrapes (e.g. one time series
+    # per CPU core per node for node_cpu_seconds_total). When Grafana displays a
+    # panel it has to sum and rate() those raw series on every page load.
+    #
+    # A recording rule tells Prometheus to run a query on a schedule and save the
+    # result as a *new, pre-computed metric*. Benefits:
+    #   1. Dashboard queries become simple lookups instead of expensive computations.
+    #   2. Only the single aggregated result is stored – not all the raw series –
+    #      which significantly reduces both storage and memory usage.
+    #
+    # Naming convention used here:  level:metric_name:operation
+    #   level     = what the metric is aggregated across  (instance, namespace_pod, …)
+    #   metric    = the base metric name
+    #   operation = what was computed  (rate5m, ratio, bytes, …)
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: node.recording
+      # Re-evaluate every 1 minute instead of every scrape interval (45 s).
+      # Using a longer interval here still gives useful graphs while reducing
+      # the number of writes to the TSDB.
+      interval: 1m
+      rules:
+        # ── CPU ────────────────────────────────────────────────────────────────
+        # Pre-compute CPU utilisation per node (0 = idle, 1 = 100 % busy).
+        #
+        # Without this rule a dashboard panel computes:
+        #   1 - avg without(cpu,mode)(rate(node_cpu_seconds_total{mode="idle"}[5m]))
+        # …against one raw series per CPU core per node.
+        # With this rule the panel simply queries: instance:node_cpu_utilization:rate5m
+        - record: instance:node_cpu_utilization:rate5m
+          expr: >-
+            1 - avg without(cpu, mode) (
+              rate(node_cpu_seconds_total{mode="idle"}[5m])
+            )
+
+        # ── Memory ─────────────────────────────────────────────────────────────
+        # Pre-compute memory utilisation per node (0 = all free, 1 = all used).
+        # Uses MemAvailable so it correctly accounts for kernel buffer/cache pages
+        # that the OS can reclaim under pressure.
+        - record: instance:node_memory_utilization:ratio
+          expr: >-
+            1 - (
+              node_memory_MemAvailable_bytes
+              / node_memory_MemTotal_bytes
+            )
+
+        # ── Network ────────────────────────────────────────────────────────────
+        # Pre-compute network receive rate per node in bytes/s.
+        # Loopback (lo) and virtual/tunnel interfaces are excluded because they
+        # represent intra-host traffic and would inflate the numbers.
+        - record: instance:node_network_receive_bytes_excluding_lo:rate5m
+          expr: >-
+            sum without(device) (
+              rate(node_network_receive_bytes_total{
+                device!~"lo|veth.*|docker.*|flannel.*|cni.*|cali.*|tunl.*"
+              }[5m])
+            )
+
+        # Pre-compute network transmit rate per node (same interface filter).
+        - record: instance:node_network_transmit_bytes_excluding_lo:rate5m
+          expr: >-
+            sum without(device) (
+              rate(node_network_transmit_bytes_total{
+                device!~"lo|veth.*|docker.*|flannel.*|cni.*|cali.*|tunl.*"
+              }[5m])
+            )
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Container / Pod-level recording rules
+    #
+    # cAdvisor exports one time series per container for CPU and memory metrics.
+    # Pods can have multiple containers (sidecars, init containers, etc.).
+    # These rules sum across all containers within a pod so dashboards can show
+    # per-pod totals with a simple query.
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: container.recording
+      interval: 1m
+      rules:
+        # ── CPU ────────────────────────────────────────────────────────────────
+        # Sum CPU usage (cores) across all containers in each pod.
+        # The {container!=""} filter excludes the special "pause" container that
+        # Kubernetes uses for networking but that has no real workload CPU usage.
+        - record: namespace_pod:container_cpu_usage:rate5m
+          expr: >-
+            sum by (namespace, pod) (
+              rate(container_cpu_usage_seconds_total{container!=""}[5m])
+            )
+
+        # ── Memory ─────────────────────────────────────────────────────────────
+        # Sum memory working-set bytes across all containers in each pod.
+        # working_set = memory the kernel cannot reclaim under pressure
+        # (better measure of actual memory pressure than RSS or cache-inclusive usage).
+        - record: namespace_pod:container_memory_working_set:bytes
+          expr: >-
+            sum by (namespace, pod) (
+              container_memory_working_set_bytes{container!=""}
+            )
