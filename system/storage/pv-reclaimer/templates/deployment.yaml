@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pv-reclaimer
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: pv-reclaimer
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .Values.syncWave | default -5 | quote }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pv-reclaimer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pv-reclaimer
+    spec:
+      serviceAccountName: pv-reclaimer
+      containers:
+        - name: pv-reclaimer
+          image: alpine/k8s:1.35.0
+          resources: {{- toYaml .Values.controller.resources | nindent 12 }}
+          env:
+            - name: WEBHOOK_URL
+              value: {{ .Values.controller.webhookUrl | default "" | quote }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "PV Reclaimer started - watching for Released PVs in real-time"
+
+              reclaim_pv() {
+                PV_NAME="$1"
+                echo "[$(date -u +%FT%TZ)] Released PV detected: $PV_NAME - clearing claimRef"
+                kubectl patch pv "$PV_NAME" --type=merge -p '{"spec":{"claimRef":null}}'
+                if [ $? -eq 0 ]; then
+                  echo "[$(date -u +%FT%TZ)] PV $PV_NAME is now Available"
+                else
+                  echo "[$(date -u +%FT%TZ)] Failed to patch PV $PV_NAME"
+                fi
+              }
+
+              echo "Checking for already-Released PVs..."
+              kubectl get pv -o json | \
+                jq -r '.items[] | select(.status.phase=="Released") | .metadata.name' | \
+                while read -r PV; do reclaim_pv "$PV"; done
+
+              echo "Watching for PV events..."
+              kubectl get pv --watch -o json | \
+                jq --unbuffered -r 'select(.status.phase=="Released") | .metadata.name' | \
+                while read -r PV; do reclaim_pv "$PV"; done

@@ -1,0 +1,14 @@
+controller:
+  # Webhook notification — TODO: wire up to HomeAssistant/Alertmanager/Discord etc.
+  # webhookUrl: "https://hooks.example.com/notify"
+  webhookUrl: ""
+
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 50m
+      memory: 64Mi
+
+syncWave: -5
