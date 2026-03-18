@@ -14,10 +14,12 @@ ingress_internal:
   host: tautulli.<secret:kv/data/domains~local>
   port: web
 storage:
-  - mountPath: /config
-    storagePath: tautulli/config
-    size: 10Gi
-    type: nfs-client
+  - type: longhorn
+    mountPath: /config
+    size: 2Gi
+    nameSuffix: config
+    volumeName: arr-stack-tautulli-config
+    protect: true
 podSecurityContext:
   fsGroup: 1000
 probes:
