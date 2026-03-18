@@ -10,7 +10,6 @@ longhorn:
     taintToleration: "node-role.kubernetes.io/control-plane:NoSchedule;dedicated=master:NoSchedule"
     # Auto-create default disk on labeled nodes
     createDefaultDiskLabeledNodes: true
-    # Quick replica stale detection (30 min) for fast failure recovery in homelab
     replicaSoftAntiAffinity: true
     replicaAutoBalance: "least-effort"
     # Allow volumes on any node/disk when no selectors specified (homelab flexibility)
@@ -18,9 +17,28 @@ longhorn:
     allowEmptyDiskSelectorVolume: true
     # Engine settings
     defaultDataEngine: v1
+    # Protect against accidental volume deletion cascading from node loss
+    nodeDownPodDeletionPolicy: delete-both-statefulset-and-deployment-pod
+    # Auto-delete failed replica instances so they don't block rebuilds
+    autoDeletePodWhenVolumeDetachedUnexpectedly: true
+    # Automatically clean up the system-generated snapshot after backup completes
+    # (prevents backup snapshots from piling up alongside your explicit snapshots)
+    autoCleanupSystemGeneratedSnapshot: true
+    # Automatically clean up recurring job backup snapshots older than the retain count
+    autoCleanupRecurringJobBackupSnapshot: true
+    # How long (minutes) to wait after a replica goes offline before Longhorn starts
+    # rebuilding it on another node. 600 = 10 min: avoids spurious rebuilds from brief
+    # network hiccups, but recovers quickly from real node failures.
+    replicaReplenishmentWaitInterval: 600
     # Snapshot & backup settings
-    snapshotDataIntegrity: ignored
-    unmapMarkSnapChainRemoved: ignored
+    # fast-check: only checksums new/modified data — catches silent corruption without full scan overhead
+    snapshotDataIntegrity: fast-check
+    # Enable unmap propagation into snapshot chains (works together with filesystem-trim recurring job)
+    unmapMarkSnapChainRemoved: enabled
+    # Keep 0 successful job pods (they vanish as soon as the next run replaces them)
+    # Keep 1 failed job pod so you can kubectl logs / describe to debug failures
+    recurringSuccessfulJobsHistoryLimit: 0
+    recurringFailedJobsHistoryLimit: 1
 
   defaultBackupStore:
     backupTarget: "nfs://<secret:kv/data/storage/nfs~server-ip>:/volume4/k3s-volumes/storage/longhorn-backups"
@@ -54,13 +72,13 @@ longhorn:
     defaultDataLocality: best-effort
     defaultFsType: ext4
     disableRevisionCounter: "true"
-    # Quick stale replica detection (30 min) — faster recovery for homelab
-    staleReplicaTimeout: "30"
+    # 1440 min (24h) — survives planned reboots, catches real failures within a day
+    staleReplicaTimeout: "1440"
     # Retain volumes after PVC deletion (manual cleanup required)
     reclaimPolicy: Retain
     volumeBindingMode: Immediate
     # Settings for snapshot/backup reliability
-    unmapMarkSnapChainRemoved: ignored
+    unmapMarkSnapChainRemoved: enabled
 
 # ──────────────────────────────────────────────
 # Longhorn Extras (managed by this chart)
@@ -81,8 +99,8 @@ storageClasses:
     isDefault: false
     reclaimPolicy: Retain
     replicas: 3
-    # Quick stale replica detection (30 min) — matches default class
-    staleReplicaTimeout: "30"
+    # 1440 min (24h) — matches the staleReplicaTimeout in the persistence block above
+    staleReplicaTimeout: "1440"
     # best-effort data locality for better performance
     dataLocality: best-effort
     fsType: ext4
@@ -120,6 +138,42 @@ recurringJobs:
     retain: 7
     parameters:
       volume-backup-policy: if-not-present
+
+  # Purge orphaned/system snapshots that were never cleaned up.
+  # Without this, disk usage grows unbounded over time even with retain limits.
+  snapshotCleanup:
+    enabled: true
+    name: snapshot-cleanup
+    cron: "0 4 * * *"
+    task: snapshot-delete
+    retain: 0
+    concurrency: 2
+    labels:
+      recurring-job: snapshot-cleanup
+
+  # Reclaim unused blocks inside ext4 volumes back to the backing store.
+  # Longhorn volumes are thin-provisioned — without trim, deleted data still
+  # occupies space on your NFS/disk. Run weekly during off-hours.
+  filesystemTrim:
+    enabled: true
+    name: filesystem-trim
+    cron: "0 5 * * 0"
+    task: filesystem-trim
+    retain: 0
+    concurrency: 2
+    labels:
+      recurring-job: filesystem-trim
+
+  # 4-week rolling backup for catching corruption/issues not noticed within 7 days.
+  backupWeekly:
+    enabled: true
+    name: backup-weekly
+    cron: "0 2 * * 0"
+    task: backup
+    retain: 4
+    concurrency: 1
+    labels:
+      backup-type: weekly
 
 # Volume protection policy
 # Blocks deletion of Longhorn volumes with label: protect=true
