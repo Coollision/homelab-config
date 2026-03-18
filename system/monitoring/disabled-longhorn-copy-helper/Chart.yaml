@@ -1,5 +1,0 @@
-apiVersion: v2
-name: longhorn-copy-helper
-description: Helper chart to mount existing Longhorn volumes for manual copy operations
-version: 0.1.0
-appVersion: "1.0.0"
