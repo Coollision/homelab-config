@@ -21,7 +21,7 @@ spec:
       serviceAccountName: pv-reclaimer
       containers:
         - name: pv-reclaimer
-          image: alpine/k8s:1.35.0
+          image: alpine/k8s:1.35.2
           resources: {{- toYaml .Values.controller.resources | nindent 12 }}
           env:
             - name: WEBHOOK_URL
