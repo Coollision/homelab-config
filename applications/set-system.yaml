@@ -49,3 +49,9 @@ spec:
           kind: CustomResourceDefinition
           jqPathExpressions:
             - '.spec?.conversion?.webhook?.clientConfig?.caBundle'
+        - group: ""
+          kind: ConfigMap
+          name: smb-operator-migration
+          namespace: storage
+          jqPathExpressions:
+            - .data
