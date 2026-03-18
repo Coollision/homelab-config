@@ -5,6 +5,7 @@ namespace: storage
 
 resources:
   - smb-operator-config.yaml
+  - smb-operator-migration.yaml
   - smb-operator-deploy.yaml
   - smb-credentials-secret.yaml
 

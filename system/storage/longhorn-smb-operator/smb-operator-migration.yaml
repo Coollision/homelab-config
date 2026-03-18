@@ -1,0 +1,48 @@
+---
+# Migration Mounter ConfigMap
+#
+# Add Longhorn volume names here to temporarily expose them as SMB shares
+# on the existing SMB server — without needing a PVC or a running workload.
+#
+# Use case: scale down a service, add the volume name below, copy/inspect
+# data from your desktop over SMB, then remove it when done.
+#
+# Fields per entry:
+#   name        (required) — Longhorn volume name
+#   shareName   (optional) — SMB share name visible on the network,
+#                            defaults to the volume name
+#   smb         (optional) — 'rw' (read-write, default) or 'ro' (read-only)
+#
+# Mount strategy is chosen automatically:
+#   RWO volumes — a temporary PV+PVC (migrate-<name>) is created so the
+#                 Longhorn CSI driver attaches the volume directly into the
+#                 SMB server pod. Cleaned up automatically when removed.
+#   RWX volumes — mounted via the Longhorn NFS share endpoint (no extra
+#                 resources created).
+#
+# The operator reconciles within seconds of editing this ConfigMap.
+# Remove an entry to immediately unmount it from the SMB server.
+#
+# Example:
+#   volumes:
+#     - name: arr-stack-tautulli-config   # RWO — direct CSI mount
+#       shareName: tautulli-migration
+#       smb: rw
+#     - name: some-rwx-volume            # RWX — NFS mount
+#       smb: ro
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: smb-operator-migration
+  namespace: storage
+  annotations:
+    argocd.argoproj.io/sync-options: ServerSideApply=true
+    argocd.argoproj.io/compare-options: IgnoreDifferences=true
+data:
+  volumes.yaml: |
+    volumes: []
+    # Add volumes to expose here, e.g.:
+    # volumes:
+    #   - name: arr-stack-tautulli-config
+    #     shareName: tautulli-migration
+    #     smb: rw

@@ -307,22 +307,45 @@ def retry_on_error(func):
 
 @dataclass
 class SMBShare:
-    """Represents a single SMB share configuration"""
+    """Represents a single SMB share configuration.
+
+    mount_type:
+      'nfs'    — RWX volume; the startup script mounts via NFS from the Longhorn share endpoint.
+      'direct' — RWO volume; a temp PV+PVC is created so the CSI driver mounts it directly
+                 into the SMB server pod. No NFS mount in the startup script.
+    """
     name: str
     path: str
     namespace: str
     pvc_name: str
     access_mode: str
-    nfs_server: str
-    nfs_path: str
-    
+    mount_type: str = 'nfs'    # 'nfs' | 'direct'
+    nfs_server: str = ''
+    nfs_path: str = ''
+    longhorn_volume_name: str = ''  # set for direct mounts; used to build PV/PVC names
+
     @property
     def readonly(self) -> bool:
         return self.access_mode == 'read-only'
-    
+
     @property
     def unique_id(self) -> str:
         return f"{self.namespace}/{self.pvc_name}"
+
+    @property
+    def migration_pv_name(self) -> str:
+        """Stable name for the temp PV created for a direct migration share."""
+        return f"migrate-{self.longhorn_volume_name}"
+
+    @property
+    def migration_pvc_name(self) -> str:
+        """Stable name for the temp PVC created for a direct migration share."""
+        return f"migrate-{self.longhorn_volume_name}"
+
+    @property
+    def pod_volume_name(self) -> str:
+        """Safe k8s volume name for use inside the pod spec (max 63 chars, no slashes)."""
+        return self.migration_pvc_name[:63]
 
 
 class SMBOperator:
@@ -342,7 +365,8 @@ class SMBOperator:
         self.config = cfg
         self.current_shares: Set[str] = set()
         self.operator_uid: Optional[str] = None
-        
+        self.operator_labels: Dict[str, str] = {}  # cached from own deployment
+
         logger.info("SMB Operator initialized")
     
     def record_event(self, obj_kind: str, obj_name: str, obj_namespace: str, 
@@ -394,20 +418,37 @@ class SMBOperator:
             logger.warning(f"Failed to update PVC annotations: {e}")
     
     def get_operator_uid(self) -> Optional[str]:
-        """Get operator deployment UID for owner references"""
+        """Get operator deployment UID and cache its labels for propagation to child resources."""
         if self.operator_uid:
             return self.operator_uid
-        
+
         try:
             deployment = self.apps_v1.read_namespaced_deployment(
                 'smb-operator',
                 self.config.namespace
             )
             self.operator_uid = deployment.metadata.uid
+            # Cache all labels from the operator deployment — includes ArgoCD tracking labels
+            self.operator_labels = dict(deployment.metadata.labels or {})
+            logger.debug(f"Cached operator labels: {self.operator_labels}")
             return self.operator_uid
         except Exception as e:
             logger.warning(f"Failed to get operator UID: {e}")
             return None
+
+    def get_child_labels(self, extra: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+        """Return labels to apply to all operator-managed child resources.
+
+        Inherits the operator's own labels (which include ArgoCD tracking labels
+        like argocd.argoproj.io/app-name) so resources appear in the ArgoCD UI
+        under the same application — without hardcoding any app name.
+        """
+        self.get_operator_uid()  # ensure labels are cached
+        labels = dict(self.operator_labels)
+        labels['managed-by'] = 'smb-operator'
+        if extra:
+            labels.update(extra)
+        return labels
     
     def get_labeled_pvcs(self) -> List:
         """Get all PVCs with smb-access label with retry"""
@@ -449,11 +490,245 @@ class SMBOperator:
             logger.error(f"Failed to parse NFS endpoint {share_endpoint}: {e}")
             return None
     
+    def discover_migration_shares(self) -> List[SMBShare]:
+        """Discover migration shares from smb-operator-migration ConfigMap.
+
+        ConfigMap format (data key: volumes.yaml):
+            volumes:
+              - name: my-longhorn-volume   # Longhorn volume name (required)
+                shareName: my-share        # SMB share name (optional)
+                smb: rw                    # 'rw' (default) or 'ro'
+
+        RWX volumes  → NFS share endpoint is used (same as PVC-based shares).
+        RWO volumes  → a temporary PV+PVC (migrate-<name>) is created in the
+                       storage namespace so the CSI driver mounts it directly
+                       into the SMB server pod. No NFS mount needed.
+        """
+        migration_cm_name = 'smb-operator-migration'
+        shares = []
+
+        try:
+            cm = self.core_v1.read_namespaced_config_map(migration_cm_name, self.config.namespace)
+        except ApiException as e:
+            if e.status == 404:
+                return []
+            logger.warning(f"Failed to read migration ConfigMap: {e}")
+            return []
+        except Exception as e:
+            logger.warning(f"Failed to read migration ConfigMap: {e}")
+            return []
+
+        raw = cm.data.get('volumes.yaml', '') if cm.data else ''
+        if not raw.strip():
+            return []
+
+        try:
+            data = yaml.safe_load(raw) or {}
+        except Exception as e:
+            logger.error(f"Failed to parse migration ConfigMap volumes.yaml: {e}")
+            return []
+
+        volume_entries = data.get('volumes', [])
+        if not volume_entries:
+            return []
+
+        logger.info(f"Migration ConfigMap: found {len(volume_entries)} volume(s)")
+
+        for entry in volume_entries:
+            volume_name = entry.get('name', '').strip()
+            if not volume_name:
+                logger.warning(f"Migration entry missing 'name', skipping: {entry}")
+                continue
+
+            share_name = entry.get('shareName', volume_name).strip()
+            smb_mode = entry.get('smb', 'rw').strip().lower()
+            if smb_mode not in ('rw', 'ro'):
+                logger.warning(f"Invalid smb value '{smb_mode}' for migration volume {volume_name}, defaulting to 'rw'")
+                smb_mode = 'rw'
+            access_mode = 'read-only' if smb_mode == 'ro' else 'shared'
+
+            logger.info(f"Migration: resolving Longhorn volume '{volume_name}' -> SMB share '{share_name}' ({smb_mode})")
+
+            volume = self.get_longhorn_volume(volume_name)
+            if not volume:
+                logger.warning(f"Migration: Longhorn volume '{volume_name}' not found, skipping")
+                continue
+
+            lh_access_mode = volume.get('spec', {}).get('accessMode', '').lower()  # 'rwo' or 'rwx'
+            share_endpoint = volume.get('status', {}).get('shareEndpoint', '')
+
+            if share_endpoint:
+                # RWX path — mount via NFS share endpoint (same as PVC-based shares)
+                parsed = self.parse_nfs_endpoint(share_endpoint)
+                if not parsed:
+                    logger.error(f"Migration: failed to parse NFS endpoint '{share_endpoint}' for '{volume_name}'")
+                    continue
+                nfs_server, nfs_path = parsed
+                logger.info(f"  RWX — NFS endpoint: {nfs_server}:{nfs_path}")
+                share = SMBShare(
+                    name=share_name,
+                    path=f"/shares/{share_name}",
+                    namespace=self.config.namespace,
+                    pvc_name=f"migration-{volume_name}",
+                    access_mode=access_mode,
+                    mount_type='nfs',
+                    nfs_server=nfs_server,
+                    nfs_path=nfs_path,
+                    longhorn_volume_name=volume_name,
+                )
+            else:
+                # RWO path — mount via temp PV+PVC so CSI attaches it directly
+                lh_size = volume.get('spec', {}).get('size', '1073741824')
+                logger.info(f"  RWO ({lh_access_mode}) — will use direct CSI mount via temp PV+PVC "
+                            f"(migrate-{volume_name}), size={lh_size}")
+                share = SMBShare(
+                    name=share_name,
+                    path=f"/shares/{share_name}",
+                    namespace=self.config.namespace,
+                    pvc_name=f"migration-{volume_name}",
+                    access_mode=access_mode,
+                    mount_type='direct',
+                    longhorn_volume_name=volume_name,
+                )
+
+            shares.append(share)
+
+        logger.info(f"Migration: resolved {len(shares)} share(s)")
+        return shares
+
+    def ensure_migration_pvcs(self, migration_shares: List[SMBShare]):
+        """Create temp PV+PVC for RWO direct-mount migration shares; delete orphaned ones.
+
+        Resources are named  migrate-<longhorn-volume-name>  and labelled
+        smb-operator/migration=true  so they can be identified and cleaned up.
+        """
+        LABEL = 'smb-operator/migration'
+        ns = self.config.namespace
+
+        # Labels applied to all migration PV/PVCs — includes ArgoCD tracking labels
+        migration_labels = self.get_child_labels({LABEL: 'true'})
+        desired: Dict[str, SMBShare] = {
+            s.migration_pvc_name: s
+            for s in migration_shares
+            if s.mount_type == 'direct'
+        }
+
+        # ── Garbage-collect orphaned PVCs ─────────────────────────────────────
+        try:
+            existing_pvcs = self.core_v1.list_namespaced_persistent_volume_claim(
+                ns, label_selector=f'{LABEL}=true'
+            )
+            for pvc in existing_pvcs.items:
+                pvc_name = pvc.metadata.name
+                if pvc_name not in desired:
+                    logger.info(f"Migration cleanup: deleting orphaned PVC {ns}/{pvc_name}")
+                    try:
+                        self.core_v1.delete_namespaced_persistent_volume_claim(pvc_name, ns)
+                    except ApiException as e:
+                        if e.status != 404:
+                            logger.warning(f"Failed to delete orphaned PVC {pvc_name}: {e}")
+        except Exception as e:
+            logger.warning(f"Failed to list migration PVCs for cleanup: {e}")
+
+        # ── Garbage-collect orphaned PVs ──────────────────────────────────────
+        try:
+            existing_pvs = self.core_v1.list_persistent_volume(
+                label_selector=f'{LABEL}=true'
+            )
+            for pv in existing_pvs.items:
+                pv_name = pv.metadata.name
+                if pv_name not in desired:
+                    logger.info(f"Migration cleanup: deleting orphaned PV {pv_name}")
+                    try:
+                        self.core_v1.delete_persistent_volume(pv_name)
+                    except ApiException as e:
+                        if e.status != 404:
+                            logger.warning(f"Failed to delete orphaned PV {pv_name}: {e}")
+        except Exception as e:
+            logger.warning(f"Failed to list migration PVs for cleanup: {e}")
+
+        # ── Ensure PV+PVC exist for each desired direct share ─────────────────
+        for pvc_name, share in desired.items():
+            lh_vol = self.get_longhorn_volume(share.longhorn_volume_name)
+            if not lh_vol:
+                logger.warning(f"Migration: cannot create PV for '{share.longhorn_volume_name}' — volume not found")
+                continue
+
+            size_bytes = lh_vol.get('spec', {}).get('size', '1073741824')
+            # Convert bytes string → k8s quantity (Mi)
+            try:
+                size_mi = f"{int(size_bytes) // (1024 * 1024)}Mi"
+            except (ValueError, TypeError):
+                size_mi = '1Gi'
+
+            pv_name = share.migration_pv_name
+
+            # Create PV if missing
+            try:
+                self.core_v1.read_persistent_volume(pv_name)
+                logger.debug(f"Migration PV {pv_name} already exists")
+            except ApiException as e:
+                if e.status == 404:
+                    logger.info(f"Migration: creating PV {pv_name} ({size_mi}) for volume '{share.longhorn_volume_name}'")
+                    pv = client.V1PersistentVolume(
+                        metadata=client.V1ObjectMeta(name=pv_name, labels=migration_labels),
+                        spec=client.V1PersistentVolumeSpec(
+                            capacity={'storage': size_mi},
+                            volume_mode='Filesystem',
+                            access_modes=['ReadWriteOnce'],
+                            persistent_volume_reclaim_policy='Retain',
+                            storage_class_name='longhorn',
+                            csi=client.V1CSIPersistentVolumeSource(
+                                driver='driver.longhorn.io',
+                                fs_type='ext4',
+                                volume_handle=share.longhorn_volume_name,
+                            ),
+                        ),
+                    )
+                    try:
+                        self.core_v1.create_persistent_volume(pv)
+                    except ApiException as ce:
+                        logger.error(f"Migration: failed to create PV {pv_name}: {ce}")
+                        continue
+                else:
+                    logger.warning(f"Migration: failed to read PV {pv_name}: {e}")
+                    continue
+
+            # Create PVC if missing
+            try:
+                self.core_v1.read_namespaced_persistent_volume_claim(pvc_name, ns)
+                logger.debug(f"Migration PVC {ns}/{pvc_name} already exists")
+            except ApiException as e:
+                if e.status == 404:
+                    logger.info(f"Migration: creating PVC {ns}/{pvc_name}")
+                    storage_class = 'longhorn'
+                    pvc = client.V1PersistentVolumeClaim(
+                        metadata=client.V1ObjectMeta(
+                            name=pvc_name,
+                            namespace=ns,
+                            labels=migration_labels,
+                        ),
+                        spec=client.V1PersistentVolumeClaimSpec(
+                            storage_class_name=storage_class,
+                            volume_name=pv_name,
+                            access_modes=['ReadWriteOnce'],
+                            resources=client.V1ResourceRequirements(
+                                requests={'storage': size_mi}
+                            ),
+                        ),
+                    )
+                    try:
+                        self.core_v1.create_namespaced_persistent_volume_claim(ns, pvc)
+                    except ApiException as ce:
+                        logger.error(f"Migration: failed to create PVC {pvc_name}: {ce}")
+                else:
+                    logger.warning(f"Migration: failed to read PVC {pvc_name}: {e}")
+
     def discover_shares(self) -> List[SMBShare]:
         """Discover all SMB shares from labeled PVCs"""
         shares = []
         pvcs = self.get_labeled_pvcs()
-        
+
         for pvc in pvcs:
             try:
                 namespace = pvc.metadata.namespace
@@ -528,7 +803,7 @@ class SMBOperator:
         return shares
     
     def generate_smb_config(self, shares: List[SMBShare]) -> str:
-        """Generate Samba configuration with user authentication"""
+        """Generate Samba configuration with user authentication and performance tuning"""
         lines = [
             "[global]",
             f"workgroup = {self.config.smb_workgroup}",
@@ -538,7 +813,26 @@ class SMBOperator:
             "restrict anonymous = 1",
             "guest ok = no",
             "log level = 1",
-            ""
+            "",
+            "# idmap — required to avoid 'range not specified' warnings on connect",
+            "idmap config * : backend = tdb",
+            "idmap config * : range = 1000-9999",
+            "",
+            "# Performance tuning (Samba 4.21+)",
+            "socket options = TCP_NODELAY IPTOS_LOWDELAY SO_RCVBUF=131072 SO_SNDBUF=131072",
+            "read raw = yes",
+            "write raw = yes",
+            "max xmit = 65535",
+            "dead time = 15",
+            "getwd cache = yes",
+            "aio read size = 1",
+            "aio write size = 1",
+            "use sendfile = yes",
+            "server multi channel support = yes",
+            "strict locking = no",
+            "oplocks = yes",
+            "level2 oplocks = yes",
+            "",
         ]
         
         for share in shares:
@@ -579,21 +873,31 @@ class SMBOperator:
         ]
         
         for share in shares:
-            lines.extend([
-                f"echo 'Mounting share: {share.name}'",
-                f"mkdir -p {share.path}",
-                f"mount -t nfs -o vers=4.2,noresvport {share.nfs_server}:{share.nfs_path} {share.path} || {{",
-                f"  echo 'Failed to mount {share.name}'",
-                "  exit 1",
-                "}",
-                f"echo '  Mounted: {share.nfs_server}:{share.nfs_path} -> {share.path}'",
-                "echo ''",
-                ""
-            ])
+            if share.mount_type == 'direct':
+                # CSI mounts the volume directly into the pod at share.path —
+                # just ensure the directory exists (it will already be mounted).
+                lines.extend([
+                    f"echo 'Direct CSI mount ready: {share.name}'",
+                    f"mkdir -p {share.path}",
+                    "echo ''",
+                    ""
+                ])
+            else:
+                lines.extend([
+                    f"echo 'Mounting share: {share.name}'",
+                    f"mkdir -p {share.path}",
+                    f"mount -t nfs -o vers=4.2,noresvport {share.nfs_server}:{share.nfs_path} {share.path} || {{",
+                    f"  echo 'Failed to mount {share.name}'",
+                    "  exit 1",
+                    "}",
+                    f"echo '  Mounted: {share.nfs_server}:{share.nfs_path} -> {share.path}'",
+                    "echo ''",
+                    ""
+                ])
         
         lines.extend([
             "echo 'Starting Samba daemon...'",
-            "exec /usr/sbin/smbd -F -S --no-process-group"
+            "exec /usr/sbin/smbd --foreground --no-process-group"
         ])
         
         return "\n".join(lines)
@@ -626,6 +930,14 @@ class SMBOperator:
             ],
             volume_mounts=[
                 client.V1VolumeMount(name='smb-config', mount_path='/etc/samba/smb.conf', sub_path='smb.conf')
+            ] + [
+                # Direct CSI mounts for RWO migration volumes
+                client.V1VolumeMount(
+                    name=share.pod_volume_name,
+                    mount_path=share.path,
+                )
+                for share in shares
+                if share.mount_type == 'direct'
             ],
             resources=client.V1ResourceRequirements(
                 requests={
@@ -684,6 +996,17 @@ class SMBOperator:
                             items=[client.V1KeyToPath(key='smb.conf', path='smb.conf')]
                         )
                     )
+                ] + [
+                    # PVC-backed volumes for RWO migration direct mounts
+                    client.V1Volume(
+                        name=share.pod_volume_name,
+                        persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
+                            claim_name=share.migration_pvc_name,
+                            read_only=share.readonly,
+                        )
+                    )
+                    for share in shares
+                    if share.mount_type == 'direct'
                 ],
                 termination_grace_period_seconds=30  # Allow 30s for graceful shutdown
             )
@@ -702,7 +1025,7 @@ class SMBOperator:
             metadata=client.V1ObjectMeta(
                 name=self.config.smb_deployment_name,
                 namespace=self.config.namespace,
-                labels={'app': self.config.smb_deployment_name, 'managed-by': 'smb-operator'},
+                labels=self.get_child_labels({'app': self.config.smb_deployment_name}),
                 annotations={
                     'smb-operator/version': '2.0',
                     'smb-operator/shares-count': str(len(shares)),
@@ -741,9 +1064,9 @@ class SMBOperator:
                     metadata=client.V1ObjectMeta(
                         name=self.config.smb_service_name,
                         namespace=self.config.namespace,
-                        labels={'app': self.config.smb_deployment_name},
+                        labels=self.get_child_labels({'app': self.config.smb_deployment_name}),
                         annotations={
-                            'service.kubernetes.io/topology-mode': 'Auto'  # Suppresses Endpoints deprecation warning
+                            'service.kubernetes.io/topology-mode': 'Auto'
                         },
                         owner_references=owner_refs if owner_refs else None
                     ),
@@ -776,7 +1099,11 @@ class SMBOperator:
         except ApiException as e:
             if e.status == 404:
                 cm = client.V1ConfigMap(
-                    metadata=client.V1ObjectMeta(name=cm_name, namespace=self.config.namespace),
+                    metadata=client.V1ObjectMeta(
+                        name=cm_name,
+                        namespace=self.config.namespace,
+                        labels=self.get_child_labels(),
+                    ),
                     data={'smb.conf': smb_config}
                 )
                 self.core_v1.create_namespaced_config_map(self.config.namespace, cm)
@@ -794,9 +1121,27 @@ class SMBOperator:
             # Check if we need to change strategy type - requires replace, not patch
             existing_strategy = existing.spec.strategy.type if existing.spec.strategy else None
             new_strategy = deployment.spec.strategy.type if deployment.spec.strategy else None
-            
+            # Strategic merge patch will NOT remove list entries (e.g. volumes/volumeMounts)
+            # if those entries are no longer in the new spec. Prefer replace in those cases.
+            existing_volumes = {v.name for v in (existing.spec.template.spec.volumes or [])}
+            new_volumes = {v.name for v in (deployment.spec.template.spec.volumes or [])}
+            existing_mounts = set()
+            new_mounts = set()
+            if existing.spec.template.spec.containers:
+                existing_mounts = {m.mount_path for m in (existing.spec.template.spec.containers[0].volume_mounts or [])}
+            if deployment.spec.template.spec.containers:
+                new_mounts = {m.mount_path for m in (deployment.spec.template.spec.containers[0].volume_mounts or [])}
+
+            replace_needed = False
             if existing_strategy and new_strategy and existing_strategy != new_strategy:
-                logger.info(f"Strategy change detected: {existing_strategy} -> {new_strategy}, using replace operation")
+                replace_needed = True
+            if existing_volumes != new_volumes:
+                replace_needed = True
+            if existing_mounts != new_mounts:
+                replace_needed = True
+
+            if replace_needed:
+                logger.info("Detected significant deployment change (strategy/volumes/volumeMounts); using replace operation")
                 self.apps_v1.replace_namespaced_deployment(self.config.smb_deployment_name, self.config.namespace, deployment)
             else:
                 self.apps_v1.patch_namespaced_deployment(self.config.smb_deployment_name, self.config.namespace, deployment)
@@ -821,8 +1166,18 @@ class SMBOperator:
         """Main reconciliation logic"""
         try:
             logger.info("Starting reconciliation...")
-            
-            shares = self.discover_shares()
+
+            pvc_shares = self.discover_shares()
+            migration_shares = self.discover_migration_shares()
+
+            # Merge — migration shares are identified by their synthetic pvc_name prefix
+            # so they won't collide with real PVC-based shares in current_shares tracking
+            shares = pvc_shares + migration_shares
+
+            if migration_shares:
+                logger.info(f"Including {len(migration_shares)} migration share(s) in SMB server: "
+                            f"{[s.name for s in migration_shares]}")
+
             new_shares = {s.unique_id for s in shares}
             
             if new_shares == self.current_shares:
@@ -844,7 +1199,11 @@ class SMBOperator:
             # Generate and apply configuration
             smb_config = self.generate_smb_config(shares)
             self.update_smb_config(smb_config)
-            
+
+            # Ensure temp PV+PVCs exist for RWO direct-mount migration shares,
+            # and clean up any that were removed from the ConfigMap
+            self.ensure_migration_pvcs(migration_shares)
+
             deployment = self.generate_deployment(shares)
             success = self.apply_deployment(deployment)
             
@@ -871,40 +1230,81 @@ class SMBOperator:
             return False
     
     def watch_pvcs(self):
-        """Watch for PVC changes using Kubernetes Watch API"""
-        logger.info("Starting PVC watch...")
-        w = watch.Watch()
-        
-        while not shutdown_event.is_set():
-            try:
-                for event in w.stream(
-                    self.core_v1.list_persistent_volume_claim_for_all_namespaces,
-                    label_selector='smb-access',
-                    timeout_seconds=self.config.reconcile_interval
-                ):
-                    if shutdown_event.is_set():
-                        break
-                    
-                    event_type = event['type']
-                    pvc = event['object']
-                    logger.info(f"PVC event: {event_type} {pvc.metadata.namespace}/{pvc.metadata.name}")
-                    
-                    if self.reconcile():
-                        metrics.reconcile_count += 1
-                        metrics.last_reconcile_time = time.time()
-                        metrics.shares_managed = len(self.current_shares)
-                    
-            except ApiException as e:
-                if e.status == 410:
-                    logger.warning("Watch expired, restarting...")
-                    continue
-                else:
-                    logger.error(f"Watch error: {e}", exc_info=True)
+        """Watch for PVC changes and migration ConfigMap changes using Kubernetes Watch API"""
+        logger.info("Starting PVC + migration ConfigMap watch...")
+
+        def watch_pvcs_stream():
+            w = watch.Watch()
+            while not shutdown_event.is_set():
+                try:
+                    for event in w.stream(
+                        self.core_v1.list_persistent_volume_claim_for_all_namespaces,
+                        label_selector='smb-access',
+                        timeout_seconds=self.config.reconcile_interval
+                    ):
+                        if shutdown_event.is_set():
+                            return
+                        event_type = event['type']
+                        pvc = event['object']
+                        logger.info(f"PVC event: {event_type} {pvc.metadata.namespace}/{pvc.metadata.name}")
+                        if self.reconcile():
+                            metrics.reconcile_count += 1
+                            metrics.last_reconcile_time = time.time()
+                            metrics.shares_managed = len(self.current_shares)
+                except ApiException as e:
+                    if e.status == 410:
+                        logger.warning("PVC watch expired, restarting...")
+                        continue
+                    else:
+                        logger.error(f"PVC watch error: {e}", exc_info=True)
+                        time.sleep(10)
+                except Exception as e:
+                    logger.error(f"Unexpected PVC watch error: {e}", exc_info=True)
                     time.sleep(10)
-            except Exception as e:
-                logger.error(f"Unexpected watch error: {e}", exc_info=True)
-                time.sleep(10)
-    
+
+        def watch_migration_configmap_stream():
+            w = watch.Watch()
+            while not shutdown_event.is_set():
+                try:
+                    for event in w.stream(
+                        self.core_v1.list_namespaced_config_map,
+                        namespace=self.config.namespace,
+                        field_selector='metadata.name=smb-operator-migration',
+                        timeout_seconds=self.config.reconcile_interval
+                    ):
+                        if shutdown_event.is_set():
+                            return
+                        event_type = event['type']
+                        logger.info(f"Migration ConfigMap event: {event_type} smb-operator-migration")
+                        if self.reconcile():
+                            metrics.reconcile_count += 1
+                            metrics.last_reconcile_time = time.time()
+                            metrics.shares_managed = len(self.current_shares)
+                except ApiException as e:
+                    if e.status == 410:
+                        logger.warning("Migration ConfigMap watch expired, restarting...")
+                        continue
+                    else:
+                        logger.error(f"Migration ConfigMap watch error: {e}", exc_info=True)
+                        time.sleep(10)
+                except Exception as e:
+                    logger.error(f"Unexpected migration ConfigMap watch error: {e}", exc_info=True)
+                    time.sleep(10)
+
+        # Run both watchers in parallel threads
+        pvc_thread = threading.Thread(target=watch_pvcs_stream, daemon=True, name='watch-pvcs')
+        migration_thread = threading.Thread(target=watch_migration_configmap_stream, daemon=True, name='watch-migration-cm')
+
+        pvc_thread.start()
+        migration_thread.start()
+
+        # Block until shutdown
+        while not shutdown_event.is_set():
+            shutdown_event.wait(timeout=5)
+
+        pvc_thread.join(timeout=10)
+        migration_thread.join(timeout=10)
+
     def run(self):
         """Main operator loop with graceful shutdown"""
         global healthy, ready

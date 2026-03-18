@@ -16,7 +16,7 @@ data:
     smb:
       deploymentName: smb-server
       serviceName: smb-server
-      image: dperson/samba:latest
+      image: crazymax/samba:latest
       workgroup: WORKGROUP
       serverString: Homelab Storage Server
       security:
@@ -34,10 +34,10 @@ data:
     resources:
       smbServer:
         requests:
-          cpu: 100m
-          memory: 128Mi
+          cpu: 200m
+          memory: 256Mi
         limits:
-          cpu: 500m
+          cpu: 2000m
           memory: 512Mi
       operator:
         requests:
