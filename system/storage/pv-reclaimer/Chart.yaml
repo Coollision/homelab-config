@@ -1,0 +1,5 @@
+apiVersion: v2
+name: pv-reclaimer
+description: Watches for Released PVs, auto-reclaims them and sends a webhook notification
+version: 0.1.0
+appVersion: "1.0.0"
