@@ -44,8 +44,64 @@ spec:
   cron: {{ .Values.recurringJobs.systemBackupDaily.cron | quote }}
   task: {{ .Values.recurringJobs.systemBackupDaily.task }}
   retain: {{ .Values.recurringJobs.systemBackupDaily.retain }}
+  groups: []
+  labels: {}
   {{- if .Values.recurringJobs.systemBackupDaily.parameters }}
   parameters:
     {{- toYaml .Values.recurringJobs.systemBackupDaily.parameters | nindent 4 }}
+  {{- end }}
+{{- end }}
+---
+{{- if .Values.recurringJobs.snapshotCleanup.enabled }}
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: {{ .Values.recurringJobs.snapshotCleanup.name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  cron: {{ .Values.recurringJobs.snapshotCleanup.cron | quote }}
+  task: {{ .Values.recurringJobs.snapshotCleanup.task }}
+  retain: {{ .Values.recurringJobs.snapshotCleanup.retain }}
+  concurrency: {{ .Values.recurringJobs.snapshotCleanup.concurrency }}
+  groups: []
+  {{- if .Values.recurringJobs.snapshotCleanup.labels }}
+  labels:
+    {{- toYaml .Values.recurringJobs.snapshotCleanup.labels | nindent 4 }}
+  {{- end }}
+{{- end }}
+---
+{{- if .Values.recurringJobs.filesystemTrim.enabled }}
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: {{ .Values.recurringJobs.filesystemTrim.name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  cron: {{ .Values.recurringJobs.filesystemTrim.cron | quote }}
+  task: {{ .Values.recurringJobs.filesystemTrim.task }}
+  retain: {{ .Values.recurringJobs.filesystemTrim.retain }}
+  concurrency: {{ .Values.recurringJobs.filesystemTrim.concurrency }}
+  groups: []
+  {{- if .Values.recurringJobs.filesystemTrim.labels }}
+  labels:
+    {{- toYaml .Values.recurringJobs.filesystemTrim.labels | nindent 4 }}
+  {{- end }}
+{{- end }}
+---
+{{- if .Values.recurringJobs.backupWeekly.enabled }}
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: {{ .Values.recurringJobs.backupWeekly.name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  cron: {{ .Values.recurringJobs.backupWeekly.cron | quote }}
+  task: {{ .Values.recurringJobs.backupWeekly.task }}
+  retain: {{ .Values.recurringJobs.backupWeekly.retain }}
+  concurrency: {{ .Values.recurringJobs.backupWeekly.concurrency }}
+  groups: []
+  {{- if .Values.recurringJobs.backupWeekly.labels }}
+  labels:
+    {{- toYaml .Values.recurringJobs.backupWeekly.labels | nindent 4 }}
   {{- end }}
 {{- end }}

@@ -21,6 +21,10 @@
     recurringJobs []string  optional recurring-job names to label-enable
     pvcName       string    optional — adds claimRef for StatefulSet-managed PVCs
                             whose name differs from the PV name
+                            ⚠️  Always set pvcName for StatefulSet-managed PVCs.
+                            If the PV ends up in Released state after a PVC deletion,
+                            recover with:
+                              kubectl patch pv <pv-name> --type=merge -p '{"spec":{"claimRef":null}}'
 */}}
 {{- define "longhorn-storage-lib.volumes" -}}
 {{- $cfg           := .Values.storageConfig | default dict }}
@@ -80,6 +84,8 @@ apiVersion: v1
 kind: PersistentVolume
 metadata:
   name: {{ $volName }}
+  annotations:
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false
 spec:
   capacity:
     storage: {{ .size }}

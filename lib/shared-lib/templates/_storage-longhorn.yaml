@@ -79,6 +79,7 @@ metadata:
   name: {{ $volumeName }}
   annotations:
     longhorn.io/volume-name: {{ $volumeName }}
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false
     {{- if .root.Values.syncWave }}
     argocd.argoproj.io/sync-wave: {{ .root.Values.syncWave | default 0 | quote }}
     {{- end }}
@@ -105,10 +106,11 @@ metadata:
     smb-access: shared
     smb-share-name: {{ $volumeName }}
     {{- end }}
-  {{- if .root.Values.syncWave }}
   annotations:
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false
+    {{- if .root.Values.syncWave }}
     argocd.argoproj.io/sync-wave: {{ .root.Values.syncWave | default 0 | quote }}
-  {{- end }}
+    {{- end }}
 spec:
   storageClassName: {{ $sc }}
   volumeName: {{ $volumeName }}

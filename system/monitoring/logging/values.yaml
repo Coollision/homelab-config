@@ -119,6 +119,12 @@ loki:
           period: 24h
         object_store: filesystem # we're storing on filesystem so there's no real persistence here.
         schema: v13
+    podSecurityContext:
+      fsGroup: 10001
+      fsGroupChangePolicy: Always  # Always fix ownership on mount, not just on mismatch
+      runAsGroup: 10001
+      runAsNonRoot: true
+      runAsUser: 10001
   singleBinary:
     replicas: 1
     persistence:
@@ -130,7 +136,7 @@ loki:
         cpu: 100m
         memory: 256Mi
       limits:
-        cpu: "1"
+        cpu: 500m
         memory: 512Mi
   read:
     replicas: 0
