@@ -81,7 +81,7 @@ argo-cd:
       server.disable.auth: false
       server.repo.server.timeout.seconds: "180"
       # Limit concurrent manifest generation to prevent OOM during cache invalidation (e.g. force push)
-      reposerver.parallelism.limit: "3"
+      reposerver.parallelism.limit: "2"
 
     cmp:
       create: true
@@ -137,6 +137,7 @@ argo-cd:
     enabled: false
 
   repoServer:
+    replicas: 2
     affinity:
       nodeAffinity:
         preferredDuringSchedulingIgnoredDuringExecution:
