@@ -58,5 +58,10 @@
   ansible.builtin.include_tasks: fetch_kubeconfig.yml
   when: inventory_hostname == k3s_primary_master
 
+- name: Install etcd defrag timer
+  ansible.builtin.include_tasks: install_etcd_defrag.yml
+  when: inventory_hostname == k3s_primary_master
+  tags: etcd_defrag
+
 - name: Apply node annotations (labels are applied during registration)
   ansible.builtin.include_tasks: apply_annotations.yml
