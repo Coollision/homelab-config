@@ -19,6 +19,11 @@ kubelet-arg:
   - "system-reserved=cpu=100m,memory=100Mi,ephemeral-storage=2Gi"
   - "eviction-hard=imagefs.available<5%,imagefs.inodesFree<3%,memory.available<500Mi,nodefs.available<5%,nodefs.inodesFree<3%,pid.available<5%"
   - "max-pods={{ k3s_max_pods | default(90) }}"
+  - "node-status-update-frequency={{ k3s_node_status_update_frequency | default('10s') }}"
+
+{% if k3s_node_lease_duration_seconds is defined %}
+node-lease-duration-seconds: {{ k3s_node_lease_duration_seconds }}
+{% endif %}
 
 kube-proxy-arg:
   - "metrics-bind-address=0.0.0.0"

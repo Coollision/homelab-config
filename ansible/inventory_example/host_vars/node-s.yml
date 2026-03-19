@@ -16,3 +16,8 @@ k3s_node_annotations:
   node.longhorn.io/default-disks-config: '[{"path":"/mnt/longhorn","allowScheduling":true,"tags":["fast"]}]'
 
 longhorn_disk_device: /dev/sda3
+
+
+# VM — hypervisor steal spikes cause kubelet lease timeouts
+# Relaxed values to prevent false NotReady flips
+k3s_node_status_update_frequency: "20s"

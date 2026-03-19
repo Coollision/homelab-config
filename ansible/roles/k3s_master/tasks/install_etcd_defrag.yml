@@ -1,0 +1,84 @@
+# Auto-detect etcd version from the installed k3s binary.
+# Can be overridden by setting k3s_etcd_version explicitly (e.g. in host/group vars).
+- name: Get installed k3s version
+  ansible.builtin.command: /usr/local/bin/k3s --version
+  register: _k3s_bin_version
+  changed_when: false
+  when: k3s_etcd_version is not defined
+
+- name: Parse k3s version tag from binary output
+  ansible.builtin.set_fact:
+    _k3s_version_tag: "{{ _k3s_bin_version.stdout | regex_search('v[0-9]+\\.[0-9]+\\.[0-9]+\\+k3s[0-9]+') }}"
+  when: k3s_etcd_version is not defined
+
+- name: Fetch k3s version.sh from GitHub to resolve bundled etcd version
+  ansible.builtin.uri:
+    url: "https://raw.githubusercontent.com/k3s-io/k3s/{{ _k3s_version_tag | replace('+', '%2B') }}/scripts/version.sh"
+    return_content: true
+  register: _k3s_version_sh
+  when: k3s_etcd_version is not defined
+
+- name: Set k3s_etcd_version from version.sh
+  ansible.builtin.set_fact:
+    k3s_etcd_version: "{{ _k3s_version_sh.content | regex_search('ETCD_VERSION.*v([0-9]+\\.[0-9]+\\.[0-9]+)', '\\1') | first }}"
+  when: k3s_etcd_version is not defined
+
+- name: Download etcdctl binary
+  ansible.builtin.get_url:
+    url: "https://github.com/etcd-io/etcd/releases/download/v{{ k3s_etcd_version }}/etcd-v{{ k3s_etcd_version }}-linux-amd64.tar.gz"
+    dest: /tmp/etcd-{{ k3s_etcd_version }}.tar.gz
+    mode: "0644"
+  when: ansible_facts.architecture == "x86_64"
+
+- name: Extract etcdctl
+  ansible.builtin.unarchive:
+    src: /tmp/etcd-{{ k3s_etcd_version }}.tar.gz
+    dest: /tmp
+    remote_src: true
+    include:
+      - "etcd-v{{ k3s_etcd_version }}-linux-amd64/etcdctl"
+    extra_opts:
+      - "--strip-components=1"
+  when: ansible_facts.architecture == "x86_64"
+
+- name: Install etcdctl to /usr/local/bin
+  ansible.builtin.copy:
+    src: /tmp/etcdctl
+    dest: /usr/local/bin/etcdctl
+    owner: root
+    group: root
+    mode: "0755"
+    remote_src: true
+  when: ansible_facts.architecture == "x86_64"
+
+- name: Clean up etcdctl download
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /tmp/etcd-{{ k3s_etcd_version }}.tar.gz
+    - /tmp/etcdctl
+  when: ansible_facts.architecture == "x86_64"
+
+- name: Install etcd-defrag systemd service
+  ansible.builtin.template:
+    src: etcd-defrag.service.j2
+    dest: "{{ systemd_dir }}/etcd-defrag.service"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install etcd-defrag systemd timer
+  ansible.builtin.template:
+    src: etcd-defrag.timer.j2
+    dest: "{{ systemd_dir }}/etcd-defrag.timer"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable and start etcd-defrag timer
+  ansible.builtin.systemd:
+    name: etcd-defrag.timer
+    daemon_reload: true
+    state: started
+    enabled: true

@@ -1,0 +1,12 @@
+[Unit]
+Description=Defragment etcd database
+After=k3s.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/etcdctl \
+  --endpoints=https://127.0.0.1:2379 \
+  --cacert=/var/lib/rancher/k3s/server/tls/etcd/server-ca.crt \
+  --cert=/var/lib/rancher/k3s/server/tls/etcd/server-client.crt \
+  --key=/var/lib/rancher/k3s/server/tls/etcd/server-client.key \
+  defrag
