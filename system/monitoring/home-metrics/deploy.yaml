@@ -63,7 +63,7 @@ spec:
     matchNames:
       - monitoring
   endpoints:
-    - interval: 5s
+    - interval: 30s
       port: snmp-exporter-metrics
       path: "/snmp"
       targetPort: 9116

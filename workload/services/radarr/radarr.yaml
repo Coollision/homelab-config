@@ -105,11 +105,16 @@ spec:
               path: /ping
             initialDelaySeconds: 20
             periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
           livenessProbe:
             httpGet:
               port: 7878
               path: /ping
             initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
           volumeMounts:
             - name: radarr-config
               mountPath: /config
