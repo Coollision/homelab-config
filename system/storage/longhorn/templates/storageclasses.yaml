@@ -6,6 +6,7 @@ metadata:
   name: {{ .Values.storageClasses.shared.name }}
   annotations:
     storageclass.kubernetes.io/description: {{ .Values.storageClasses.shared.description | quote }}
+    argocd.argoproj.io/sync-options: Replace=true
 provisioner: driver.longhorn.io
 allowVolumeExpansion: true
 reclaimPolicy: {{ .Values.storageClasses.shared.reclaimPolicy }}
