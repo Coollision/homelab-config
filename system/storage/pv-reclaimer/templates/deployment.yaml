@@ -49,6 +49,11 @@ spec:
                 while read -r PV; do reclaim_pv "$PV"; done
 
               echo "Watching for PV events..."
-              kubectl get pv --watch -o json | \
-                jq --unbuffered -r 'select(.status.phase=="Released") | .metadata.name' | \
-                while read -r PV; do reclaim_pv "$PV"; done
+              while true; do
+                kubectl get pv --watch -o json | \
+                  jq --unbuffered -r 'select(.status.phase=="Released") | .metadata.name' | \
+                  while read -r PV; do reclaim_pv "$PV"; done
+
+                echo "[$(date -u +%FT%TZ)] PV watch stream ended; reconnecting in 5s..."
+                sleep 5
+              done
