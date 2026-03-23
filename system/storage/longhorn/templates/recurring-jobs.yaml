@@ -63,7 +63,8 @@ spec:
   task: {{ .Values.recurringJobs.snapshotCleanup.task }}
   retain: {{ .Values.recurringJobs.snapshotCleanup.retain }}
   concurrency: {{ .Values.recurringJobs.snapshotCleanup.concurrency }}
-  groups: []
+  groups:
+    - default
   {{- if .Values.recurringJobs.snapshotCleanup.labels }}
   labels:
     {{- toYaml .Values.recurringJobs.snapshotCleanup.labels | nindent 4 }}
@@ -100,7 +101,8 @@ spec:
   task: {{ .Values.recurringJobs.backupWeekly.task }}
   retain: {{ .Values.recurringJobs.backupWeekly.retain }}
   concurrency: {{ .Values.recurringJobs.backupWeekly.concurrency }}
-  groups: []
+  groups:
+    - default
   {{- if .Values.recurringJobs.backupWeekly.labels }}
   labels:
     {{- toYaml .Values.recurringJobs.backupWeekly.labels | nindent 4 }}
