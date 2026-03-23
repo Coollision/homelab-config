@@ -81,7 +81,8 @@ spec:
   task: {{ .Values.recurringJobs.filesystemTrim.task }}
   retain: {{ .Values.recurringJobs.filesystemTrim.retain }}
   concurrency: {{ .Values.recurringJobs.filesystemTrim.concurrency }}
-  groups: []
+  groups:
+    - default
   {{- if .Values.recurringJobs.filesystemTrim.labels }}
   labels:
     {{- toYaml .Values.recurringJobs.filesystemTrim.labels | nindent 4 }}
