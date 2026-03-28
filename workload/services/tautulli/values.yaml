@@ -1,5 +1,5 @@
 fullnameOverride: tautulli
-statefullset:
+statefulset:
   image:
     repository: linuxserver/tautulli
     tag: latest

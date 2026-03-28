@@ -1,6 +1,6 @@
 {{- define "shared-lib.container" -}}
 {{- $root := . -}}
-{{- $config := .Values.deployment | default .Values.statefullset -}}
+{{- $config := .Values.deployment | default .Values.statefulset -}}
 name: {{ .Chart.Name }}
 image: {{ include "shared-lib.image" . }}
 imagePullPolicy: {{ include "shared-lib.imagePullPolicy" . }}

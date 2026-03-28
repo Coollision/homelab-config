@@ -1,5 +1,5 @@
 fullnameOverride: mqtt-playground
-statefullset:
+statefulset:
   image:
     repository: ghcr.io/coollision/mqtt-go-playground
     tag: latest
