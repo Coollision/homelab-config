@@ -90,7 +90,7 @@
         "sizing": "auto",
         "text": {}
       },
-      "pluginVersion": "12.4.1",
+      "pluginVersion": "12.4.2",
       "targets": [
         {
           "datasource": {
@@ -98,7 +98,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "(sum(node_memory_MemTotal_bytes{service=\"monitoring-node-exporter\"}) - sum(node_memory_MemFree_bytes{service=\"monitoring-node-exporter\"}+node_memory_Buffers_bytes{service=\"monitoring-node-exporter\"}+node_memory_Cached_bytes{service=\"monitoring-node-exporter\"}) ) / sum(node_memory_MemTotal_bytes{service=\"monitoring-node-exporter\"}) * 100",
+          "expr": "(sum(node_memory_MemTotal_bytes{job=\"node-exporter\"}) - sum(node_memory_MemFree_bytes{job=\"node-exporter\"}+node_memory_Buffers_bytes{job=\"node-exporter\"}+node_memory_Cached_bytes{job=\"node-exporter\"})) / sum(node_memory_MemTotal_bytes{job=\"node-exporter\"}) * 100",
           "format": "time_series",
           "instant": true,
           "interval": "10s",
@@ -176,7 +176,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.1",
+      "pluginVersion": "12.4.2",
       "targets": [
         {
           "datasource": {
@@ -259,7 +259,7 @@
         "sizing": "auto",
         "text": {}
       },
-      "pluginVersion": "12.4.1",
+      "pluginVersion": "12.4.2",
       "targets": [
         {
           "datasource": {
@@ -409,7 +409,7 @@
         "cellHeight": "sm",
         "showHeader": true
       },
-      "pluginVersion": "12.4.1",
+      "pluginVersion": "12.4.2",
       "targets": [
         {
           "datasource": {
@@ -522,7 +522,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.1",
+      "pluginVersion": "12.4.2",
       "targets": [
         {
           "datasource": {
@@ -637,7 +637,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.4.1",
+      "pluginVersion": "12.4.2",
       "targets": [
         {
           "datasource": {
@@ -752,7 +752,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.4.1",
+      "pluginVersion": "12.4.2",
       "targets": [
         {
           "datasource": {
@@ -859,7 +859,7 @@
         "cellHeight": "sm",
         "showHeader": true
       },
-      "pluginVersion": "12.4.1",
+      "pluginVersion": "12.4.2",
       "targets": [
         {
           "datasource": {
@@ -936,7 +936,7 @@
         "tags": [],
         "viewMode": "list"
       },
-      "pluginVersion": "12.4.1",
+      "pluginVersion": "12.4.2",
       "title": "Alarms",
       "type": "alertlist"
     },
@@ -1003,7 +1003,7 @@
         "sizing": "auto",
         "text": {}
       },
-      "pluginVersion": "12.4.1",
+      "pluginVersion": "12.4.2",
       "targets": [
         {
           "datasource": {
@@ -1058,6 +1058,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1073,7 +1074,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red"
+                "color": "red",
+                "value": 0
               },
               {
                 "color": "transparent",
@@ -1105,7 +1107,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.0.2",
+      "pluginVersion": "12.4.2",
       "targets": [
         {
           "datasource": {
@@ -1158,6 +1160,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1173,7 +1176,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "transparent"
+                "color": "transparent",
+                "value": 0
               },
               {
                 "color": "red",
@@ -1205,7 +1209,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.0.2",
+      "pluginVersion": "12.4.2",
       "targets": [
         {
           "datasource": {
@@ -1307,6 +1311,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1322,7 +1327,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": 0
               },
               {
                 "color": "red",
@@ -1355,7 +1361,7 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.0.2",
+      "pluginVersion": "12.4.2",
       "targets": [
         {
           "datasource": {
@@ -1410,6 +1416,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": true,
             "stacking": {
               "group": "A",
@@ -1425,7 +1432,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": 0
               },
               {
                 "color": "red",
@@ -1458,7 +1466,7 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.0.2",
+      "pluginVersion": "12.4.2",
       "targets": [
         {
           "datasource": {
@@ -1525,6 +1533,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1540,7 +1549,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": 0
               },
               {
                 "color": "red",
@@ -1573,7 +1583,7 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.0.2",
+      "pluginVersion": "12.4.2",
       "targets": [
         {
           "datasource": {
@@ -1640,6 +1650,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1655,7 +1666,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": 0
               },
               {
                 "color": "red",
@@ -1688,7 +1700,7 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.0.2",
+      "pluginVersion": "12.4.2",
       "targets": [
         {
           "datasource": {
@@ -1754,6 +1766,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": true,
             "stacking": {
               "group": "A",
@@ -1769,7 +1782,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": 0
               },
               {
                 "color": "red",
@@ -1802,7 +1816,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.0.2",
+      "pluginVersion": "12.4.2",
       "targets": [
         {
           "datasource": {
@@ -1845,13 +1859,13 @@
     "list": []
   },
   "time": {
-    "from": "now-6h",
+    "from": "now-7d",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
   "title": "k3s Monitoring Overvieuw",
   "uid": "82pBZCmRkasd",
-  "version": 1,
+  "version": 3,
   "weekStart": ""
 }
