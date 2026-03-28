@@ -10,7 +10,7 @@ maintainers:
 dependencies:
   - name: kube-prometheus-stack
     alias: promstack
-    version: 82.14.1
+    version: 82.15.1
     repository: https://prometheus-community.github.io/helm-charts
   - name: longhorn-storage-lib
     version: 0.1.0
