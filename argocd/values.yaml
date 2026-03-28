@@ -16,7 +16,7 @@ argo-cd:
       exec.enabled: "true"
       timeout.reconciliation: 5m
       timeout.reconciliation.jitter: 2m
-      repos.server.timeout.seconds: "180"
+      repos.server.timeout.seconds: "300"
       # Garbage collection
       server.default.logout.url: https://argocd.<secret:kv/data/domains~domain>/
       application.resourceTrackingMethod: annotation
@@ -89,9 +89,21 @@ argo-cd:
     params:
       server.insecure: true
       server.disable.auth: false
-      server.repo.server.timeout.seconds: "180"
+      server.repo.server.timeout.seconds: "300"
+      controller.repo.server.timeout.seconds: "300"
       # Limit concurrent manifest generation to prevent OOM during cache invalidation (e.g. force push)
       reposerver.parallelism.limit: "2"
+      reposerver.git.lsremote.parallelism.limit: "2"
+      # Extend cache expiration for monorepo stability (default 3m)
+      reposerver.revision.cache.expiration: "15m"
+      # Increase manifest size limit for large monorepo directories (default 10M)
+      reposerver.max.combined.directory.manifests.size: "100M"
+      # Exclude non-manifest paths from CMP tar stream to reduce sidecar memory pressure
+      reposerver.plugin.tar.exclusions: ".git/*;.github/*;ansible/*;node-setup/*;*.md"
+      # Enable git globbing improvements for nested ApplicationSet patterns
+      applicationsetcontroller.enable.new.git.file.globbing: "true"
+      # Disable plugin path optimization for now - path resolution issues with relative paths
+      # reposerver.plugin.use.manifest.generate.paths: "false"
 
     cmp:
       create: true
@@ -126,9 +138,9 @@ argo-cd:
     resources:
       requests:
         memory: 768Mi
-        cpu: 150m
+        cpu: 100m
       limits:
-        memory: 1536Mi
+        memory: 1024Mi
         cpu: 1000m
 
   server:
@@ -158,19 +170,19 @@ argo-cd:
               operator: NotIn
               values:
               - rpi
-    resources:
-      requests:
-        memory: 512Mi
-        cpu: 250m
-      limits:
-        memory: 1536Mi
-        cpu: 1500m
+    # resources:
+    #   requests:
+    #     memory: 512Mi
+    #     cpu: 250m
+    #   limits:
+    #     memory: 1536Mi
+    #     cpu: 1500m
     serviceAccount:
       name: argocd-role
     env:
       # Increase timeout for Helm/Kustomize execution (default 90s)
       - name: ARGOCD_EXEC_TIMEOUT
-        value: "180s"
+        value: "300s"
     extraContainers:
       - name: avp
         command: [ /var/run/argocd/argocd-cmp-server ]
@@ -179,17 +191,21 @@ argo-cd:
           - secretRef:
               name: argocd-vault-replacer-credentials
         env:
+          - name: GOMEMLIMIT
+            value: "1100MiB"
+          - name: GOGC
+            value: "50"
           - name: ARGOCD_PLUGIN_TIMEOUT
-            value: "180"
+            value: "300"
           - name: VAULT_CLIENT_TIMEOUT
-            value: "180s"
+            value: "300s"
         # resources:
         #   requests:
         #     memory: 512Mi
-        #     cpu: 250m
+        #     cpu: 200m
         #   limits:
-        #     memory: 2Gi
-        #     cpu: 1000m
+        #     memory: 1Gi
+        #     cpu: 200m
         securityContext:
           runAsNonRoot: true
           runAsUser: 999

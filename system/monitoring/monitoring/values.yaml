@@ -110,10 +110,10 @@ promstack:
       resources:
         requests:
           cpu: 300m
-          memory: 2Gi
+          memory: 1500Mi
         limits:
           cpu: 1500m
-          memory: 3Gi
+          memory: 2Gi
       storageSpec:
         volumeClaimTemplate:
           metadata:
