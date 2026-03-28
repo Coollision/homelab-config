@@ -15,6 +15,14 @@ config:
   CSRF_TRUSTED_ORIGINS: https://babybuddy.<secret:kv/data/domains~domain>
   SECURE_PROXY_SSL_HEADER: "True"
 
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 400m
+    memory: 512Mi
+
 ingress_internal_secure:
   host: babybuddy.<secret:kv/data/domains~domain>
   port: http

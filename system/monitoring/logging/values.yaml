@@ -133,11 +133,11 @@ loki:
       volumeName: monitoring-loki
     resources:
       requests:
-        cpu: 100m
-        memory: 256Mi
-      limits:
-        cpu: 500m
+        cpu: 150m
         memory: 512Mi
+      limits:
+        cpu: 750m
+        memory: 1Gi
   read:
     replicas: 0
   backend:
@@ -167,6 +167,13 @@ loki:
 # Reduce memcached cache sizes from defaults (8192MB/1024MB) — homelab doesn't need production sizing
 chunksCache:
   allocatedMemory: 256
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi
 
 resultsCache:
   allocatedMemory: 128
