@@ -125,7 +125,7 @@ promstack:
               - ReadWriteOnce
             resources:
               requests:
-                storage: 10Gi
+                storage: 20Gi
       ruleSelectorNilUsesHelmValues: false
       serviceMonitorSelectorNilUsesHelmValues: false
       serviceMonitorSelector:
@@ -232,6 +232,8 @@ promstack:
   grafana:
     externalUrl: http://grafana.<secret:kv/data/domains~local>/
     adminPassword: <secret:kv/data/monitoring/grafana~adminPassword>
+    deploymentStrategy:
+      type: Recreate
     resources:
       requests:
         cpu: 100m
@@ -399,7 +401,7 @@ storage:
     mountPath: /data/prometheus
     storagePath: prometheus-prometheus-monitoring-promstack-0
     volumeName: monitoring-prometheus
-    size: "10Gi"
+    size: "20Gi"
     type: longhorn
     accessMode: ReadWriteOnce
   - nameSuffix: grafana
