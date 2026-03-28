@@ -27,6 +27,7 @@ node-feature-discovery:
     #     memory: 40Mi
     config:
       core:
+        sleepInterval: 30s
         labelSources:
           - "custom"
 
@@ -49,12 +50,17 @@ descheduler:
   cmdOptions:
     v: 3
   deschedulerPolicy:
+    maxNoOfPodsToEvictPerNode: 3
+    maxNoOfPodsToEvictPerNamespace: 6
+    maxNoOfPodsToEvictTotal: 10
     profiles:
-      - name: default
+      - name: mini-nodes
         pluginConfig:
           - name: "DefaultEvictor"
             args:
               evictLocalStoragePods: true
+              nodeFit: true
+              nodeSelector: "type=mini"
               labelSelector:
                 matchExpressions:
                 - key: "preventDeschedule"
@@ -75,17 +81,20 @@ descheduler:
           - name: "RemovePodsViolatingNodeTaints"
           - name: "LowNodeUtilization"
             args:
+              numberOfNodes: 1
+              evictionLimits:
+                node: 2
               evictableNamespaces:
                 exclude:
                   - storage
               thresholds:
-                cpu: 20
-                memory: 20
-                pods: 20
+                cpu: 60
+                memory: 40
+                pods: 55
               targetThresholds:
-                cpu: 50
-                memory: 50
-                pods: 50
+                cpu: 80
+                memory: 85
+                pods: 80
         plugins:
           balance:
             enabled:
@@ -98,16 +107,87 @@ descheduler:
               - "RemovePodsViolatingNodeTaints"
               - "RemovePodsViolatingNodeAffinity"
               - "RemovePodsViolatingInterPodAntiAffinity"
-
+      - name: vm-nodes
+        pluginConfig:
+          - name: "DefaultEvictor"
+            args:
+              evictLocalStoragePods: true
+              nodeFit: true
+              nodeSelector: "type=vm"
+              labelSelector:
+                matchExpressions:
+                - key: "preventDeschedule"
+                  operator: "NotIn"
+                  values:
+                  - "true"
+          - name: "RemoveDuplicates"
+          - name: "RemovePodsHavingTooManyRestarts"
+            args:
+              podRestartThreshold: 15
+              includingInitContainers: true
+          - name: "RemovePodsViolatingNodeAffinity"
+            args:
+              nodeAffinityType:
+                - "requiredDuringSchedulingIgnoredDuringExecution"
+          - name: "RemovePodsViolatingInterPodAntiAffinity"
+          - name: "RemovePodsViolatingTopologySpreadConstraint"
+          - name: "RemovePodsViolatingNodeTaints"
+          - name: "LowNodeUtilization"
+            args:
+              numberOfNodes: 1
+              evictionLimits:
+                node: 2
+              evictableNamespaces:
+                exclude:
+                  - storage
+              thresholds:
+                cpu: 60
+                memory: 25
+                pods: 45
+              targetThresholds:
+                cpu: 75
+                memory: 60
+                pods: 70
+        plugins:
+          balance:
+            enabled:
+              - "RemoveDuplicates"
+              - "RemovePodsViolatingTopologySpreadConstraint"
+              - "LowNodeUtilization"
+          deschedule:
+            enabled:
+              - "RemovePodsHavingTooManyRestarts"
+              - "RemovePodsViolatingNodeTaints"
+              - "RemovePodsViolatingNodeAffinity"
+              - "RemovePodsViolatingInterPodAntiAffinity"
+      - name: hw-enforcement
+        pluginConfig:
+          - name: "DefaultEvictor"
+            args:
+              evictLocalStoragePods: true
+              nodeFit: true
+              labelSelector:
+                matchExpressions:
+                - key: "preventDeschedule"
+                  operator: "NotIn"
+                  values:
+                  - "true"
+          - name: "RemovePodsViolatingNodeAffinity"
+            args:
+              nodeAffinityType:
+                - "requiredDuringSchedulingIgnoredDuringExecution"
+        plugins:
+          deschedule:
+            enabled:
+              - "RemovePodsViolatingNodeAffinity"
   service:
     enabled: true
   serviceMonitor:
     enabled: true
-
-# resources:
-#   requests:
-#     cpu: 200m
-#     memory: 30Mi
-#   limits:
-#     cpu: 300m
-#     memory: 40Mi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi

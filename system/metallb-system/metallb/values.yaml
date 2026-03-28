@@ -26,10 +26,9 @@ metallb:
       failureThreshold: 5
     resources:
       requests:
-        cpu: 10m
+        cpu: 50m
         memory: 48Mi
       limits:
-        cpu: 100m
         memory: 128Mi
     frr:
       resources:
