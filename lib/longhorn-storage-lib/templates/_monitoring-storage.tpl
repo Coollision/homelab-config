@@ -69,7 +69,7 @@ spec:
   dataEngine: "v1"
   dataLocality: "best-effort"
   frontend: "blockdev"
-  numberOfReplicas: 2
+  numberOfReplicas: 3
   size: "{{ $sizeBytes }}"
   diskSelector: []
   nodeSelector: []

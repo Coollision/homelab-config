@@ -34,7 +34,7 @@
 {{- $volumeName := .storage.volumeName | default $pvcName -}}
 {{- $volNs := "storage" -}}
 {{- $sc := .storage.storageClass | default "longhorn" -}}
-{{- $replicas := .storage.replicas | default 2 -}}
+{{- $replicas := .storage.replicas | default 3 -}}
 {{- $accessMode := .storage.volumeAccessMode | default (ternary "rwx" "rwo" (eq $sc "longhorn-shared")) -}}
 {{ $sizeBytes := include "shared-lib.storage.sizeToBytes" .storage }}
 ---
