@@ -22,7 +22,8 @@ spec:
       containers:
         - name: pv-reclaimer
           image: alpine/k8s:1.35.3
-          resources: {{- toYaml .Values.controller.resources | nindent 12 }}
+          resources:
+            {{- toYaml .Values.controller.resources | nindent 12 }}
           env:
             - name: WEBHOOK_URL
               value: {{ .Values.controller.webhookUrl | default "" | quote }}

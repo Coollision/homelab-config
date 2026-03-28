@@ -107,3 +107,18 @@ spec:
             sum by (namespace, pod) (
               container_memory_working_set_bytes{container!=""}
             )
+
+        # ── Network ────────────────────────────────────────────────────────────
+        # Pre-compute network metrics per pod (aggregated from containers).
+        # Using recv_bytes to identify noisy pods without tracking all TCP/UDP streams.
+        - record: namespace_pod:container_network_transmit_bytes:rate5m
+          expr: >-
+            sum by (namespace, pod) (
+              rate(container_network_transmit_bytes_total{device!~"lo|veth.*|docker.*|flannel.*|cni.*|cali.*|tunl.*"}[5m])
+            )
+
+        - record: namespace_pod:container_network_receive_bytes:rate5m
+          expr: >-
+            sum by (namespace, pod) (
+              rate(container_network_receive_bytes_total{device!~"lo|veth.*|docker.*|flannel.*|cni.*|cali.*|tunl.*"}[5m])
+            )
