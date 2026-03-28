@@ -163,28 +163,26 @@ loki:
         - sourceLabels: [__name__]
           regex: go_(gc_heap_(allocs|frees)_by_size_bytes|sched_(pauses|latencies)|gc_pauses).*_bucket
           action: drop
-
-# Reduce memcached cache sizes from defaults (8192MB/1024MB) — homelab doesn't need production sizing
-chunksCache:
-  allocatedMemory: 256
-  resources:
-    requests:
-      cpu: 100m
-      memory: 512Mi
-    limits:
-      cpu: 500m
-      memory: 768Mi
-
-resultsCache:
-  allocatedMemory: 128
-
-# Disable synthetic canary probes — not useful for homelab, saves ~3 pods
-lokiCanary:
-  enabled: false
-
-# Reduce gateway noise
-gateway:
-  verboseLogging: false
+  # Reduce memcached cache sizes from defaults (8192MB/1024MB) — homelab doesn't need production sizing
+  chunksCache:
+    allocatedMemory: 256
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 768Mi
+  resultsCache:
+    allocatedMemory: 128
+  # Disable synthetic canary probes — not useful for homelab, saves ~3 pods
+  lokiCanary:
+    enabled: false
+  test:
+    enabled: false
+  # Reduce gateway noise
+  gateway:
+    verboseLogging: false
 
 storage:
   - nameSuffix: loki
