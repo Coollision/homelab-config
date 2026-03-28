@@ -13,10 +13,10 @@ Main entrypoint for the shared library chart. It will render all underlying temp
 {{- end }}
 {{- if .Values.deployment }}
 {{ include "shared-lib.deployment" . }}
-{{- else if .Values.statefullset }}
-{{ include "shared-lib.statefullset" . }}
+{{- else if .Values.statefulset }}
+{{ include "shared-lib.statefulset" . }}
 {{- else }}
-{{- "need to have a deployment or statefullset" | fail -}}
+{{- "need to have a deployment or statefulset" | fail -}}
 {{- end }}
 {{- if not .Values.disableService }}
 ---

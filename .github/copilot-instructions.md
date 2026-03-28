@@ -84,8 +84,8 @@ The shared library provides a comprehensive templating system for consistent ser
 **Core Template**: `{{ include "shared-lib.all" . }}` renders complete application stacks
 **Key Components**:
 
-- `_app-deployment.yaml` / `_app-statefullset.yaml`: Workload definitions with built-in affinity, probes, storage
-- `_service.yaml`: Automatic service creation from `deployment.ports` or `statefullset.ports`
+- `_app-deployment.yaml` / `_app-statefulset.yaml`: Workload definitions with built-in affinity, probes, storage
+- `_service.yaml`: Automatic service creation from `deployment.ports` or `statefulset.ports`
 - `_storage.yaml`: NFS storage with path-based (`storagePath`) or name-based provisioning
 - `_ingress-*.yaml`: Traefik IngressRoute patterns (internal, internal-secure, external-secure)
 
@@ -99,7 +99,7 @@ dependencies:
     repository: file://../../../lib/shared-lib
 
 # values.yaml - Standard structure
-deployment: # or statefullset:
+deployment: # or statefulset:
   image:
     repository: myapp
   ports:

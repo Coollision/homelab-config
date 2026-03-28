@@ -1,5 +1,5 @@
 fullnameOverride: zigbee2mqtt
-statefullset:
+statefulset:
   image:
     repository: koenkk/zigbee2mqtt
     tag: 2.9.1

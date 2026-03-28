@@ -1,4 +1,4 @@
-{{- define "shared-lib.statefullset" }}
+{{- define "shared-lib.statefulset" }}
 {{- $root := . -}}
 apiVersion: apps/v1
 kind: StatefulSet

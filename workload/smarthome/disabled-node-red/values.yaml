@@ -1,5 +1,5 @@
 fullnameOverride: node-red
-statefullset:
+statefulset:
   image:
     repository: nodered/node-red
     tag: 4.1.8

@@ -1,5 +1,5 @@
 {{- define "shared-lib.image" -}}
-  {{- $config := .Values.deployment | default .Values.statefullset -}}
+  {{- $config := .Values.deployment | default .Values.statefulset -}}
   {{- $i := $config.image -}}
   {{- if $i.digest -}}
     {{- printf "%s@sha256:%s" $i.repository $i.digest -}}
@@ -11,7 +11,7 @@
 {{- end -}}
 
 {{- define "shared-lib.imagePullPolicy" -}}
-{{- $config := .Values.deployment | default .Values.statefullset -}}
+{{- $config := .Values.deployment | default .Values.statefulset -}}
 {{- $i := $config.image -}}
 {{- $i.imagePullPolicy | default "IfNotPresent" | quote -}}
 {{- end -}}
@@ -45,7 +45,7 @@ env:
 {{- if .Values.deployment -}}
 {{- .Values.deployment.ports | toYaml -}}
 {{- else -}}
-{{- .Values.statefullset.ports | toYaml -}}
+{{- .Values.statefulset.ports | toYaml -}}
 {{- end -}}
 {{- end }}
 
