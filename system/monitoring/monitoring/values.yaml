@@ -84,13 +84,23 @@ promstack:
       externalUrl: http://prometheus.<secret:kv/data/domains~local>/
       retention: 120d
       retentionSize: 9GB
-      # enableAdminAPI: true
+      enableAdminAPI: true
       scrapeInterval: 30s
       additionalArgs:
         - name: "storage.tsdb.max-block-duration"
           value: "2h"
+        # Reduce query.max-samples from default 50M to 10M for homelab stability 
+        # and memory efficiency. 10M still allows complex queries across 120d data.
         - name: "query.max-samples"
-          value: "50000000"
+          value: "10000000"
+        # Limit concurrent queries to prevent memory spikes under load
+        - name: "query.max-concurrency"
+          value: "150"
+        # Enable native histogram support for efficient storage of distributions
+        - name: "enable-feature"
+          value: "native-histograms"
+      # Prometheus-operator managed WAL compression option (instead of CLI arg)
+      walCompression: true
       livenessProbe:
         initialDelaySeconds: 30
         periodSeconds: 15
@@ -252,6 +262,41 @@ promstack:
   # prometheus-node-exporter is already configured above (relabelings that set
   # the instance label from the Kubernetes node name). We extend it here with
   # metricRelabelings to drop metrics that are not useful in homelab dashboards.
+  # ── kube-state-metrics metric filtering ──────────────────────────────────
+  # kube-state-metrics emits exhaustive Kubernetes object metadata (~3000+ metrics).
+  # Most homelab setups only need a small subset for dashboards. Drop verbose metrics.
+  # These metrics have high cardinality due to pod labels, and generated data we don't use.
+  prometheus-kube-state-metrics:
+    # Restrict labels exposed in metrics to only those we use in dashboards.
+    # This dramatically reduces cardinality while keeping metrics queryable.
+    # pod_labels are excluded entirely by omitting them from the allowlist.
+    metricLabelsAllowlist:
+      - "pods=[*]"
+      - "deployments=[*]"
+      - "statefulsets=[*]"
+      - "daemonsets=[*]"
+      - "services=[*]"
+      - "nodes=[*]"
+    prometheus:
+      monitor:
+        metricRelabelings:
+          # Drop rarely-used pod/container metadata metrics
+          - sourceLabels: [__name__]
+            regex: "kube_pod_labels|kube_pod_status_phase_reason|kube_pod_status_reason|kube_pod_status_scheduled_time|kube_container_status_last_terminated_reason|kube_container_status_terminated_reason"
+            action: drop
+          # Drop per-pod resource limits we don't dashboard (use requests instead)
+          - sourceLabels: [__name__]
+            regex: "kube_pod_container_resource_limits"
+            action: drop
+          # Don't need individual pod parent object references
+          - sourceLabels: [__name__]
+            regex: "kube_pod_owner"
+            action: drop
+          # Drop verbose replicaset metrics we don't use
+          - sourceLabels: [__name__]
+            regex: "kube_replicaset.*|kube_statefulset_status_replicas.*"
+            action: drop
+  
   prometheus-node-exporter:
     prometheus:
       monitor:
@@ -273,6 +318,26 @@ promstack:
           - sourceLabels: [__name__]
             regex: "go_.*|process_.*"
             action: drop
+  
+  # ── cAdvisor (kubelet container metrics) filtering ─────────────────────────
+  # Kubelet exposes 69+ container_* metrics from cAdvisor. We only need key metrics.
+  # Drop perfctr, tcp, udp, and other verbose container metrics.
+  kubelet:
+    serviceMonitor:
+      metricRelabelings: &drop-cadvisor-verbose
+        # Drop verbose TCP/UDP connection metrics (one per container per connection type)
+        - sourceLabels: [__name__]
+          regex: "container_network_tcp.*|container_network_udp.*"
+          action: drop
+        # Drop filesystem details we don't dashboard
+        - sourceLabels: [__name__]
+          regex: "container_fs_usage_bytes|container_fs_limits_bytes"
+          action: drop
+        # Drop advanced metrics (perf counters, etc.)
+        - sourceLabels: [__name__]
+          regex: "container_perf.*|container_last_seen|container_last_recorded.*|container_start_time_seconds"
+          action: drop
+      cAdvisorMetricRelabelings: *drop-cadvisor-verbose
     nameOverride: node-exporter
   nameOverride: promstack
   cleanPrometheusOperatorObjectNames: true

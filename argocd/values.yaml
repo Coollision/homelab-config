@@ -75,6 +75,16 @@ argo-cd:
           - BackgroundScanReport
           - ClusterBackgroundScanReport
           - UpdateRequest
+        ### Longhorn backup/snapshot resources are runtime data and should not be pruned by GitOps
+        - apiGroups:
+          - longhorn.io
+          kinds:
+          - Snapshot
+          - Backup
+          - BackupVolume
+          - BackupBackingImage
+          - SystemBackup
+          - SystemRestore
 
     params:
       server.insecure: true

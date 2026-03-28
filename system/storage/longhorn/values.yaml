@@ -67,7 +67,7 @@ longhorn:
   # Default Longhorn StorageClass configuration
   persistence:
     defaultClass: true
-    defaultClassReplicaCount: 2
+    defaultClassReplicaCount: 3
     # best-effort: prefer replicas on same node as pod (better read performance, no scheduling impact)
     defaultDataLocality: best-effort
     defaultFsType: ext4
@@ -98,7 +98,7 @@ storageClasses:
     name: longhorn-shared
     isDefault: false
     reclaimPolicy: Retain
-    replicas: 2
+    replicas: 3
     # 1440 min (24h) — matches the staleReplicaTimeout in the persistence block above
     staleReplicaTimeout: "1440"
     # best-effort data locality for better performance
