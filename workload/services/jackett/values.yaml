@@ -9,6 +9,13 @@ config:
   TZ: Europe/Brussels
   PUID: 1000
   PGID: 1000
+resources:
+  requests:
+    cpu: 100m
+    memory: 192Mi
+  limits:
+    cpu: 400m
+    memory: 384Mi
 ingress_internal:
   host: jackett.<secret:kv/data/domains~local>
   port: web

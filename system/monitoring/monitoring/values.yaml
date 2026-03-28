@@ -53,10 +53,6 @@ promstack:
   kubeApiServer:
     serviceMonitor:
       metricRelabelings: *drop-highcard-buckets
-  kubelet:
-    serviceMonitor:
-      metricRelabelings: *drop-highcard-buckets
-      cAdvisorMetricRelabelings: *drop-highcard-buckets
   alertmanager:
     alertmanagerSpec:
       externalUrl: http://alertmanager.<secret:kv/data/domains~local>/
@@ -111,13 +107,13 @@ promstack:
         periodSeconds: 10
         timeoutSeconds: 10
         failureThreshold: 3
-      # resources:
-      #   limits:
-      #     cpu: 2
-      #     memory: 2.5Gi
-      #   requests:
-      #     cpu: 1200m
-      #     memory: 2Gi
+      resources:
+        requests:
+          cpu: 300m
+          memory: 2Gi
+        limits:
+          cpu: 1500m
+          memory: 3Gi
       storageSpec:
         volumeClaimTemplate:
           metadata:
@@ -236,6 +232,13 @@ promstack:
   grafana:
     externalUrl: http://grafana.<secret:kv/data/domains~local>/
     adminPassword: <secret:kv/data/monitoring/grafana~adminPassword>
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
     sidecar:
       dashboards:
         provider:
@@ -319,26 +322,63 @@ promstack:
             regex: "go_.*|process_.*"
             action: drop
   
-  # ── cAdvisor (kubelet container metrics) filtering ─────────────────────────
-  # Kubelet exposes 69+ container_* metrics from cAdvisor. We only need key metrics.
-  # Drop perfctr, tcp, udp, and other verbose container metrics.
+  # ── kubelet / cAdvisor filtering ────────────────────────────────────────────
+  # Keep a single kubelet block. The plain kubelet endpoint (/metrics) gets a
+  # conservative bucket reduction, while cAdvisor gets the broader container
+  # noise filtering.
   kubelet:
     serviceMonitor:
-      metricRelabelings: &drop-cadvisor-verbose
-        # Drop verbose TCP/UDP connection metrics (one per container per connection type)
+      metricRelabelings:
+        # Reduce bucket cardinality of kubelet storage operations.
+        - sourceLabels: [__name__, le]
+          regex: "(csi_operations|storage_operation_duration)_seconds_bucket;(0.25|2.5|15|25|120|600)(\\.0)?"
+          action: drop
+      cAdvisorMetricRelabelings:
+        # Drop less useful container CPU metrics.
+        - sourceLabels: [__name__]
+          regex: 'container_cpu_(cfs_throttled_seconds_total|load_average_10s|system_seconds_total|user_seconds_total)'
+          action: drop
+        # Drop less useful / always zero filesystem metrics.
+        - sourceLabels: [__name__]
+          regex: 'container_fs_(io_current|io_time_seconds_total|io_time_weighted_seconds_total|reads_merged_total|sector_reads_total|sector_writes_total|writes_merged_total)'
+          action: drop
+        # Drop less useful / always zero container memory metrics.
+        - sourceLabels: [__name__]
+          regex: 'container_memory_(mapped_file|swap)'
+          action: drop
+        # Drop less useful container process metrics.
+        - sourceLabels: [__name__]
+          regex: 'container_(file_descriptors|tasks_state|threads_max)'
+          action: drop
+        # Drop container_memory_failures_total{scope="hierarchy"} metrics,
+        # we only need the container scope.
+        - sourceLabels: [__name__, scope]
+          regex: 'container_memory_failures_total;hierarchy'
+          action: drop
+        # Drop container network metrics for noisy virtual interfaces.
+        - sourceLabels: [__name__, interface]
+          regex: 'container_network_.*;(cali|cilium|cni|lxc|nodelocaldns|tunl).*'
+          action: drop
+        # Drop container spec metrics that overlap with kube-state-metrics.
+        - sourceLabels: [__name__]
+          regex: 'container_spec.*'
+          action: drop
+        # Drop cgroup metrics with no pod.
+        - sourceLabels: [id, pod]
+          regex: '.+;'
+          action: drop
+        # Drop verbose TCP/UDP connection metrics (one per container per connection type).
         - sourceLabels: [__name__]
           regex: "container_network_tcp.*|container_network_udp.*"
           action: drop
-        # Drop filesystem details we don't dashboard
+        # Drop filesystem details we don't dashboard.
         - sourceLabels: [__name__]
           regex: "container_fs_usage_bytes|container_fs_limits_bytes"
           action: drop
-        # Drop advanced metrics (perf counters, etc.)
+        # Drop advanced metrics (perf counters, etc.).
         - sourceLabels: [__name__]
           regex: "container_perf.*|container_last_seen|container_last_recorded.*|container_start_time_seconds"
           action: drop
-      cAdvisorMetricRelabelings: *drop-cadvisor-verbose
-    nameOverride: node-exporter
   nameOverride: promstack
   cleanPrometheusOperatorObjectNames: true
   defaultRules:
