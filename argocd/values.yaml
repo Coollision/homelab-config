@@ -100,6 +100,8 @@ argo-cd:
       reposerver.max.combined.directory.manifests.size: "100M"
       # Exclude non-manifest paths from CMP tar stream to reduce sidecar memory pressure
       reposerver.plugin.tar.exclusions: ".git/*;.github/*;ansible/*;node-setup/*;*.md"
+      # Enable narrowed file streaming to CMP when app-level manifest-generate-paths annotations are present
+      reposerver.plugin.use.manifest.generate.paths: "true"
       # Enable git globbing improvements for nested ApplicationSet patterns
       applicationsetcontroller.enable.new.git.file.globbing: "true"
       # Disable plugin path optimization for now - path resolution issues with relative paths
@@ -183,6 +185,8 @@ argo-cd:
       # Increase timeout for Helm/Kustomize execution (default 90s)
       - name: ARGOCD_EXEC_TIMEOUT
         value: "300s"
+      - name: ARGOCD_EXEC_FATAL_TIMEOUT
+        value: "30s"
     extraContainers:
       - name: avp
         command: [ /var/run/argocd/argocd-cmp-server ]
@@ -195,6 +199,10 @@ argo-cd:
             value: "1100MiB"
           - name: GOGC
             value: "50"
+          - name: ARGOCD_EXEC_TIMEOUT
+            value: "300s"
+          - name: ARGOCD_EXEC_FATAL_TIMEOUT
+            value: "30s"
           - name: ARGOCD_PLUGIN_TIMEOUT
             value: "300"
           - name: VAULT_CLIENT_TIMEOUT

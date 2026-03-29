@@ -3,6 +3,8 @@ kind: Application
 metadata:
   name: argocd-apps
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/manifest-generate-paths: "/applications;/lib/shared-lib;/lib/longhorn-storage-lib"
 spec:
   project: default
   source:
