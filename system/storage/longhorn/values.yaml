@@ -30,6 +30,12 @@ longhorn:
     # rebuilding it on another node. 600 = 10 min: avoids spurious rebuilds from brief
     # network hiccups, but recovers quickly from real node failures.
     replicaReplenishmentWaitInterval: 600
+    # Limit concurrent replica rebuilds per node to avoid I/O thrashing
+    concurrentReplicaRebuildPerNodeLimit: 2
+    # Limit concurrent backup requests
+    concurrentVolumeBackupBackupCriticalRequests: 2
+    # Limit concurrent automatic engine upgrades
+    concurrentAutomaticEngineUpgradePerNodeLimit: 1
     # Snapshot & backup settings
     # fast-check: only checksums new/modified data — catches silent corruption without full scan overhead
     snapshotDataIntegrity: fast-check
