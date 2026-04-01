@@ -1,0 +1,6 @@
+apiVersion: v2
+name: aws-tunnels
+description: AWS SSM tunnel deployments with shared auth server and multi-tunnel support
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

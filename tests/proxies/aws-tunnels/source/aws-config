@@ -1,0 +1,7 @@
+[profile {{ .Values.aws.profile }}]
+sso_start_url  = {{ .Values.aws.ssoStartUrl }}
+sso_region     = {{ .Values.aws.region }}
+sso_account_id = {{ .Values.aws.accountId }}
+sso_role_name  = {{ .Values.aws.roleName }}
+region         = {{ .Values.aws.region }}
+output         = json

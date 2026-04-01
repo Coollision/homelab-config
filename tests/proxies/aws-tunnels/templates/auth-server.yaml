@@ -1,0 +1,135 @@
+{{- if .Values.auth.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.auth.name }}
+  namespace: {{ include "aws-tunnels.namespace" . }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.auth.name }}
+    app.kubernetes.io/part-of: {{ include "aws-tunnels.partOf" . }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.auth.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.auth.name }}
+        app.kubernetes.io/part-of: {{ include "aws-tunnels.partOf" . }}
+      annotations:
+        checksum/server: {{ $.Files.Get "source/server.py" | sha256sum }}
+        checksum/awsconfig: {{ tpl ($.Files.Get "source/aws-config") . | sha256sum }}
+    spec:
+      affinity:
+{{ include "aws-tunnels.excludedNodeAffinity" . | indent 8 }}
+      initContainers:
+        - name: install-aws-cli
+          image: {{ .Values.auth.image }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              apt-get update -qq && apt-get install -y -qq curl unzip > /dev/null
+              curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+              unzip -q /tmp/awscliv2.zip -d /tmp
+              /tmp/aws/install --install-dir /opt/aws-cli --bin-dir /opt/aws-bin
+              rm -rf /tmp/aws /tmp/awscliv2.zip
+          resources:
+{{ toYaml .Values.auth.initResources | indent 12 }}
+          volumeMounts:
+            - name: aws-cli-bin
+              mountPath: /opt/aws-bin
+            - name: aws-cli-lib
+              mountPath: /opt/aws-cli
+      containers:
+        - name: auth-server
+          image: {{ .Values.auth.image }}
+          command: ["python3", "/app/server.py"]
+          env:
+            - name: AWS_PROFILE
+              value: {{ .Values.aws.profile | quote }}
+            - name: AWS_CONFIG_FILE
+              value: /root/.aws/config
+            - name: HOME
+              value: /root
+            - name: PATH
+              value: "/opt/aws-bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            - name: PORT
+              value: {{ .Values.auth.port | quote }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.auth.port }}
+              protocol: TCP
+          volumeMounts:
+            - name: server-script
+              mountPath: /app
+            - name: aws-config
+              mountPath: /root/.aws/config
+              subPath: config
+            - name: credentials
+              mountPath: /aws-creds
+            - name: credentials
+              mountPath: /root/.aws/sso
+              subPath: sso
+            - name: aws-cli-bin
+              mountPath: /opt/aws-bin
+            - name: aws-cli-lib
+              mountPath: /opt/aws-cli
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.auth.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          resources:
+{{ toYaml .Values.auth.resources | indent 12 }}
+      volumes:
+        - name: server-script
+          configMap:
+            name: {{ .Values.shared.authServerConfigMapName }}
+            defaultMode: 0755
+        - name: aws-config
+          configMap:
+            name: {{ .Values.shared.awsConfigMapName }}
+        - name: credentials
+          persistentVolumeClaim:
+            claimName: {{ .Values.pvc.name }}
+        - name: aws-cli-bin
+          emptyDir: {}
+        - name: aws-cli-lib
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.auth.name }}
+  namespace: {{ include "aws-tunnels.namespace" . }}
+spec:
+  selector:
+    app: {{ .Values.auth.name }}
+  ports:
+    - name: http
+      port: {{ .Values.auth.port }}
+      targetPort: {{ .Values.auth.port }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ .Values.auth.name }}
+  namespace: {{ include "aws-tunnels.namespace" . }}
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`{{ .Values.auth.host }}`)
+      services:
+        - kind: Service
+          name: {{ .Values.auth.name }}
+          namespace: {{ include "aws-tunnels.namespace" . }}
+          port: {{ .Values.auth.port }}
+          scheme: http
+  tls: {}
+{{- end }}

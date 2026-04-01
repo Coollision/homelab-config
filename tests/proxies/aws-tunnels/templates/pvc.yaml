@@ -1,0 +1,66 @@
+{{- if .Values.pvc.longhornVolume.enabled }}
+apiVersion: longhorn.io/v1beta2
+kind: Volume
+metadata:
+  name: {{ .Values.pvc.longhornVolume.name }}
+  namespace: {{ .Values.pvc.storageNamespace }}
+  annotations:
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false
+  labels:
+{{ toYaml .Values.pvc.longhornVolume.labels | indent 4 }}
+spec:
+  accessMode: {{ .Values.pvc.longhornVolume.accessMode }}
+  dataEngine: {{ .Values.pvc.longhornVolume.dataEngine }}
+  dataLocality: {{ .Values.pvc.longhornVolume.dataLocality }}
+  frontend: {{ .Values.pvc.longhornVolume.frontend }}
+  numberOfReplicas: {{ .Values.pvc.longhornVolume.numberOfReplicas }}
+  size: {{ .Values.pvc.longhornVolume.sizeBytes | quote }}
+  diskSelector: []
+  nodeSelector: []
+  replicaAutoBalance: {{ .Values.pvc.longhornVolume.replicaAutoBalance }}
+  revisionCounterDisabled: {{ .Values.pvc.longhornVolume.revisionCounterDisabled }}
+  snapshotDataIntegrity: {{ .Values.pvc.longhornVolume.snapshotDataIntegrity }}
+  Standby: {{ .Values.pvc.longhornVolume.standby }}
+  migratable: {{ .Values.pvc.longhornVolume.migratable }}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ .Values.pvc.name }}
+  annotations:
+    longhorn.io/volume-name: {{ .Values.pvc.longhornVolume.name }}
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false
+spec:
+  capacity:
+    storage: {{ .Values.pvc.size }}
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: {{ .Values.pvc.storageClassName }}
+  csi:
+    driver: driver.longhorn.io
+    fsType: ext4
+    volumeHandle: {{ .Values.pvc.longhornVolume.name }}
+---
+{{- end }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.pvc.name }}
+  namespace: {{ .Values.pvc.namespace }}
+  labels:
+    smb-access: shared
+    smb-share-name: {{ .Values.pvc.name }}
+  annotations:
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false
+spec:
+  storageClassName: {{ .Values.pvc.storageClassName }}
+  {{- if .Values.pvc.longhornVolume.enabled }}
+  volumeName: {{ .Values.pvc.longhornVolume.name }}
+  {{- end }}
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: {{ .Values.pvc.size }}
