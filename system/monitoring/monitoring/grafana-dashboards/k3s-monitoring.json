@@ -1216,11 +1216,13 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
+          "editorMode": "code",
           "expr": "sum without(pod) (rpi_cpu_temperature_celsius)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
           "legendFormat": "cpu: {{instance}}",
+          "range": true,
           "refId": "A"
         },
         {
@@ -1253,12 +1255,24 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "avg by (instance) (node_hwmon_temp_celsius{chip=\"nvme_nvme0\", service=\"monitoring-node-exporter\"})",
+          "expr": "avg by (instance) (node_hwmon_temp_celsius{chip=\"nvme_nvme0\", service=\"monitoring-prometheus-node-exporter\"})",
           "hide": true,
           "instant": false,
           "legendFormat": "disk: {{instance}}",
           "range": true,
           "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "avg by (instance) (node_hwmon_temp_celsius{chip=\"platform_coretemp_0\", service=\"monitoring-prometheus-node-exporter\"})",
+          "instant": false,
+          "legendFormat": "cpu: {{instance}}",
+          "range": true,
+          "refId": "E"
         }
       ],
       "title": "Temperature",
@@ -1859,13 +1873,13 @@
     "list": []
   },
   "time": {
-    "from": "now-7d",
+    "from": "now-2d",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
   "title": "k3s Monitoring Overvieuw",
   "uid": "82pBZCmRkasd",
-  "version": 3,
+  "version": 4,
   "weekStart": ""
 }
