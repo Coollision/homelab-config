@@ -834,6 +834,8 @@ class SMBOperator:
             "level2 oplocks = yes",
             "",
         ]
+
+        veto_files = "/.DS_Store/._*/.Spotlight-V100/.TemporaryItems/.Trashes/.fseventsd/Thumbs.db/desktop.ini/$RECYCLE.BIN/System Volume Information/lost+found/"
         
         for share in shares:
             lines.extend([
@@ -849,6 +851,8 @@ class SMBOperator:
                 f"write list = " + ("" if share.readonly else self.config.smb_username),
                 "force user = root",
                 "force group = root",
+                f"veto files = {veto_files}",
+                "delete veto files = yes",
                 "create mask = 0755",
                 "directory mask = 0755",
                 ""
