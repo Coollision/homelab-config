@@ -41,10 +41,9 @@ metallb:
     frrMetrics:
       resources:
         requests:
-          cpu: 5m
+          cpu: 10m
           memory: 24Mi
         limits:
-          cpu: 50m
           memory: 64Mi
     reloader:
       resources:
