@@ -23,5 +23,8 @@ ingress_internal_secure:
   port: ingress
 storage:
   - mountPath: /opt/cloudbeaver/workspace
-    size: 5Gi
-    type: nfs-client
+    size: 512Mi
+    type: longhorn
+    namesuffix: workspace
+    volumeName: cloudbeaver-workspace
+    protect: true
