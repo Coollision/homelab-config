@@ -3,7 +3,7 @@ fullnameOverride: babybuddy
 statefulset:
   image:
     repository: lscr.io/linuxserver/babybuddy
-    tag: 2.7.1
+    tag: 2.8.0
   ports:
     http: 8000
 
