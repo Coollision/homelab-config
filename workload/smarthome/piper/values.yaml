@@ -1,0 +1,21 @@
+fullnameOverride: piper
+deployment:
+  image:
+    repository: rhasspy/wyoming-piper
+    tag: 2.2.2
+  ports:
+    piper-port: 10200
+  args:
+    - --voice
+    - nl_BE-rdh-medium
+    - --data-dir
+    - /data
+config:
+  TZ: Europe/Brussels
+storage:
+  - mountPath: /data
+    nameSuffix: data
+    size: 512Mi
+    type: longhorn
+    volumeName: piper-data
+    replicas: 2
