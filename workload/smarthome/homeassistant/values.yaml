@@ -16,9 +16,12 @@ homeassistantdb:
     MYSQL_PASSWORD: <secret:kv/data/smarthome/homeassistant-db~password>
   storage:
     - mountPath: /var/lib/mysql
-      storagePath: homeassistant-db/data
-      size: 30Gi
-      type: nfs-client
+      size: 20Gi
+      type: longhorn
+      volumeName: homeassistant-db
+      nameSuffix: db
+      protect: true
+
   probes:
     livenessProbe:
       exec:
@@ -78,9 +81,13 @@ homeassistant:
     port: web
   storage:
     - mountPath: /config
-      storagePath: homeassistant/config
-      size: 30Gi
-      type: nfs-client
+      size: 2Gi
+      type: longhorn
+      volumeName: homeassistant
+      nameSuffix: config
+      storageClass: longhorn-shared
+      protect: true
+
   hostNetwork: true
   dnsPolicy: ClusterFirstWithHostNet
   imagePreSync: true
