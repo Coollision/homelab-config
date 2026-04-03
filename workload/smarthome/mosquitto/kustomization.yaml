@@ -1,0 +1,93 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Patches for Helm-rendered resources
+patches:
+  - target:
+      group: apps
+      version: v1
+      kind: StatefulSet
+      name: mosquitto
+      namespace: smarthome
+    patch: |-
+      - op: add
+        path: /spec/template/spec/initContainers
+        value:
+        - name: mosquitto-init
+          image: eclipse-mosquitto:2.0.22-openssl
+          command: ["/bin/sh", "-c"]
+          args:
+          - |
+            echo "$(cat /mosquitto/config/credential1)" >> /mosquitto/creds/credentials && \
+            echo "$(cat /mosquitto/config/credential2)" >> /mosquitto/creds/credentials && \
+            echo "$(cat /mosquitto/config/credential3)" >> /mosquitto/creds/credentials && \
+            echo "$(cat /mosquitto/config/credential4)" >> /mosquitto/creds/credentials && \
+            echo "$(cat /mosquitto/config/credential5)" >> /mosquitto/creds/credentials && \
+            echo "$(cat /mosquitto/config/credential6)" >> /mosquitto/creds/credentials && \
+            chmod 0700 /mosquitto/creds/credentials && \
+            mosquitto_passwd -U /mosquitto/creds/credentials
+          volumeMounts:
+          - name: mosquitto-config
+            mountPath: /mosquitto/config
+          - name: mosquitto-creds
+            mountPath: /mosquitto/creds
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/0
+        value:
+          name: mosquitto-config
+          mountPath: /mosquitto/config
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/1
+        value:
+          name: mosquitto-creds
+          mountPath: /mosquitto/creds
+      - op: replace
+        path: /spec/serviceName
+        value: mosquitto-mqtt
+      - op: add
+        path: /spec/template/spec/volumes/0
+        value:
+          name: mosquitto-creds
+          emptyDir: {}
+      - op: add
+        path: /spec/template/spec/volumes/1
+        value:
+          name: mosquitto-config
+          configMap:
+            name: mosquitto-config
+  - target:
+      group: ""
+      version: v1
+      kind: Service
+      name: mosquitto-service
+      namespace: smarthome
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: mosquitto-mqtt
+      - op: replace
+        path: /spec/type
+        value: LoadBalancer
+      - op: add
+        path: /spec/loadBalancerIP
+        value: <secret:kv/data/smarthome/mosquito~ip>
+      - op: replace
+        path: /spec/ports/0/port
+        value: 1880
+
+# ConfigMap from local file
+generatorOptions:
+  disableNameSuffixHash: true
+
+configMapGenerator:
+  - name: mosquitto-config
+    namespace: smarthome
+    files:
+      - mosquitto.conf
+    literals:
+      - credential1=<secret:kv/data/smarthome/mosquito~credential1>
+      - credential2=<secret:kv/data/smarthome/mosquito~credential2>
+      - credential3=<secret:kv/data/smarthome/mosquito~credential3>
+      - credential4=<secret:kv/data/smarthome/mosquito~credential4>
+      - credential5=<secret:kv/data/smarthome/mosquito~credential5>
+      - credential6=<secret:kv/data/smarthome/mosquito~credential6>
