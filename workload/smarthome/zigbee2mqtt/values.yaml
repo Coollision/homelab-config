@@ -17,9 +17,11 @@ ingress_internal:
   port: web
 storage:
   - mountPath: /data
-    storagePath: zigbee2mqtt/data
-    size: 10Gi
-    type: nfs-client
+    type: longhorn
+    volumeName: zigbee2mqtt
+    storageClass: longhorn-shared
+    size: 128Mi
+    protect: true
 
 affinity:
   node:
