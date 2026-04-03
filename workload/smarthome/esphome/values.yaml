@@ -16,6 +16,8 @@ ingress_internal_secure:
   port: web
 storage:
   - mountPath: /config
-    storagePath: esphome
-    size: 30Gi
-    type: nfs-client
+    type: longhorn
+    size: 15Gi
+    volumeName: esphome
+    storageClass: longhorn-shared
+    protect: true
