@@ -1,0 +1,31 @@
+# Mosquito StatefulSet configuration using shared-lib
+fullnameOverride: mosquitto
+
+statefulset:
+  image:
+    repository: eclipse-mosquitto
+    tag: "2.0.22-openssl"
+  
+  ports:
+    mqtt: 1883
+
+# Environment variables
+config:
+  TZ: Europe/Brussels
+
+# Storage configuration - PVC for data persistence
+storage:
+  - mountPath: /mosquitto/data
+    size: 128Mi
+    type: longhorn
+    volumeName: mosquitto
+    replicas: 2
+    protect: true
+
+# Service configuration:
+# - shared-lib creates service automatically from statefulset.ports
+# - Kustomize patch in kustomization.yaml configures:
+#   - Service name: mosquitto-mqtt
+#   - Type: LoadBalancer
+#   - LoadBalancerIP: <secret:kv/data/smarthome/mosquito~ip>
+#   - Maps service port 1880 to container port 1883
