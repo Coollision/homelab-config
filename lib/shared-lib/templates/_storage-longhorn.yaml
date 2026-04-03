@@ -36,6 +36,7 @@
 {{- $sc := .storage.storageClass | default "longhorn" -}}
 {{- $replicas := .storage.replicas | default 3 -}}
 {{- $accessMode := .storage.volumeAccessMode | default (ternary "rwx" "rwo" (eq $sc "longhorn-shared")) -}}
+{{- $protect := ne .storage.protect false -}}
 {{ $sizeBytes := include "shared-lib.storage.sizeToBytes" .storage }}
 ---
 apiVersion: longhorn.io/v1beta2
@@ -43,12 +44,12 @@ kind: Volume
 metadata:
   name: {{ $volumeName }}
   namespace: {{ $volNs }}
-  {{- if or .root.Values.syncWave .storage.annotations .storage.protect }}
+  {{- if or .root.Values.syncWave .storage.annotations $protect }}
   annotations:
     {{- if .root.Values.syncWave }}
     argocd.argoproj.io/sync-wave: {{ .root.Values.syncWave | default 0 | quote }}
     {{- end }}
-    {{- if .storage.protect }}
+    {{- if $protect }}
     argocd.argoproj.io/sync-options: Delete=false,Prune=false
     {{- end }}
     {{- with .storage.annotations }}
