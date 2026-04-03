@@ -1,0 +1,31 @@
+fullnameOverride: whisper
+statefulset:
+  image:
+    repository: rhasspy/wyoming-whisper
+    tag: 3.1.0
+  ports:
+    whisper: 10300
+  args:
+    - --data-dir
+    - /data
+    - --download-dir
+    - /data
+    - --language
+    - nl
+    - --model
+    - medium-int8
+    - --beam-size
+    - "5"
+    - --compute-type
+    - int8
+    - --device
+    - cpu
+config:
+  TZ: Europe/Brussels
+storage:
+  - mountPath: /data
+    nameSuffix: data
+    size: 6Gi
+    type: longhorn
+    volumeName: whisper-data
+    replicas: 2
