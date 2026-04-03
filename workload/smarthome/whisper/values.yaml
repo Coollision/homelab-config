@@ -29,3 +29,11 @@ storage:
     type: longhorn
     volumeName: whisper-data
     replicas: 2
+
+affinity:
+  node:
+    required:
+      - matchExpressions:
+          - key: type
+            operator: In
+            values: ["mini"]
