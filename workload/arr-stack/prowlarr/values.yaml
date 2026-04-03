@@ -1,0 +1,40 @@
+fullnameOverride: prowlarr
+statefullset:
+  image:
+    repository: linuxserver/prowlarr
+    tag: 2.3.0
+    imagePullPolicy: Always
+  ports:
+    web: 9696
+
+config:
+  TZ: Europe/Brussels
+  PUID: 1000
+  PGID: 1000
+
+arrXmlPostgres:
+  enabled: true
+  requireExistingConfig: true
+  userKey: prowlarr_user
+  passwordKey: prowlarr_password
+  mainDbKey: prowlarr_database
+  logDbKey: prowlarr_database_logs
+
+podSecurityContext:
+  fsGroup: 1000
+
+ingress_internal:
+  host: prowlarr.<secret:kv/data/domains~local>
+  port: web
+
+ingress_internal_secure:
+  host: prowlarr.<secret:kv/data/domains~domain>
+  port: web
+
+storage:
+  - type: longhorn
+    mountPath: /config
+    size: 8Gi
+    nameSuffix: config
+    volumeName: arr-stack-prowlarr-config
+    protect: true

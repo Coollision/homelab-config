@@ -43,7 +43,10 @@ config:
     configMapKeyRef:
       name: service-db
       key: port
-  DB_NAME: jellyseerr
+  DB_NAME:
+    configMapKeyRef:
+      name: service-db
+      key: jellyseerr_database
   DB_USER:
     secretKeyRef:
       name: services-db
@@ -70,4 +73,7 @@ ingress_external_secure:
 storage:
   - mountPath: /app/config
     size: 5Gi
-    type: nfs-client
+    type: longhorn
+    nameSuffix: config
+    volumeName: arr-stack-jellyseerr-config
+    protect: true

@@ -1,0 +1,164 @@
+{{- if .Values.dbAutomation.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-db-reconciler-script
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ .Values.dbAutomation.syncWave | default "5" | quote }}
+data:
+  reconcile.sh: |
+    #!/bin/sh
+    set -eu
+
+    deadline=$(( $(date +%s) + {{ .Values.dbAutomation.timeoutSeconds | default 900 }} ))
+    until PGPASSWORD="$POSTGRES_ADMIN_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_ADMIN_USER" -d postgres -c 'SELECT 1;' >/dev/null 2>&1; do
+      if [ "$(date +%s)" -ge "$deadline" ]; then
+        echo "Timed out waiting for postgres"
+        exit 1
+      fi
+      echo "Waiting for postgres to become ready"
+      sleep 5
+    done
+
+    desired_dbs="{{ range $i, $db := .Values.dbAutomation.databases }}{{ if $i }} {{ end }}{{ $db.name }}{{ end }}"
+    desired_user_keys="{{ range $i, $u := .Values.dbAutomation.users }}{{ if $i }} {{ end }}{{ $u.usernameKey }}{{ end }}"
+    desired_users=""
+    for user_key in $desired_user_keys; do
+      user_name="$(printenv USERNAME_${user_key})"
+      desired_users="$desired_users $user_name"
+    done
+
+{{- range .Values.dbAutomation.users }}
+    role_name="$(printenv USERNAME_{{ .usernameKey }})"
+    role_password="$(printenv PASSWORD_{{ .passwordKey }})"
+    role_superuser={{ ternary "true" "false" .superuser }}
+
+    if [ "$role_superuser" = "true" ]; then
+      role_attr='SUPERUSER'
+    else
+      role_attr='NOSUPERUSER'
+    fi
+
+    PGPASSWORD="$POSTGRES_ADMIN_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_ADMIN_USER" -d postgres -c "SELECT CASE WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '$role_name') THEN format('ALTER ROLE %I LOGIN PASSWORD %L ' || '$role_attr', '$role_name', '$role_password') ELSE format('CREATE ROLE %I LOGIN PASSWORD %L ' || '$role_attr', '$role_name', '$role_password') END \\gexec; SELECT format('COMMENT ON ROLE %I IS %L', '$role_name', 'managed-by=arr-db-reconciler') \\gexec"
+{{- end }}
+
+{{- range .Values.dbAutomation.databases }}
+    db_name={{ .name | quote }}
+    db_owner="$(printenv USERNAME_{{ .ownerKey }})"
+
+    PGPASSWORD="$POSTGRES_ADMIN_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_ADMIN_USER" -d postgres -c "SELECT CASE WHEN EXISTS (SELECT 1 FROM pg_database WHERE datname = '$db_name') THEN format('ALTER DATABASE %I OWNER TO %I', '$db_name', '$db_owner') ELSE format('CREATE DATABASE %I OWNER %I', '$db_name', '$db_owner') END \\gexec"
+
+    PGPASSWORD="$POSTGRES_ADMIN_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_ADMIN_USER" -d postgres -c "SELECT format('COMMENT ON DATABASE %I IS %L', '$db_name', 'managed-by=arr-db-reconciler') \\gexec"
+  {{- range .access }}
+    access_role="$(printenv USERNAME_{{ .usernameKey }})"
+    PGPASSWORD="$POSTGRES_ADMIN_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_ADMIN_USER" -d postgres -c "SELECT format('GRANT {{ join ", " .privileges }} ON DATABASE %I TO %I', '$db_name', '$access_role') \\gexec"
+  {{- end }}
+{{- if $.Values.dbAutomation.access.revokeUnlisted }}
+    managed_roles="$(PGPASSWORD=\"$POSTGRES_ADMIN_PASSWORD\" psql -h \"$POSTGRES_HOST\" -p \"$POSTGRES_PORT\" -U \"$POSTGRES_ADMIN_USER\" -d postgres -At -c \"SELECT rolname FROM pg_roles WHERE shobj_description(oid, 'pg_authid') = 'managed-by=arr-db-reconciler'\")"
+    allowed_roles="$db_owner"
+  {{- range .access }}
+    allowed_roles="$allowed_roles $(printenv USERNAME_{{ .usernameKey }})"
+  {{- end }}
+    for role_name in $managed_roles; do
+      case " $allowed_roles " in
+        *" $role_name "*)
+          :
+          ;;
+        *)
+          echo "Revoking access on $db_name from unmanaged role: $role_name"
+          PGPASSWORD="$POSTGRES_ADMIN_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_ADMIN_USER" -d postgres -c "SELECT format('REVOKE ALL PRIVILEGES ON DATABASE %I FROM %I', '$db_name', '$role_name') \\gexec"
+          ;;
+      esac
+    done
+{{- end }}
+{{- end }}
+
+{{- if .Values.dbAutomation.prune.databases }}
+    managed_dbs="$(PGPASSWORD=\"$POSTGRES_ADMIN_PASSWORD\" psql -h \"$POSTGRES_HOST\" -p \"$POSTGRES_PORT\" -U \"$POSTGRES_ADMIN_USER\" -d postgres -At -c \"SELECT datname FROM pg_database WHERE datname NOT IN ('postgres','template0','template1') AND shobj_description(oid, 'pg_database') = 'managed-by=arr-db-reconciler'\")"
+    for db_name in $managed_dbs; do
+      case " $desired_dbs " in
+        *" $db_name "*)
+          :
+          ;;
+        *)
+          echo "Dropping unmanaged database: $db_name"
+          PGPASSWORD="$POSTGRES_ADMIN_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_ADMIN_USER" -d postgres -c "SELECT format('DROP DATABASE %I', '$db_name') \\gexec"
+          ;;
+      esac
+    done
+{{- end }}
+
+{{- if .Values.dbAutomation.prune.users }}
+    managed_users="$(PGPASSWORD=\"$POSTGRES_ADMIN_PASSWORD\" psql -h \"$POSTGRES_HOST\" -p \"$POSTGRES_PORT\" -U \"$POSTGRES_ADMIN_USER\" -d postgres -At -c \"SELECT rolname FROM pg_roles WHERE shobj_description(oid, 'pg_authid') = 'managed-by=arr-db-reconciler'\")"
+    for role_name in $managed_users; do
+      case " $desired_users " in
+        *" $role_name "*)
+          :
+          ;;
+        *)
+          echo "Dropping unmanaged role: $role_name"
+          PGPASSWORD="$POSTGRES_ADMIN_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_ADMIN_USER" -d postgres -c "SELECT format('DROP ROLE %I', '$role_name') \\gexec"
+          ;;
+      esac
+    done
+{{- end }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-db-reconciler
+  annotations:
+    argocd.argoproj.io/hook: {{ .Values.dbAutomation.hook | default "Sync" | quote }}
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: {{ .Values.dbAutomation.syncWave | default "5" | quote }}
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Chart.Name }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: db-reconciler
+          image: {{ .Values.dbAutomation.image | quote }}
+          imagePullPolicy: {{ .Values.dbAutomation.imagePullPolicy | default "IfNotPresent" | quote }}
+          command:
+            - /bin/sh
+            - /scripts/reconcile.sh
+          volumeMounts:
+            - name: reconcile-script
+              mountPath: /scripts
+              readOnly: true
+          env:
+            - name: POSTGRES_HOST
+              value: {{ .Values.dbAutomation.host | quote }}
+            - name: POSTGRES_PORT
+              value: {{ .Values.dbAutomation.port | quote }}
+            - name: POSTGRES_ADMIN_USER
+              value: {{ .Values.dbAutomation.adminUser | quote }}
+            - name: POSTGRES_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.dbAutomation.adminPassword.secretName | default (printf "%s-postgresql" .Release.Name) | quote }}
+                  key: {{ .Values.dbAutomation.adminPassword.secretKey | default "postgres-password" | quote }}
+{{- range .Values.dbAutomation.users }}
+            - name: USERNAME_{{ .usernameKey }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.dbAutomation.userSecretName | default "services-db" | quote }}
+                  key: {{ .usernameKey | quote }}
+            - name: PASSWORD_{{ .passwordKey }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.dbAutomation.userSecretName | default "services-db" | quote }}
+                  key: {{ .passwordKey | quote }}
+{{- end }}
+      volumes:
+        - name: reconcile-script
+          configMap:
+            name: {{ .Release.Name }}-db-reconciler-script
+            defaultMode: 0755
+{{- end }}

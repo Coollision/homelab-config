@@ -1,0 +1,24 @@
+{{- if and .Values.dbAutomation.enabled .Values.dbAutomation.managedSecret.enabled }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.dbAutomation.managedSecret.name | default "services-db" }}
+  namespace: {{ .Release.Namespace }}
+type: Opaque
+data:
+{{- range .Values.dbAutomation.managedSecret.entries }}
+  {{ required "dbAutomation.managedSecret.entries[].key is required" .key }}: {{ required "dbAutomation.managedSecret.entries[].value is required" .value }}
+{{- end }}
+{{- end }}
+{{- if and .Values.dbAutomation.enabled .Values.dbAutomation.managedConfigMap.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.dbAutomation.managedConfigMap.name | default "service-db" }}
+  namespace: {{ .Release.Namespace }}
+data:
+{{- range .Values.dbAutomation.managedConfigMap.entries }}
+  {{ required "dbAutomation.managedConfigMap.entries[].key is required" .key }}: {{ required "dbAutomation.managedConfigMap.entries[].value is required" .value | quote }}
+{{- end }}
+{{- end }}

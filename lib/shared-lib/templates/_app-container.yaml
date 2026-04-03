@@ -37,6 +37,12 @@ volumeMounts:
   - name: {{ printf "%s-%s" (include "helm.fullname" $root) (default "" .nameSuffix) | trunc 63 | trimSuffix "-" }}
     mountPath: {{ .mountPath }}
   {{- end }}
+  {{- if .Values.extraVolumeMounts }}
+  {{- toYaml .Values.extraVolumeMounts | nindent 2 }}
+  {{- end }}
+{{- else if .Values.extraVolumeMounts }}
+volumeMounts:
+  {{- toYaml .Values.extraVolumeMounts | nindent 2 }}
 {{- end }}
 {{ include "shared-lib.probes" .  -}}
 {{- end -}}

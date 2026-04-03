@@ -21,9 +21,11 @@ ingress_internal:
   port: web
 storage:
   - mountPath: /config
-    storagePath: jackett/config
     size: 10Gi
-    type: nfs-client
+    type: longhorn
+    nameSuffix: config
+    volumeName: arr-stack-jackett-config
+    protect: true
 podSecurityContext:
   fsGroup: 1000
 probes:
