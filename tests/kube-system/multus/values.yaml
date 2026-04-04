@@ -1,0 +1,9 @@
+image:
+  repository: ghcr.io/k8snetworkplumbingwg/multus-cni
+  tag: stable-thick
+
+# K3s stores CNI config at a non-standard path.
+# Standard path (/etc/cni/net.d) is NOT used by K3s.
+cni:
+  confDir: /var/lib/rancher/k3s/agent/etc/cni/net.d
+  binDir: /opt/cni/bin

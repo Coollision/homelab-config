@@ -1,0 +1,107 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: multus
+  namespace: kube-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  selector:
+    matchLabels:
+      app: multus
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: multus
+    spec:
+      hostNetwork: true
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+      priorityClassName: system-node-critical
+      serviceAccountName: multus
+      initContainers:
+        # Copy the multus-shim CNI binary to the host so kubelet can call it.
+        - name: install-multus-shim
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          command:
+            - cp
+            - /usr/src/multus-cni/bin/multus-shim
+            - /host/opt/cni/bin/multus-shim
+          volumeMounts:
+            - name: cni-bin
+              mountPath: /host/opt/cni/bin
+      containers:
+        - name: kube-multus
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          command:
+            - /usr/src/multus-cni/bin/multus-daemon
+          args:
+            # Auto-detect the existing CNI config (Flannel) and wrap it.
+            - --multus-conf-file=auto
+            # K3s-specific CNI conf dir (NOT /etc/cni/net.d).
+            - --cni-conf-dir={{ .Values.cni.confDir }}
+            - --multus-cni-conf-dir={{ .Values.cni.confDir }}
+            - --cni-bin-dir={{ .Values.cni.binDir }}
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: cni-conf
+              mountPath: /host/etc/cni/net.d
+            - name: cni-bin
+              mountPath: /host/opt/cni/bin
+            - name: host-run
+              mountPath: /host/run
+              mountPropagation: Bidirectional
+            - name: host-var-lib-cni
+              mountPath: /var/lib/cni
+            - name: multus-daemon-config
+              mountPath: /etc/cni/net.d/multus.d
+              readOnly: true
+      volumes:
+        - name: cni-conf
+          hostPath:
+            # K3s writes CNI config here — this is the directory Multus must manage.
+            path: {{ .Values.cni.confDir }}
+        - name: cni-bin
+          hostPath:
+            path: {{ .Values.cni.binDir }}
+        - name: host-run
+          hostPath:
+            path: /run
+        - name: host-var-lib-cni
+          hostPath:
+            path: /var/lib/cni
+        - name: multus-daemon-config
+          configMap:
+            name: multus-daemon-config
+            items:
+              - key: daemon-config.json
+                path: daemon-config.json
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: multus-daemon-config
+  namespace: kube-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+data:
+  daemon-config.json: |
+    {
+      "chrootDir": "/hostroot",
+      "confDir": "{{ .Values.cni.confDir }}",
+      "logToStderr": true,
+      "logLevel": "verbose",
+      "binDir": "{{ .Values.cni.binDir }}",
+      "cniDir": "/var/lib/cni/multus",
+      "socketDir": "/host/run/multus/"
+    }
