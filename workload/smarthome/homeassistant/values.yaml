@@ -7,6 +7,19 @@ homeassistantdb:
       tag: 12.2.2
     ports:
       mysql: 3306
+    args:
+      - --innodb-buffer-pool-size=512M
+      - --innodb-flush-log-at-trx-commit=2
+      - --innodb-log-file-size=128M
+      - --max-connections=20
+      - --innodb-io-capacity=500
+      - --innodb-io-capacity-max=2000
+      - --tmp-table-size=32M
+      - --max-heap-table-size=32M
+      - --innodb-stats-on-metadata=0
+      - --query-cache-type=0
+      - --query-cache-size=0
+      - --skip-name-resolve
   config:
     ServerName: mariadb
     MYSQL_ROOT_PASSWORD: <secret:kv/data/smarthome/homeassistant-db~root-password>
@@ -43,7 +56,7 @@ homeassistantdb:
       failureThreshold: 4
   resources:
     requests:
-      memory: "600Mi"
+      memory: "700Mi"
       cpu: "150m"
     limits:
       memory: "1Gi"
