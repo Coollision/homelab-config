@@ -78,7 +78,7 @@ homeassistant:
   statefulset:
     image:
       repository: ghcr.io/home-assistant/home-assistant
-      tag: 2026.4.0
+      tag: 2026.4.1
     ports:
       web: 8123
   config:
