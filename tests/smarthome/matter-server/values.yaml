@@ -1,0 +1,90 @@
+fullnameOverride: matter-server
+
+statefulset:
+  image:
+    repository: ghcr.io/matter-js/matterjs-server
+    tag: stable
+  ports:
+    ws: 5580
+
+config:
+  TZ: Europe/Brussels
+  STORAGE_PATH: /data
+  # PRIMARY_INTERFACE is not needed when node-r is exclusively on VLAN 40:
+  # the host's only interface IS the IoT VLAN interface and mDNS works natively.
+  # Uncomment and set this only if the node has multiple interfaces and you need
+  # to pin Matter to a specific one.
+  # PRIMARY_INTERFACE: <secret:kv/data/smarthome/matter-server~primary-interface>
+
+# Host networking is required for Matter. It lets the container use the node's
+# real network stack so mDNS multicast (224.0.0.251 / ff02::fb) is visible.
+# With node-r on VLAN 40, this gives direct sight of all IoT devices.
+hostNetwork: true
+dnsPolicy: ClusterFirstWithHostNet
+
+imagePreSync: true
+
+# Internal dashboard access via Traefik.
+# Traefik reaches this through Flannel's overlay, which routes across VLANs.
+ingress_internal:
+  host: matter-server.<secret:kv/data/domains~local>
+  port: ws
+
+ingress_internal_secure:
+  host: matter-server.<secret:kv/data/domains~domain>
+  port: ws
+
+storage:
+  - mountPath: /data
+    type: longhorn
+    size: 1Gi
+    volumeName: matter-server
+    nameSuffix: data
+    protect: true
+
+probes:
+  liveness:
+    httpGet:
+      path: /
+      port: ws
+    initialDelaySeconds: 30
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 5
+  readiness:
+    httpGet:
+      path: /
+      port: ws
+    initialDelaySeconds: 15
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+labels:
+  app.kubernetes.io/component: matter-server
+
+# REQUIRED: matter-server MUST run on the node that lives on VLAN 40 (IoT).
+# Add the label `iot-network=true` to node-r before deploying.
+# See MATTER_INTEGRATION.md → "Step 2: Label the IoT node in Kubernetes".
+affinity:
+  node:
+    required:
+      - matchExpressions:
+          - key: iot-network
+            operator: In
+            values: ["true"]
+    preferred:
+      - weight: 50
+        matchExpressions:
+          - key: type
+            operator: NotIn
+            values:
+              - mini
