@@ -21,7 +21,7 @@ spec:
     metadata:
       name: "{{.path.basename}}"
       annotations:
-        argocd.argoproj.io/manifest-generate-paths: "/{{.path.path}};/lib/shared-lib;/lib/longhorn-storage-lib"
+        argocd.argoproj.io/manifest-generate-paths: "/{{.path.path}};/lib/shared-lib;/lib/arr-lib;/lib/longhorn-storage-lib"
     spec:
       project: workloads
       source:
