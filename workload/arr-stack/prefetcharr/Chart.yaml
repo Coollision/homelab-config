@@ -1,6 +1,6 @@
 apiVersion: v2
 name: prefetcharr
-description: A Helm chart for Jellyseerr
+description: A Helm chart for Prefetcharr
 type: application
 version: 0.1.0
 appVersion: "1.0.0"
