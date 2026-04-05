@@ -1,0 +1,49 @@
+---
+- name: Load 8021q kernel module
+  become: true
+  community.general.modprobe:
+    name: 8021q
+    state: present
+    persistent: present
+
+- name: Install vlan tools
+  become: true
+  ansible.builtin.apt:
+    name: vlan
+    state: present
+    cache_valid_time: 600
+
+- name: Ensure systemd-networkd is enabled and running
+  become: true
+  ansible.builtin.systemd:
+    name: systemd-networkd
+    enabled: true
+    state: started
+
+- name: Deploy systemd-networkd .netdev for VLAN {{ vlan_id }}
+  become: true
+  ansible.builtin.template:
+    src: vlan.netdev.j2
+    dest: "/etc/systemd/network/40-vlan{{ vlan_id }}.netdev"
+    owner: root
+    group: systemd-network
+    mode: "0640"
+  notify: Reload networkd
+
+- name: Deploy systemd-networkd .network for VLAN {{ vlan_id }}
+  become: true
+  ansible.builtin.template:
+    src: vlan.network.j2
+    dest: "/etc/systemd/network/41-vlan{{ vlan_id }}.network"
+    owner: root
+    group: systemd-network
+    mode: "0640"
+  notify: Reload networkd
+
+- name: Bring VLAN sub-interface up immediately (no IP assigned)
+  become: true
+  ansible.builtin.command: >
+    ip link set {{ vlan_parent_interface }}.{{ vlan_id }} up
+  register: _vlan_up
+  changed_when: _vlan_up.rc == 0
+  failed_when: false

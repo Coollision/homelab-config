@@ -1,0 +1,7 @@
+# VLAN {{ vlan_id }} sub-interface — no IP assigned to the node.
+# The pod receives its VLAN {{ vlan_id }} address via Multus MACVLAN.
+[Match]
+Name={{ vlan_parent_interface }}.{{ vlan_id }}
+
+[Network]
+LinkLocalAddressing=no

@@ -1,0 +1,3 @@
+---
+vlan_id: 40
+vlan_parent_interface: enp1s0
