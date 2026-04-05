@@ -1,0 +1,39 @@
+fullnameOverride: jackett
+deployment:
+  image:
+    repository: linuxserver/jackett
+    tag: latest
+  ports:
+    web: 9117
+config:
+  TZ: Europe/Brussels
+  PUID: 1000
+  PGID: 1000
+resources:
+  requests:
+    cpu: 100m
+    memory: 192Mi
+  limits:
+    cpu: 400m
+    memory: 384Mi
+ingress_internal:
+  host: jackett.<secret:kv/data/domains~local>
+  port: web
+storage:
+  - mountPath: /config
+    size: 10Gi
+    type: longhorn
+    nameSuffix: config
+    volumeName: arr-stack-jackett-config
+    protect: true
+podSecurityContext:
+  fsGroup: 1000
+probes:
+  liveness:
+    tcpSocket:
+      port: web
+    initialDelaySeconds: 30
+    periodSeconds: 10
+keel:
+  policy: force
+  pollSchedule: "@midnight"

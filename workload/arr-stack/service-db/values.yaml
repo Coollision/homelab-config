@@ -1,0 +1,182 @@
+postgresql:
+  diagnosticMode:
+    enabled: false
+  auth:
+    postgresPassword: <secret:kv/data/services~db_root-pass>
+    usePasswordFiles: false
+  primary:
+    persistence:
+      enabled: true
+      storageClass: longhorn
+      accessModes:
+        - ReadWriteOnce
+      size: 10Gi
+    livenessProbe:
+      initialDelaySeconds: 90
+      periodSeconds: 120
+      timeoutSeconds: 35
+      failureThreshold: 15
+    readinessProbe:
+      initialDelaySeconds: 30
+      periodSeconds: 120
+      timeoutSeconds: 35
+      failureThreshold: 15
+    startupProbe:
+      enabled: true
+      initialDelaySeconds: 120
+      periodSeconds: 30
+      timeoutSeconds: 1
+      failureThreshold: 40
+      successThreshold: 1
+    terminationGracePeriodSeconds: 180
+    # resources:
+    #   limits:
+    #     cpu: 600m
+    #     memory: 256Mi
+    #   requests:
+    #     cpu: 200m
+    #     memory: 128Mi
+
+# Shared memory configuration for better PostgreSQL performance
+shmVolume:
+  enabled: true
+  sizeLimit: "256Mi"
+
+# Volume permissions - critical for NFS mounts
+volumePermissions:
+  enabled: true
+
+dbAutomation:
+  enabled: true
+  # Run as an ArgoCD sync hook so changes reconcile every sync, not only first boot.
+  hook: Sync
+  syncWave: "5"
+  timeoutSeconds: 900
+  image: postgres:16-alpine
+  imagePullPolicy: IfNotPresent
+  host: service-db-postgresql-hl
+  port: "5432"
+  adminUser: postgres
+  adminPassword:
+    # Bitnami chart default secret name is <release-name>-postgresql.
+    secretName: ""
+    secretKey: postgres-password
+  managedSecret:
+    enabled: true
+    name: services-db
+    entries:
+      - key: sonarr_user
+        value: <secret:kv/data/services~sonarr_user | base64>
+      - key: sonarr_password
+        value: <secret:kv/data/services~sonarr_password | base64>
+      - key: radarr_user
+        value: <secret:kv/data/services~radarr_user | base64>
+      - key: radarr_password
+        value: <secret:kv/data/services~radarr_password | base64>
+      - key: prowlarr_user
+        value: <secret:kv/data/services~prowlarr_user | base64>
+      - key: prowlarr_password
+        value: <secret:kv/data/services~prowlarr_password | base64>
+      - key: bazarr_user
+        value: <secret:kv/data/services~bazarr_user | base64>
+      - key: bazarr_password
+        value: <secret:kv/data/services~bazarr_password | base64>
+      - key: jellyseerr_user
+        value: <secret:kv/data/services~jellyseerr_user | base64>
+      - key: jellyseerr_password
+        value: <secret:kv/data/services~jellyseerr_password | base64>
+  managedConfigMap:
+    enabled: true
+    name: service-db
+    entries:
+      - key: host
+        value: service-db-postgresql-hl
+      - key: port
+        value: "5432"
+      - key: sonarr_database
+        value: sonarr_main
+      - key: sonarr_database_logs
+        value: sonarr_log
+      - key: radarr_database
+        value: radarr_main
+      - key: radarr_database_logs
+        value: radarr_log
+      - key: prowlarr_database
+        value: prowlarr_main
+      - key: prowlarr_database_logs
+        value: prowlarr_log
+      - key: bazarr_database
+        value: bazarr_main
+      - key: jellyseerr_database
+        value: jellyseerr
+  userSecretName: services-db
+  access:
+    revokeUnlisted: true
+  prune:
+    users: true
+    databases: true
+  users:
+    - usernameKey: sonarr_user
+      passwordKey: sonarr_password
+      superuser: false
+    - usernameKey: radarr_user
+      passwordKey: radarr_password
+      superuser: false
+    - usernameKey: prowlarr_user
+      passwordKey: prowlarr_password
+      superuser: true
+    - usernameKey: bazarr_user
+      passwordKey: bazarr_password
+      superuser: false
+    - usernameKey: jellyseerr_user
+      passwordKey: jellyseerr_password
+      superuser: false
+  databases:
+    - name: sonarr_main
+      configKey: sonarr_database
+      ownerKey: sonarr_user
+      access:
+        - usernameKey: sonarr_user
+          privileges: [CONNECT, TEMPORARY]
+    - name: sonarr_log
+      configKey: sonarr_database_logs
+      ownerKey: sonarr_user
+      access:
+        - usernameKey: sonarr_user
+          privileges: [CONNECT, TEMPORARY]
+    - name: radarr_main
+      configKey: radarr_database
+      ownerKey: radarr_user
+      access:
+        - usernameKey: radarr_user
+          privileges: [CONNECT, TEMPORARY]
+    - name: radarr_log
+      configKey: radarr_database_logs
+      ownerKey: radarr_user
+      access:
+        - usernameKey: radarr_user
+          privileges: [CONNECT, TEMPORARY]
+    - name: prowlarr_main
+      configKey: prowlarr_database
+      ownerKey: prowlarr_user
+      access:
+        - usernameKey: prowlarr_user
+          privileges: [CONNECT, TEMPORARY]
+    - name: prowlarr_log
+      configKey: prowlarr_database_logs
+      ownerKey: prowlarr_user
+      access:
+        - usernameKey: prowlarr_user
+          privileges: [CONNECT, TEMPORARY]
+    - name: bazarr_main
+      configKey: bazarr_database
+      ownerKey: bazarr_user
+      access:
+        - usernameKey: bazarr_user
+          privileges: [CONNECT, TEMPORARY]
+    - name: jellyseerr
+      configKey: jellyseerr_database
+      ownerKey: jellyseerr_user
+      access:
+        - usernameKey: jellyseerr_user
+          privileges: [CONNECT, TEMPORARY]

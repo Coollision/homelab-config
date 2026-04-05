@@ -1,0 +1,79 @@
+fullnameOverride: jellyseerr
+deployment:
+  image:
+    repository: ghcr.io/seerr-team/seerr
+    tag: v3.1.0
+  ports:
+    ingress: 5055
+
+podSecurityContext:
+  fsGroup: 1000
+  fsGroupChangePolicy: OnRootMismatch
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  privileged: false
+  runAsUser: 1000
+  runAsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+config:
+  TZ: Europe/Brussels
+  LOG_LEVEL: debug
+  DB_TYPE: postgres
+  DB_HOST:
+    configMapKeyRef:
+      name: service-db
+      key: host
+  DB_PORT:
+    configMapKeyRef:
+      name: service-db
+      key: port
+  DB_NAME:
+    configMapKeyRef:
+      name: service-db
+      key: jellyseerr_database
+  DB_USER:
+    secretKeyRef:
+      name: services-db
+      key: jellyseerr_user
+  DB_PASS:
+    secretKeyRef:
+      name: services-db
+      key: jellyseerr_password
+  DB_LOG_QUERIES: "false"
+
+
+ingress_internal:
+  host: jellyseerr.<secret:kv/data/domains~local>
+  port: ingress
+
+ingress_internal_secure:
+  host: jellyseerr.<secret:kv/data/domains~domain>
+  port: ingress
+
+ingress_external_secure:
+  host: jellyseerr.<secret:kv/data/domains~domain>
+  port: ingress
+
+storage:
+  - mountPath: /app/config
+    size: 5Gi
+    type: longhorn
+    nameSuffix: config
+    volumeName: arr-stack-jellyseerr-config
+    protect: true

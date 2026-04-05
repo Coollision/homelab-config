@@ -23,13 +23,6 @@ metadata:
   {{- end }}
 spec:
   replicas: {{ .Values.replicaCount | default "1" }}
-  {{- if .Values.deployment.strategy }}
-  strategy:
-    {{- toYaml .Values.deployment.strategy | nindent 4 }}
-  {{- else }}
-  strategy:
-    type: Recreate
-  {{- end }}
   revisionHistoryLimit: 3
   selector:
     matchLabels:
@@ -60,12 +53,13 @@ spec:
       {{- end }}
       {{- if .Values.initContainers }}
       initContainers:
-        {{- toYaml .Values.initContainers | nindent 8 }}
+        {{- tpl (toYaml .Values.initContainers) . | nindent 8 }}
       {{- end }}
       containers:
         - {{ include "shared-lib.container" . | indent 10 | trim }}
       {{- if or .Values.storage .Values.extraVolumes }}
       volumes:
+        {{- if .Values.storage }}
         {{- range .Values.storage }}
         - name: {{ printf "%s-%s" (include "helm.fullname" $root ) ( default  "" .nameSuffix )| trunc 63 | trimSuffix "-" }}
           persistentVolumeClaim:
@@ -75,8 +69,9 @@ spec:
             claimName: {{ printf "%s-%s" (include "helm.fullname" $root ) ( default  "" .nameSuffix )| trunc 63 | trimSuffix "-" }}
             {{- end }}
         {{- end }}
-        {{- with .Values.extraVolumes }}
-        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if .Values.extraVolumes }}
+        {{- toYaml .Values.extraVolumes | nindent 8 }}
         {{- end }}
       {{- end }}
 {{- end }}

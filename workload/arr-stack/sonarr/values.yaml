@@ -1,0 +1,66 @@
+fullnameOverride: sonarr
+statefulset:
+  image:
+    repository: linuxserver/sonarr
+    tag: 4.0.16
+    imagePullPolicy: Always
+  ports:
+    web: 8989
+
+config:
+  TZ: Europe/Brussels
+  PUID: 1000
+  PGID: 1000
+
+arrXmlPostgres:
+  enabled: true
+  requireExistingConfig: false
+  userKey: sonarr_user
+  passwordKey: sonarr_password
+  mainDbKey: sonarr_database
+  logDbKey: sonarr_database_logs
+
+probes:
+  readiness:
+    httpGet:
+      path: /ping
+      port: web
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+  liveness:
+    httpGet:
+      path: /ping
+      port: web
+    initialDelaySeconds: 90
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+
+podSecurityContext:
+  fsGroup: 1000
+
+ingress_internal:
+  host: sonarr.<secret:kv/data/domains~local>
+  port: web
+
+ingress_internal_secure:
+  host: sonarr.<secret:kv/data/domains~domain>
+  port: web
+
+storage:
+  - type: longhorn
+    mountPath: /config
+    size: 8Gi
+    nameSuffix: config
+    volumeName: arr-stack-sonarr-config
+    protect: true
+  - type: existingClaim
+    mountPath: /data/downloads
+    claimName: arr-stack-downloads
+    nameSuffix: downloads
+  - type: existingClaim
+    mountPath: /data/series
+    claimName: arr-stack-series
+    nameSuffix: series
