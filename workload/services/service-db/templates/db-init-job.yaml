@@ -36,9 +36,19 @@ spec:
                   -v ON_ERROR_STOP=1 "$@"
               }
 
+              # Validate that a string is a safe PostgreSQL identifier
+              validate_identifier() {
+                local name="$1"
+                if ! echo "$name" | grep -qE '^[a-zA-Z_][a-zA-Z0-9_]*$'; then
+                  echo "Error: '$name' is not a valid identifier" >&2
+                  exit 1
+                fi
+              }
+
               create_role_if_not_exists() {
                 local user="$1"
                 local pass="$2"
+                validate_identifier "$user"
                 run_psql -c "
                   DO \$\$
                   BEGIN
@@ -56,6 +66,8 @@ spec:
               create_db_if_not_exists() {
                 local db="$1"
                 local owner="$2"
+                validate_identifier "$db"
+                validate_identifier "$owner"
                 local exists
                 exists=$(run_psql -tAc \
                   "SELECT 1 FROM pg_database WHERE datname='${db}'")
@@ -94,7 +106,7 @@ spec:
               create_db_if_not_exists "bazarr_main"   "$BAZARR_USER"
               create_db_if_not_exists "jellyseerr"    "$JELLYSEERR_USER"
 
-              echo "Database initialisation complete."
+              echo "Database initialization complete."
           env:
             - name: POSTGRES_PASSWORD
               valueFrom:
