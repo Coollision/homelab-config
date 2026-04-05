@@ -1,0 +1,70 @@
+fullnameOverride: bazarr
+
+statefulset:
+  image:
+    repository: linuxserver/bazarr
+    tag: "1.5.6"
+    imagePullPolicy: Always
+  ports:
+    web: 6767
+
+config:
+  TZ: Europe/Brussels
+  PUID: "1000"
+  PGID: "1000"
+  POSTGRES_ENABLED: "true"
+  POSTGRES_HOST:
+    configMapKeyRef:
+      name: service-db
+      key: host
+  POSTGRES_PORT:
+    configMapKeyRef:
+      name: service-db
+      key: port
+  POSTGRES_DATABASE:
+    configMapKeyRef:
+      name: service-db
+      key: bazarr_database
+  POSTGRES_USERNAME:
+    secretKeyRef:
+      name: services-db
+      key: bazarr_user
+  POSTGRES_PASSWORD:
+    secretKeyRef:
+      name: services-db
+      key: bazarr_password
+
+resources:
+  requests:
+    memory: 256Mi
+    cpu: 100m
+  limits:
+    memory: 512Mi
+    cpu: 500m
+
+ingress_internal:
+  host: bazarr.<secret:kv/data/domains~local>
+  port: web
+
+ingress_external_secure:
+  host: bazarr.<secret:kv/data/domains~domain>
+  port: web
+
+storage:
+  - mountPath: /config
+    type: longhorn
+    size: 8Gi
+    nameSuffix: config
+    volumeName: arr-stack-bazarr-config
+    protect: true
+  - mountPath: /data/series
+    type: existingClaim
+    claimName: services-series
+    nameSuffix: series
+  - mountPath: /data/videos
+    type: existingClaim
+    claimName: services-video
+    nameSuffix: videos
+
+podSecurityContext:
+  fsGroup: 1000

@@ -1,0 +1,119 @@
+fullnameOverride: radarr
+
+statefulset:
+  image:
+    repository: linuxserver/radarr
+    tag: "6.1.1"
+    imagePullPolicy: Always
+  ports:
+    web: 7878
+
+config:
+  TZ: Europe/Brussels
+  PUID: "1000"
+  PGID: "1000"
+
+resources:
+  requests:
+    memory: 256Mi
+    cpu: 100m
+  limits:
+    memory: 512Mi
+    cpu: 400m
+
+probes:
+  readiness:
+    httpGet:
+      port: 7878
+      path: /ping
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+  liveness:
+    httpGet:
+      port: 7878
+      path: /ping
+    initialDelaySeconds: 20
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 5
+
+ingress_internal:
+  host: radarr.<secret:kv/data/domains~local>
+  port: web
+
+ingress_external_secure:
+  host: radarr.<secret:kv/data/domains~domain>
+  port: web
+
+storage:
+  - mountPath: /config
+    type: longhorn
+    size: 8Gi
+    nameSuffix: config
+    volumeName: arr-stack-radarr-config
+    protect: true
+  - mountPath: /data/downloads
+    type: existingClaim
+    claimName: services-downloads
+    nameSuffix: downloads
+  - mountPath: /data/videos
+    type: existingClaim
+    claimName: services-video
+    nameSuffix: videos
+
+podSecurityContext:
+  fsGroup: 1000
+
+initContainers:
+  - name: radarr-init
+    image: alpine
+    command:
+      - "/bin/sh"
+      - "-c"
+      - cp /init/script.sh /tmp && chmod +x /tmp/script.sh && /tmp/script.sh
+    resources: {}
+    env:
+      - name: CONFIG_FILE
+        value: /config/config.xml
+      - name: POSTGRES_USER
+        valueFrom:
+          secretKeyRef:
+            name: services-db
+            key: radarr_user
+      - name: POSTGRES_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: services-db
+            key: radarr_password
+      - name: POSTGRES_HOST
+        valueFrom:
+          configMapKeyRef:
+            name: service-db
+            key: host
+      - name: POSTGRES_PORT
+        valueFrom:
+          configMapKeyRef:
+            name: service-db
+            key: port
+      - name: POSTGRES_MAIN_DB
+        valueFrom:
+          configMapKeyRef:
+            name: service-db
+            key: radarr_database
+      - name: POSTGRES_LOG_DB
+        valueFrom:
+          configMapKeyRef:
+            name: service-db
+            key: radarr_database_logs
+    volumeMounts:
+      - mountPath: /init
+        name: arr-init-script
+      - mountPath: /config
+        name: radarr-config
+
+extraVolumes:
+  - name: arr-init-script
+    configMap:
+      name: arr-init-script

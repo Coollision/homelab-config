@@ -53,9 +53,13 @@ spec:
       {{- with (include "shared-lib.affinity" .) }}
       {{- . | nindent 6 }}
       {{- end }}
+      {{- if .Values.initContainers }}
+      initContainers:
+        {{- toYaml .Values.initContainers | nindent 8 }}
+      {{- end }}
       containers:
         - {{ include "shared-lib.container" . | indent 10 | trim }}
-      {{- if .Values.storage }}
+      {{- if or .Values.storage .Values.extraVolumes }}
       volumes:
         {{- range .Values.storage }}
         - name: {{ printf "%s-%s" (include "helm.fullname" $root ) ( default  "" .nameSuffix )| trunc 63 | trimSuffix "-" }}
@@ -65,6 +69,9 @@ spec:
             {{- else }}
             claimName: {{ printf "%s-%s" (include "helm.fullname" $root ) ( default  "" .nameSuffix )| trunc 63 | trimSuffix "-" }}
             {{- end }}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
         {{- end }}
       {{- end }}
 {{- end }}

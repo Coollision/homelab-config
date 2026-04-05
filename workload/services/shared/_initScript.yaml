@@ -20,10 +20,11 @@ data:
         exit 1
     fi
 
-    # Verify XML file exists
+    # Create a minimal config if it doesn't exist yet (first boot)
     if [ ! -f "$filename" ]; then
-        echo "Error: XML file '$filename' not found."
-        exit 1
+        echo "config.xml not found, creating minimal config..."
+        mkdir -p "$(dirname "$filename")"
+        echo '<Config></Config>' > "$filename"
     fi
 
     PostgresUser="$POSTGRES_USER"

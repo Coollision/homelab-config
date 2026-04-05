@@ -1,0 +1,11 @@
+apiVersion: v2
+name: sonarr
+description: A Helm chart for Sonarr
+type: application
+version: 0.1.0
+appVersion: "4.0.17"
+
+dependencies:
+  - name: shared-lib
+    version: 0.1.0
+    repository: file://../../../lib/shared-lib
