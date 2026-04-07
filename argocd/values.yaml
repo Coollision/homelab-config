@@ -85,6 +85,124 @@ argo-cd:
           - BackupBackingImage
           - SystemBackup
           - SystemRestore
+      resource.customizations.health.longhorn.io_ShareManager: |
+        hs = {}
+        if obj.status == nil or obj.status.state == nil then
+          hs.status = "Progressing"
+          hs.message = "Waiting for Longhorn share manager status"
+          return hs
+        end
+
+        if obj.status.state == "running" then
+          hs.status = "Healthy"
+          hs.message = "Longhorn share manager is running"
+          return hs
+        end
+
+        if obj.status.state == "error" then
+          hs.status = "Degraded"
+          hs.message = "Longhorn share manager is in error state"
+          return hs
+        end
+
+        hs.status = "Progressing"
+        hs.message = "Longhorn share manager state: " .. obj.status.state
+        return hs
+      resource.customizations.health.longhorn.io_Volume: |
+        hs = {}
+        if obj.status == nil then
+          hs.status = "Progressing"
+          hs.message = "Waiting for Longhorn volume status"
+          return hs
+        end
+
+        if obj.status.robustness == "healthy" and (obj.status.state == "attached" or obj.status.state == "detached") then
+          hs.status = "Healthy"
+          hs.message = "Longhorn volume is " .. obj.status.state .. " and healthy"
+          return hs
+        end
+
+        if obj.status.robustness == "faulted" then
+          hs.status = "Degraded"
+          hs.message = "Longhorn volume is faulted"
+          return hs
+        end
+
+        hs.status = "Progressing"
+        hs.message = "Longhorn volume state: " .. (obj.status.state or "unknown") .. ", robustness: " .. (obj.status.robustness or "unknown")
+        return hs
+      resource.customizations.health.Pod: |
+        hs = {}
+
+        local function isPodReady()
+          if obj.status ~= nil and obj.status.conditions ~= nil then
+            for _, condition in ipairs(obj.status.conditions) do
+              if condition.type == "Ready" and condition.status == "True" then
+                return true
+              end
+            end
+          end
+          return false
+        end
+
+        local isLonghornShareManager = false
+        if obj.metadata ~= nil and obj.metadata.labels ~= nil then
+          if obj.metadata.labels["longhorn.io/component"] == "share-manager" then
+            isLonghornShareManager = true
+          end
+        end
+
+        if obj.status == nil or obj.status.phase == nil then
+          hs.status = "Progressing"
+          hs.message = "Waiting for pod status"
+          return hs
+        end
+
+        if obj.status.phase == "Pending" then
+          hs.status = "Progressing"
+          hs.message = obj.status.message or "Pod is pending"
+          return hs
+        end
+
+        if obj.status.phase == "Succeeded" then
+          hs.status = "Healthy"
+          hs.message = obj.status.message or "Pod completed successfully"
+          return hs
+        end
+
+        if obj.status.phase == "Failed" then
+          hs.status = "Degraded"
+          hs.message = obj.status.message or "Pod failed"
+          return hs
+        end
+
+        if obj.status.phase == "Running" then
+          if obj.spec ~= nil and obj.spec.restartPolicy == "Always" then
+            if isPodReady() then
+              hs.status = "Healthy"
+              hs.message = obj.status.message or "Pod is running and ready"
+              return hs
+            end
+
+            hs.status = "Progressing"
+            hs.message = obj.status.message or "Pod is running but not ready"
+            return hs
+          end
+
+          if isLonghornShareManager and isPodReady() then
+            hs.status = "Healthy"
+            hs.message = "Longhorn share-manager pod is running and ready"
+            return hs
+          end
+
+          hs.status = "Progressing"
+          hs.message = obj.status.message or "Pod is running"
+          return hs
+        end
+
+        hs.status = "Unknown"
+        hs.message = obj.status.message or "Pod health is unknown"
+        return hs
 
     params:
       server.insecure: true

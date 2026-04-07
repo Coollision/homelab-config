@@ -16,3 +16,5 @@ __pycache__/
 ZZ_Travel setup.md
 
 tmp/*
+.tmp
+.venv
