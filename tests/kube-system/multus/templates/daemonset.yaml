@@ -58,6 +58,9 @@ spec:
               mountPath: /host/etc/cni/net.d
             - name: cni-bin
               mountPath: /host/opt/cni/bin
+            - name: host-root
+              mountPath: /hostroot
+              readOnly: true
             - name: host-run
               mountPath: /host/run
               mountPropagation: Bidirectional
@@ -74,6 +77,9 @@ spec:
         - name: cni-bin
           hostPath:
             path: {{ .Values.cni.binDir }}
+        - name: host-root
+          hostPath:
+            path: /
         - name: host-run
           hostPath:
             path: /run

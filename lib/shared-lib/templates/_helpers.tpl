@@ -100,16 +100,42 @@ affinity:
           topologyKey: kubernetes.io/hostname
 */}}
 {{- define "shared-lib.affinity" -}}
-{{- if .Values.affinity }}
+{{- $autoNodeMatchExpressions := list -}}
+{{- if and .Values.multusNetworks (ne .Values.multusAutoNodeAffinity false) -}}
+  {{- range $network := .Values.multusNetworks -}}
+    {{- $labelKey := $network.nodeLabelKey | default "" -}}
+    {{- if not $labelKey -}}
+      {{- if hasPrefix "vlan" ($network.parentInterface | default "") -}}
+        {{- $labelKey = printf "%s-trunk" $network.parentInterface -}}
+      {{- else -}}
+        {{- $vlanFromName := regexFind "vlan[0-9]+" ($network.name | default "") -}}
+        {{- if $vlanFromName -}}
+          {{- $labelKey = printf "%s-trunk" $vlanFromName -}}
+        {{- end -}}
+      {{- end -}}
+    {{- end -}}
+    {{- if $labelKey -}}
+      {{- $autoNodeMatchExpressions = append $autoNodeMatchExpressions (dict "key" $labelKey "operator" "In" "values" (list "true")) -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if or .Values.affinity (gt (len $autoNodeMatchExpressions) 0) }}
 affinity:
-  {{- if .Values.affinity.node }}
+  {{- if or .Values.affinity.node (gt (len $autoNodeMatchExpressions) 0) }}
   nodeAffinity:
-    {{- if .Values.affinity.node.required }}
+    {{- if or .Values.affinity.node.required (gt (len $autoNodeMatchExpressions) 0) }}
     requiredDuringSchedulingIgnoredDuringExecution:
       nodeSelectorTerms:
+        {{- if .Values.affinity.node.required }}
         {{- range .Values.affinity.node.required }}
+        {{- $termExpressions := concat (.matchExpressions | default (list)) $autoNodeMatchExpressions }}
         - matchExpressions:
-            {{- toYaml .matchExpressions | nindent 12 }}
+            {{- toYaml $termExpressions | nindent 12 }}
+        {{- end }}
+        {{- else }}
+        - matchExpressions:
+            {{- toYaml $autoNodeMatchExpressions | nindent 12 }}
         {{- end }}
     {{- end }}
     {{- if .Values.affinity.node.preferred }}

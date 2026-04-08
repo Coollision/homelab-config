@@ -6,12 +6,35 @@
     state: present
     persistent: present
 
+- name: Build VLAN trunk interface list
+  ansible.builtin.set_fact:
+    _vlan_trunk_interfaces_raw: >-
+      {{
+        vlan_trunk_interfaces
+        if (vlan_trunk_interfaces | default([]) | length > 0)
+        else ([{"id": vlan_id, "parent_interface": vlan_parent_interface}]
+          if (vlan_id is defined and vlan_parent_interface is defined)
+          else [])
+      }}
+
+- name: Normalize VLAN trunk interface list
+  ansible.builtin.set_fact:
+    _vlan_trunk_interfaces: []
+
+- name: Add default logical interface names
+  ansible.builtin.set_fact:
+    _vlan_trunk_interfaces: "{{ _vlan_trunk_interfaces + [ item | combine({'interface_name': (item.interface_name | default('vlan' ~ (item.id | string)))}) ] }}"
+  loop: "{{ _vlan_trunk_interfaces_raw }}"
+  loop_control:
+    label: "{{ item.parent_interface }} -> {{ item.interface_name | default('vlan' ~ (item.id | string)) }}"
+
 - name: Install vlan tools
   become: true
   ansible.builtin.apt:
     name: vlan
     state: present
     cache_valid_time: 600
+  when: _vlan_trunk_interfaces | length > 0
 
 - name: Ensure systemd-networkd is enabled and running
   become: true
@@ -19,31 +42,44 @@
     name: systemd-networkd
     enabled: true
     state: started
+  when: _vlan_trunk_interfaces | length > 0
 
-- name: Deploy systemd-networkd .netdev for VLAN {{ vlan_id }}
+- name: Deploy systemd-networkd .netdev files
   become: true
   ansible.builtin.template:
     src: vlan.netdev.j2
-    dest: "/etc/systemd/network/40-vlan{{ vlan_id }}.netdev"
+    dest: "/etc/systemd/network/40-vlan{{ item.id }}.netdev"
     owner: root
     group: systemd-network
     mode: "0640"
+  loop: "{{ _vlan_trunk_interfaces }}"
+  loop_control:
+    label: "{{ item.parent_interface }} -> {{ item.interface_name }}"
   notify: Reload networkd
+  when: _vlan_trunk_interfaces | length > 0
 
-- name: Deploy systemd-networkd .network for VLAN {{ vlan_id }}
+- name: Deploy systemd-networkd .network files
   become: true
   ansible.builtin.template:
     src: vlan.network.j2
-    dest: "/etc/systemd/network/41-vlan{{ vlan_id }}.network"
+    dest: "/etc/systemd/network/41-vlan{{ item.id }}.network"
     owner: root
     group: systemd-network
     mode: "0640"
+  loop: "{{ _vlan_trunk_interfaces }}"
+  loop_control:
+    label: "{{ item.parent_interface }} -> {{ item.interface_name }}"
   notify: Reload networkd
+  when: _vlan_trunk_interfaces | length > 0
 
-- name: Bring VLAN sub-interface up immediately (no IP assigned)
+- name: Bring VLAN sub-interfaces up immediately
   become: true
   ansible.builtin.command: >
-    ip link set {{ vlan_parent_interface }}.{{ vlan_id }} up
+    ip link set {{ item.interface_name }} up
   register: _vlan_up
-  changed_when: _vlan_up.rc == 0
+  changed_when: false
   failed_when: false
+  loop: "{{ _vlan_trunk_interfaces }}"
+  loop_control:
+    label: "{{ item.parent_interface }} -> {{ item.interface_name }}"
+  when: _vlan_trunk_interfaces | length > 0

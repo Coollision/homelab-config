@@ -12,6 +12,16 @@ k3s_node_label:
   - kubefledged.io/cache=true
   - type=mini
   - node.longhorn.io/create-default-disk=config
+  - vlan40-trunk=true
+  - vlan5-trunk=true
+
+vlan_trunk_interfaces:
+  - id: 40
+    parent_interface: enp1s0
+    interface_name: vlan40
+  - id: 5
+    parent_interface: enp1s0
+    interface_name: vlan5
 
 k3s_node_annotations:
   node.longhorn.io/default-disks-config: '[{"path":"/mnt/longhorn","allowScheduling":true,"tags":["fast"]}]'

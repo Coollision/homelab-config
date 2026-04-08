@@ -1,0 +1,44 @@
+{{- define "shared-lib.multusNetworkNamesCsv" -}}
+{{- $names := list -}}
+{{- range $network := .Values.multusNetworks -}}
+{{- if not $network.name -}}
+{{- "multusNetworks entry missing required field: name" | fail -}}
+{{- end -}}
+{{- $names = append $names $network.name -}}
+{{- end -}}
+{{ join ", " $names }}
+{{- end -}}
+
+{{- define "shared-lib.multusNads" -}}
+{{- $root := . -}}
+{{- range $index, $network := .Values.multusNetworks }}
+{{- if not $network.name -}}
+{{- "multusNetworks entry missing required field: name" | fail -}}
+{{- end -}}
+{{- if not $network.parentInterface -}}
+{{- printf "multusNetworks[%d] missing required field: parentInterface" $index | fail -}}
+{{- end -}}
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: {{ $network.name }}
+  namespace: {{ $root.Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ default "0" $network.syncWave | quote }}
+spec:
+  config: |
+    {
+      "cniVersion": {{ default "0.3.1" $network.cniVersion | quote }},
+      "name": {{ $network.name | quote }},
+      "type": {{ default "macvlan" $network.type | quote }},
+      "master": {{ $network.parentInterface | quote }},
+      "mode": {{ default "bridge" $network.mode | quote }},
+      "ipam": {
+        "type": {{ default "dhcp" $network.ipam.type | quote }}
+      }
+    }
+{{- if lt (add1 $index) (len $root.Values.multusNetworks) }}
+---
+{{- end }}
+{{- end }}
+{{- end -}}

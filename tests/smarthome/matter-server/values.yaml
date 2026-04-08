@@ -11,21 +11,31 @@ config:
   TZ: Europe/Brussels
   STORAGE_PATH: /data
   # net1 is the Multus-attached MACVLAN interface on VLAN 40 (IoT).
-  # Matter uses this interface for mDNS multicast so IoT devices are discovered
-  # directly on their VLAN without any proxy or forwarder.
+  # Matter uses this primary interface for mDNS multicast so IoT devices are
+  # discovered directly on their VLAN without any proxy or forwarder.
   PRIMARY_INTERFACE: net1
 
-# Multus attaches a secondary MACVLAN interface (net1) on VLAN 40 to this pod.
-# No hostNetwork needed — the pod has its own VLAN 40 IP via the MACVLAN.
-podAnnotations:
-  k8s.v1.cni.cncf.io/networks: matter-server-vlan40
+# Multus attaches two additional MACVLAN interfaces to this pod:
+#   net1 = VLAN 40 (IoT / Matter device discovery)
+#   net2 = VLAN 5  (Intern / commissioning clients)
+# No hostNetwork needed — the pod gets dedicated IPs on both VLANs.
+multusNetworks:
+  - name: matter-server-vlan40
+    parentInterface: vlan40
+    nodeLabelKey: vlan40-trunk
+    type: macvlan
+    mode: bridge
+    ipam:
+      type: dhcp
+  - name: matter-server-vlan5
+    parentInterface: vlan5
+    nodeLabelKey: vlan5-trunk
+    type: macvlan
+    mode: bridge
+    ipam:
+      type: dhcp
 
 imagePreSync: true
-
-# Internal dashboard access via Traefik (routes through Flannel overlay, VLAN 30).
-ingress_internal:
-  host: matter-server.<secret:kv/data/domains~local>
-  port: ws
 
 ingress_internal_secure:
   host: matter-server.<secret:kv/data/domains~domain>
@@ -68,29 +78,3 @@ resources:
 labels:
   app.kubernetes.io/component: matter-server
 
-# REQUIRED: matter-server must run on a node whose switch port is tagged for VLAN 40.
-# Add the label `vlan40-trunk=true` to that node before deploying.
-# See MATTER_INTEGRATION.md → "Step 2: Label the trunk-capable node".
-affinity:
-  node:
-    required:
-      - matchExpressions:
-          - key: vlan40-trunk
-            operator: In
-            values: ["true"]
-
-# ── VLAN 40 MACVLAN configuration (used by templates/nad.yaml) ────────────────
-#
-# parentInterface: the VLAN 40 sub-interface that already exists on the host node,
-#   e.g. enp1s0.40 for node-gn.  Create it with:
-#     ip link add link enp1s0 name enp1s0.40 type vlan id 40
-#     ip link set enp1s0.40 up
-#   Persist via /etc/systemd/network/ or Ansible (see MATTER_INTEGRATION.md §6.1).
-#
-# podIp:   a free IP in your VLAN 40 range (192.168.40.x) — reserve it in Unifi DHCP.
-# gateway: your VLAN 40 default gateway (the Unifi gateway address on VLAN 40).
-#
-vlan40:
-  parentInterface: <secret:kv/data/smarthome/matter-server~vlan40-parent-interface>
-  podIp: <secret:kv/data/smarthome/matter-server~vlan40-ip>
-  gateway: <secret:kv/data/smarthome/matter-server~vlan40-gateway>
