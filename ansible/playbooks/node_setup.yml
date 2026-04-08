@@ -20,7 +20,6 @@
   gather_facts: false
   roles:
     - role: node-common
-    - role: vlan-trunk
 
 - name: Raspberry pi specific tasks
   hosts: rpi
