@@ -11,32 +11,40 @@
     _k3s_version_tag: "{{ _k3s_bin_version.stdout | regex_search('v[0-9]+\\.[0-9]+\\.[0-9]+\\+k3s[0-9]+') }}"
   when: k3s_etcd_version is not defined
 
-- name: Fetch k3s version.sh from GitHub to resolve bundled etcd version
+- name: Fetch k3s go.mod from GitHub to resolve bundled etcd version
   ansible.builtin.uri:
-    url: "https://raw.githubusercontent.com/k3s-io/k3s/{{ _k3s_version_tag | replace('+', '%2B') }}/scripts/version.sh"
+    url: "https://raw.githubusercontent.com/k3s-io/k3s/{{ _k3s_version_tag | replace('+', '%2B') }}/go.mod"
     return_content: true
-  register: _k3s_version_sh
+  register: _k3s_go_mod
   when: k3s_etcd_version is not defined
 
-- name: Set k3s_etcd_version from version.sh
+- name: Set k3s_etcd_version from go.mod
   ansible.builtin.set_fact:
-    k3s_etcd_version: "{{ _k3s_version_sh.content | regex_search('ETCD_VERSION.*v([0-9]+\\.[0-9]+\\.[0-9]+)', '\\1') | first }}"
+    k3s_etcd_version: "{{ (_k3s_go_mod.content | regex_findall('go\\.etcd\\.io/etcd/server/v3(?:\\s+=>\\s+[^\\s]+)?\\s+v([0-9]+\\.[0-9]+\\.[0-9]+)(?:-k3s[0-9]+)?') | first | default('', true)) | trim }}"
   when: k3s_etcd_version is not defined
+
+- name: Fail when bundled etcd version could not be resolved
+  ansible.builtin.fail:
+    msg: >-
+      Unable to determine the bundled etcd version for K3s tag {{ _k3s_version_tag }}.
+      Set `k3s_etcd_version` explicitly in inventory/group vars or update the detection regex.
+  when: k3s_etcd_version is not defined
+        or (k3s_etcd_version | trim) == ''
 
 - name: Download etcdctl binary
   ansible.builtin.get_url:
-    url: "https://github.com/etcd-io/etcd/releases/download/v{{ k3s_etcd_version }}/etcd-v{{ k3s_etcd_version }}-linux-amd64.tar.gz"
-    dest: /tmp/etcd-{{ k3s_etcd_version }}.tar.gz
+    url: "https://github.com/etcd-io/etcd/releases/download/v{{ k3s_etcd_version | trim }}/etcd-v{{ k3s_etcd_version | trim }}-linux-amd64.tar.gz"
+    dest: /tmp/etcd-{{ k3s_etcd_version | trim }}.tar.gz
     mode: "0644"
   when: ansible_facts.architecture == "x86_64"
 
 - name: Extract etcdctl
   ansible.builtin.unarchive:
-    src: /tmp/etcd-{{ k3s_etcd_version }}.tar.gz
+    src: /tmp/etcd-{{ k3s_etcd_version | trim }}.tar.gz
     dest: /tmp
     remote_src: true
     include:
-      - "etcd-v{{ k3s_etcd_version }}-linux-amd64/etcdctl"
+      - "etcd-v{{ k3s_etcd_version | trim }}-linux-amd64/etcdctl"
     extra_opts:
       - "--strip-components=1"
   when: ansible_facts.architecture == "x86_64"
@@ -56,7 +64,7 @@
     path: "{{ item }}"
     state: absent
   loop:
-    - /tmp/etcd-{{ k3s_etcd_version }}.tar.gz
+    - /tmp/etcd-{{ k3s_etcd_version | trim }}.tar.gz
     - /tmp/etcdctl
   when: ansible_facts.architecture == "x86_64"
 

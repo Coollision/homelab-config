@@ -35,3 +35,49 @@ argo should be up and running now and managing itself
 if it all seems to lock, traefik might be causing a issue, it depends on servicemonitor, and montioring is not yet installed, while monitoring wants an ingress, so traefik is not yet installed, so we have a chicken and egg problem, so you need to do a commit and disable traefik monitoring first
 
 for more info on argo see the argo readme
+
+## Handy commands
+
+### Drain all nodes at the same time
+
+Handy before planned downtime.
+
+```bash
+kubectl get nodes -o name | xargs -n 1 -P 0 -I {} kubectl drain {} --ignore-daemonsets --delete-emptydir-data --force
+```
+
+### Uncordon all nodes at the same time
+
+```bash
+kubectl get nodes -o name | xargs -n 1 -P 0 -I {} kubectl uncordon {}
+```
+
+### Restart all pods with restart count higher than 2
+
+This only deletes pods that look safe to recreate automatically:
+
+- restart count higher than or equal to `2`
+- currently `Running`
+- controlled by a `ReplicaSet`, `StatefulSet`, `DaemonSet`, or `Job`
+- not a static mirror pod
+
+Standalone pods are skipped on purpose.
+
+```bash
+kubectl get pods -A -o json \
+	| jq -r '
+		.items[]
+		| select(.status.phase == "Running")
+		| select(.metadata.annotations["kubernetes.io/config.mirror"] | not)
+		| select(any(.status.containerStatuses[]?; .restartCount >= 2))
+		| . as $pod
+		| (($pod.metadata.ownerReferences // []) | map(select(.controller == true)) | first) as $owner
+		| select($owner != null)
+		| select($owner.kind == "ReplicaSet" or $owner.kind == "StatefulSet" or $owner.kind == "DaemonSet" or $owner.kind == "Job")
+		| [$pod.metadata.namespace, $pod.metadata.name, $owner.kind, $owner.name] | @tsv
+	' \
+	| while IFS=$'\t' read -r ns pod owner_kind owner_name; do
+			echo "Deleting $ns/$pod (owner: $owner_kind/$owner_name)"
+			kubectl delete pod -n "$ns" "$pod"
+		done
+```
