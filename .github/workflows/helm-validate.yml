@@ -58,6 +58,16 @@ jobs:
           CHANGED_CHART_DIRS=""
           LIB_FANOUT="false"
 
+          add_chart_dir() {
+            local dir="$1"
+            [ -z "$dir" ] && return
+            if [ -z "$CHANGED_CHART_DIRS" ]; then
+              CHANGED_CHART_DIRS="$dir"
+            else
+              CHANGED_CHART_DIRS="$CHANGED_CHART_DIRS"$'\n'"$dir"
+            fi
+          }
+
           # Check for any YAML changes for yaml-lint job
           YAML_CHANGED="false"
           if echo "$CHANGED_FILES" | grep -qE '\.(yaml|yml)$'; then
@@ -77,7 +87,7 @@ jobs:
               if [ -f "$current_dir/Chart.yaml" ]; then
                 # Exclude charts in the charts/ subdirectory (dependencies)
                 if ! echo "$current_dir" | grep -q "/charts/"; then
-                  CHANGED_CHART_DIRS="$CHANGED_CHART_DIRS$current_dir"$'\n'
+                  add_chart_dir "$current_dir"
                 fi
                 break
               fi
@@ -88,7 +98,7 @@ jobs:
             if [ "$(basename "$changed_file")" = "Chart.yaml" ] && [ -f "$changed_file" ]; then
               chart_dir=$(dirname "$changed_file")
               if ! echo "$chart_dir" | grep -q "/charts/"; then
-                CHANGED_CHART_DIRS="$CHANGED_CHART_DIRS$chart_dir"$'\n'
+                add_chart_dir "$chart_dir"
               fi
             fi
           done <<< "$CHANGED_FILES"
@@ -136,7 +146,7 @@ jobs:
                 fi
 
                 if [ "$MATCH_BY_NAME" = true ] || [ "$MATCH_BY_REPO" = true ]; then
-                  CHANGED_CHART_DIRS="$CHANGED_CHART_DIRS$chart_dir"$'\n'
+                  add_chart_dir "$chart_dir"
                 fi
               done <<< "$ALL_CHART_DIRS"
             done
