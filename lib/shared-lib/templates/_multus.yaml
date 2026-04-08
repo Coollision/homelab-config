@@ -6,7 +6,7 @@
 {{- end -}}
 {{- $names = append $names $network.name -}}
 {{- end -}}
-{{ join ", " $names }}
+{{- join ", " $names -}}
 {{- end -}}
 
 {{- define "shared-lib.multusNads" -}}
@@ -39,6 +39,6 @@ spec:
     }
 {{- if lt (add1 $index) (len $root.Values.multusNetworks) }}
 ---
-{{- end }}
+{{ end }}
 {{- end }}
 {{- end -}}
