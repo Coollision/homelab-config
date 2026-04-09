@@ -38,12 +38,24 @@ for more info on argo see the argo readme
 
 ## Handy commands
 
-### Drain all nodes at the same time
+### Drain all nodes one by one
 
 Handy before planned downtime.
 
+Draining every node in parallel can fail on PodDisruptionBudgets, for example with Longhorn `instance-manager` pods. Drain the cluster sequentially instead:
+
 ```bash
-kubectl get nodes -o name | xargs -n 1 -P 0 -I {} kubectl drain {} --ignore-daemonsets --delete-emptydir-data --force
+for node in $(kubectl get nodes -o name); do
+	kubectl drain "$node" --ignore-daemonsets --delete-emptydir-data --force
+done
+```
+
+If you are intentionally shutting down the whole cluster and need to bypass PodDisruptionBudgets, only use this as a last resort:
+
+```bash
+for node in $(kubectl get nodes -o name); do
+	kubectl drain "$node" --ignore-daemonsets --delete-emptydir-data --force --disable-eviction
+done
 ```
 
 ### Uncordon all nodes at the same time
@@ -52,11 +64,19 @@ kubectl get nodes -o name | xargs -n 1 -P 0 -I {} kubectl drain {} --ignore-daem
 kubectl get nodes -o name | xargs -n 1 -P 0 -I {} kubectl uncordon {}
 ```
 
+### Reboot all cluster nodes with Ansible
+
+Run this from the repository root to reboot every node in the `k3scluster` inventory group:
+
+```bash
+cd ansible && ansible k3scluster -b -m ansible.builtin.reboot
+```
+
 ### Restart all pods with restart count higher than 2
 
 This only deletes pods that look safe to recreate automatically:
 
-- restart count higher than or equal to `2`
+- restart count higher than or equal to `1`
 - currently `Running`
 - controlled by a `ReplicaSet`, `StatefulSet`, `DaemonSet`, or `Job`
 - not a static mirror pod
@@ -69,7 +89,7 @@ kubectl get pods -A -o json \
 		.items[]
 		| select(.status.phase == "Running")
 		| select(.metadata.annotations["kubernetes.io/config.mirror"] | not)
-		| select(any(.status.containerStatuses[]?; .restartCount >= 2))
+		| select(any(.status.containerStatuses[]?; .restartCount >= 1))
 		| . as $pod
 		| (($pod.metadata.ownerReferences // []) | map(select(.controller == true)) | first) as $owner
 		| select($owner != null)
