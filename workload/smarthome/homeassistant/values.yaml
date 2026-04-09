@@ -83,6 +83,13 @@ homeassistant:
       web: 8123
   config:
     TZ: Europe/Brussels
+  
+  securityContext:
+    capabilities:
+      add:
+        - NET_RAW
+        - NET_ADMIN
+
   ingress_internal:
     host: homeassistant.<secret:kv/data/domains~local>
     port: web
