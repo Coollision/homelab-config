@@ -13,9 +13,9 @@ statefulset:
     - --language
     - nl
     - --model
-    - medium-int8
+    - small-int8
     - --beam-size
-    - "5"
+    - "3"
     - --compute-type
     - int8
     - --device
