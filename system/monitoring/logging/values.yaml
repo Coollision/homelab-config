@@ -12,31 +12,40 @@ promtail:
 
     snippets:
       extraScrapeConfigs: |
-        # Add an additional scrape config for syslog
-        - job_name: syslog
+        - job_name: synology
           syslog:
-            listen_address: 0.0.0.0:{{ .Values.extraPorts.syslog.containerPort }}
+            listen_address: 0.0.0.0:{{ .Values.syslogPorts.synologyTcp }}
+            listen_protocol: tcp
             idle_timeout: 60s
             use_incoming_timestamp: yes
             label_structured_data: yes
             labels:
               job: syslog
+              source: syno
           relabel_configs:
-            - source_labels:
-                - __syslog_message_hostname
+            - source_labels: [__syslog_message_hostname]
               target_label: hostname
-
-            # example label values: kernel, CRON, kubelet
-            - source_labels:
-                - __syslog_message_app_name
+            - source_labels: [__syslog_message_app_name]
               target_label: app
-
-            # example label values: debug, notice, informational, warning, error
-            - source_labels:
-                - __syslog_message_severity
+            - source_labels: [__syslog_message_severity]
               target_label: level
 
-        # Add an additional scrape config for syslog
+        - job_name: unifi
+          syslog:
+            listen_address: 0.0.0.0:{{ .Values.syslogPorts.unifiUdp }}
+            listen_protocol: udp
+            idle_timeout: 60s
+            use_incoming_timestamp: yes
+            label_structured_data: yes
+            labels:
+              job: syslog
+              source: unifi
+          relabel_configs:
+            - source_labels: [__syslog_message_hostname]
+              target_label: hostname
+            - source_labels: [__syslog_message_severity]
+              target_label: level
+
         - job_name: journal
           journal:
             path: /var/log/journal
@@ -44,18 +53,11 @@ promtail:
             labels:
               job: systemd-journal
           relabel_configs:
-            - source_labels:
-                - __journal__hostname
+            - source_labels: [__journal__hostname]
               target_label: hostname
-
-            # example label values: kubelet.service, containerd.service
-            - source_labels:
-                - __journal__systemd_unit
+            - source_labels: [__journal__systemd_unit]
               target_label: unit
-
-            # example label values: debug, notice, info, warning, error
-            - source_labels:
-                - __journal_priority_keyword
+            - source_labels: [__journal_priority_keyword]
               target_label: level
 
     # Mount journal directory and machine-id file into promtail pods
@@ -74,16 +76,13 @@ promtail:
     - name: machine-id
       mountPath: /etc/machine-id
       readOnly: true
-  extraPorts:
-    # Add a port for syslog
-    syslog:
-      name: tcp-syslog
-      containerPort: 1514
-      service:
-        port: 80
-        type: LoadBalancer
-        externalTrafficPolicy: Local
-        loadBalancerIP: <secret:kv/data/monitoring/logging~syslog_ip>
+  syslogPorts:
+    synologyTcp: 10514 # Change this value to adjust the Synology syslog listener
+    unifiUdp: 10555 # Change this value to adjust the Unifi syslog listener
+
+syslogService:
+  loadBalancerIP: <secret:kv/data/monitoring/logging~syslog_ip>
+  externalTrafficPolicy: Local
 
 loki:
   deploymentMode: SingleBinary
