@@ -4,7 +4,7 @@ metadata:
   name: {{ printf "%s-promtail-syslog" .Release.Name | trunc 63 | trimSuffix "-" }}
   namespace: {{ .Release.Namespace }}
   labels:
-    app.kubernetes.io/name: promtail
+    app.kubernetes.io/name: alloy
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     helm.sh/chart: {{ printf "%s-%s" .Chart.Name (.Chart.Version | replace "+" "_") | trunc 63 | trimSuffix "-" }}
@@ -13,14 +13,14 @@ spec:
   loadBalancerIP: {{ .Values.syslogService.loadBalancerIP }}
   externalTrafficPolicy: {{ .Values.syslogService.externalTrafficPolicy }}
   selector:
-    app.kubernetes.io/name: promtail
+    app.kubernetes.io/name: alloy
     app.kubernetes.io/instance: {{ .Release.Name }}
   ports:
     - name: syno-syslog
-      port: {{ .Values.promtail.syslogPorts.synologyTcp }}
+      port: {{ .Values.alloy.syslogPorts.synologyTcp }}
       protocol: TCP
-      targetPort: {{ .Values.promtail.syslogPorts.synologyTcp }}
+      targetPort: {{ .Values.alloy.syslogPorts.synologyTcp }}
     - name: unifi-syslog
-      port: {{ .Values.promtail.syslogPorts.unifiUdp }}
+      port: {{ .Values.alloy.syslogPorts.unifiUdp }}
       protocol: UDP
-      targetPort: {{ .Values.promtail.syslogPorts.unifiUdp }}
+      targetPort: {{ .Values.alloy.syslogPorts.unifiUdp }}
