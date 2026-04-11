@@ -126,15 +126,29 @@ alloy:
           }
 
           rule {
-            source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+            source_labels = [
+              "__meta_kubernetes_pod_label_app",
+              "__meta_kubernetes_pod_label_app_kubernetes_io_name",
+            ]
+            separator     = ";"
+            regex         = "(.+);.*|;(.+)"
             target_label  = "app"
-            regex         = "(.+)"
+            replacement   = "${1}${2}"
           }
 
           rule {
-            source_labels = ["__meta_kubernetes_pod_label_app"]
-            target_label  = "app"
-            regex         = "(.+)"
+            action = "labelmap"
+            regex  = "__meta_kubernetes_pod_label_app_kubernetes_io_(.+)"
+          }
+
+          rule {
+            action = "labelmap"
+            regex  = "__meta_kubernetes_pod_label_(.+)"
+          }
+
+          rule {
+            action = "labeldrop"
+            regex  = "pod_template_hash|controller_revision_hash|pod_template_generation|apps_kubernetes_io_pod_index|statefulset_kubernetes_io_pod_name|helm_sh_chart|chart|heritage|jobLabel"
           }
         }
 
