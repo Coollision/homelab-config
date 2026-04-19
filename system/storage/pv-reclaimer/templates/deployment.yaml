@@ -21,7 +21,7 @@ spec:
       serviceAccountName: pv-reclaimer
       containers:
         - name: pv-reclaimer
-          image: alpine/k8s:1.35.3
+          image: alpine/k8s:1.35.4
           resources:
             {{- toYaml .Values.controller.resources | nindent 12 }}
           env:
