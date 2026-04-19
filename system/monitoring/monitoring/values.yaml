@@ -5,6 +5,11 @@ speedtestExporter:
 armexporter:
   enabled: true
 promstack:
+  prometheusOperator:
+    admissionWebhooks:
+      enabled: false
+      patch:
+        enabled: false
   kubeControllerManager:
     endpoints:
       - <secret:kv/data/config/master~ip-0>
