@@ -3,7 +3,7 @@ alloy:
     synologyTcp: 10514 # Change this value to adjust the Synology syslog listener
     unifiUdp: 10555 # Change this value to adjust the Unifi syslog listener
   serviceMonitor:
-    enabled: true
+    enabled: false
     additionalLabels:
       release: monitoring
   service:
@@ -318,17 +318,21 @@ loki:
   monitoring:
     serviceMonitor:
       enabled: true
+      interval: 60s
       labels:
         release: monitoring
-      interval: 30s
       metricRelabelings:
+        # Drop self-observability metrics for the Loki process itself.
+        - sourceLabels: [__name__]
+          regex: "go_.*|process_.*|promhttp_.*"
+          action: drop
         # Drop high-cardinality gRPC message size histograms — not useful for homelab dashboards
         - sourceLabels: [__name__]
           regex: loki_(request_message_bytes|response_message_bytes)_bucket
           action: drop
         # Drop internal cache/kv/memcache latency histograms — internals not worth storing
         - sourceLabels: [__name__]
-          regex: loki_(memcache_request_duration_seconds|kv_request_duration_seconds|cache_value_size_bytes|cache_request_duration_seconds)_bucket
+          regex: loki_(memcache_request_duration_seconds|kv_request_duration_seconds|cache_value_size_bytes|cache_request_duration_seconds|boltdb_shipper_request_duration_seconds|chunk_store_index_lookups_per_query|ingester_chunk_(age_seconds|entries|size_bytes)|frontend_queue_duration_seconds)_bucket
           action: drop
         # Drop Go runtime GC/scheduler histograms — too many buckets, not actionable
         - sourceLabels: [__name__]

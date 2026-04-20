@@ -81,3 +81,13 @@ spec:
           sourceLabels:
             - instance
           targetLabel: instance
+      metricRelabelings:
+        - sourceLabels: [__name__]
+          regex: "go_.*|process_.*|promhttp_.*"
+          action: drop
+        - sourceLabels: [__name__]
+          regex: "synology_if(Index|Descr|Type|Mtu|PhysAddress|LastChange|InUcastPkts|InNUcastPkts|OutUcastPkts|OutNUcastPkts|OutQLen|Specific|Alias|CounterDiscontinuityTime)"
+          action: drop
+        - sourceLabels: [__name__]
+          regex: "synology_(storageIO.*|spaceIO.*|iSCSILUN.*)"
+          action: drop

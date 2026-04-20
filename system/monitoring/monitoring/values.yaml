@@ -10,6 +10,13 @@ promstack:
       enabled: false
       patch:
         enabled: false
+    serviceMonitor:
+      interval: 60s
+      metricRelabelings:
+        # Keep basic operator health while dropping its own runtime and latency buckets.
+        - sourceLabels: [__name__]
+          regex: "go_.*|process_.*|promhttp_.*|controller_runtime_reconcile_time_seconds_bucket|rest_client_request_duration_seconds_bucket|workqueue_(queue_duration_seconds_bucket|work_duration_seconds_bucket|unfinished_work_seconds|longest_running_processor_seconds)"
+          action: drop
   kubeControllerManager:
     endpoints:
       - <secret:kv/data/config/master~ip-0>
@@ -22,11 +29,12 @@ promstack:
       targetPort: 10257
     serviceMonitor:
       enabled: true
+      interval: 60s
       https: true
       insecureSkipVerify: true
       metricRelabelings: &drop-highcard-buckets
         - sourceLabels: [__name__]
-          regex: "apiserver_request_duration_seconds_bucket|apiserver_request_sli_duration_seconds_bucket|etcd_request_duration_seconds_bucket|apiserver_request_body_size_bytes_bucket|apiserver_watch_list_duration_seconds_bucket|apiserver_response_sizes_bucket|apiserver_watch_cache_read_wait_seconds_bucket|apiserver_watch_events_sizes_bucket|apiserver_admission_controller_admission_duration_seconds_bucket|apiserver_flowcontrol_request_execution_seconds_bucket|storage_operation_duration_seconds_bucket|workqueue_queue_duration_seconds_bucket|workqueue_work_duration_seconds_bucket"
+          regex: "go_.*|process_.*|promhttp_.*|apiserver_request_duration_seconds_bucket|apiserver_request_sli_duration_seconds_bucket|etcd_request_duration_seconds_bucket|apiserver_request_body_size_bytes_bucket|apiserver_watch_list_duration_seconds_bucket|apiserver_response_sizes_bucket|apiserver_watch_cache_read_wait_seconds_bucket|apiserver_watch_events_sizes_bucket|apiserver_admission_controller_admission_duration_seconds_bucket|apiserver_flowcontrol_request_execution_seconds_bucket|storage_operation_duration_seconds_bucket|workqueue_queue_duration_seconds_bucket|workqueue_work_duration_seconds_bucket"
           action: drop
   kubeScheduler:
     endpoints:
@@ -40,6 +48,7 @@ promstack:
       targetPort: 10259
     serviceMonitor:
       enabled: true
+      interval: 60s
       https: true
       insecureSkipVerify: true
       metricRelabelings: *drop-highcard-buckets
@@ -54,9 +63,11 @@ promstack:
       port: 10249
       targetPort: 10249
     serviceMonitor:
+      interval: 60s
       metricRelabelings: *drop-highcard-buckets
   kubeApiServer:
     serviceMonitor:
+      interval: 60s
       metricRelabelings: *drop-highcard-buckets
   alertmanager:
     alertmanagerSpec:
@@ -73,6 +84,13 @@ promstack:
             resources:
               requests:
                 storage: 2Gi
+    serviceMonitor:
+      interval: 60s
+      metricRelabelings:
+        # Keep alert counts and notification totals, drop exporter/runtime internals.
+        - sourceLabels: [__name__]
+          regex: "go_.*|promhttp_.*|alertmanager_cluster_.*|alertmanager_gossip_.*|alertmanager_memberlist_.*|alertmanager_http_request_duration_seconds_bucket|alertmanager_notification_latency_seconds_bucket|alertmanager_silences_(query_duration_seconds_bucket|snapshot_duration_seconds_bucket)"
+          action: drop
   # resources:
   #   limits:
   #     cpu: 60m
@@ -81,17 +99,25 @@ promstack:
   #     cpu: 50m
   #     memory: 20Mi
   prometheus:
+    serviceMonitor:
+      interval: 60s
+      metricRelabelings:
+        # Keep storage, scrape-health, and basic query counters while dropping
+        # bucket-heavy internals used mainly for Prometheus self-debugging.
+        - sourceLabels: [__name__]
+          regex: "go_.*|promhttp_.*|prometheus_http_request_duration_seconds_bucket|prometheus_engine_query_duration_seconds_bucket|prometheus_rule_group_duration_seconds_bucket|prometheus_target_sync_length_seconds_bucket|prometheus_tsdb_compaction_duration_seconds_bucket|prometheus_tsdb_wal_(fsync|page_flush)_duration_seconds_bucket|prometheus_remote_storage_.*"
+          action: drop
     prometheusSpec:
       externalUrl: http://prometheus.<secret:kv/data/domains~local>/
-      retention: 120d
-      retentionSize: 9GB
+      retention: 90d
+      retentionSize: 18GiB
       enableAdminAPI: true
       scrapeInterval: 30s
       additionalArgs:
         - name: "storage.tsdb.max-block-duration"
           value: "2h"
-        # Reduce query.max-samples from default 50M to 10M for homelab stability 
-        # and memory efficiency. 10M still allows complex queries across 120d data.
+        # Reduce query.max-samples from default 50M to 10M for homelab stability
+        # and memory efficiency. 10M still allows complex queries across 30d data.
         - name: "query.max-samples"
           value: "10000000"
         # Limit concurrent queries to prevent memory spikes under load
@@ -184,7 +210,7 @@ promstack:
           # not useful for homelab dashboards.
           metric_relabel_configs:
             - source_labels: [__name__]
-              regex: "go_.*|process_.*"
+              regex: "go_.*|process_.*|apiserver_request_duration_seconds_bucket|apiserver_request_sli_duration_seconds_bucket|etcd_request_duration_seconds_bucket|apiserver_request_body_size_bytes_bucket|apiserver_watch_list_duration_seconds_bucket|apiserver_response_sizes_bucket|apiserver_watch_cache_read_wait_seconds_bucket|apiserver_watch_events_sizes_bucket|apiserver_admission_controller_admission_duration_seconds_bucket|apiserver_flowcontrol_request_execution_seconds_bucket|storage_operation_duration_seconds_bucket|workqueue_queue_duration_seconds_bucket|workqueue_work_duration_seconds_bucket"
               action: drop
         - job_name: kubernetes-service-endpoints
           kubernetes_sd_configs:
@@ -232,11 +258,17 @@ promstack:
           # Drop Go runtime and process metrics from auto-discovered service targets.
           metric_relabel_configs:
             - source_labels: [__name__]
-              regex: "go_.*|process_.*"
+              regex: "go_.*|process_.*|apiserver_request_duration_seconds_bucket|apiserver_request_sli_duration_seconds_bucket|etcd_request_duration_seconds_bucket|apiserver_request_body_size_bytes_bucket|apiserver_watch_list_duration_seconds_bucket|apiserver_response_sizes_bucket|apiserver_watch_cache_read_wait_seconds_bucket|apiserver_watch_events_sizes_bucket|apiserver_admission_controller_admission_duration_seconds_bucket|apiserver_flowcontrol_request_execution_seconds_bucket|storage_operation_duration_seconds_bucket|workqueue_queue_duration_seconds_bucket|workqueue_work_duration_seconds_bucket"
               action: drop
   grafana:
     externalUrl: http://grafana.<secret:kv/data/domains~local>/
     adminPassword: <secret:kv/data/monitoring/grafana~adminPassword>
+    grafana.ini:
+      server:
+        domain: grafana.<secret:kv/data/domains~local>
+        root_url: http://grafana.<secret:kv/data/domains~local>/
+    serviceMonitor:
+      enabled: false
     deploymentStrategy:
       type: Recreate
     resources:
@@ -250,6 +282,10 @@ promstack:
       dashboards:
         provider:
           allowUiUpdates: true
+      alerts:
+        enabled: true
+        searchNamespace: ALL
+        defaultDashboardsEnabled: false
     persistence:
       enabled: true
       storageClassName: longhorn
@@ -281,22 +317,26 @@ promstack:
     # This dramatically reduces cardinality while keeping metrics queryable.
     # pod_labels are excluded entirely by omitting them from the allowlist.
     metricLabelsAllowlist:
-      - "pods=[*]"
-      - "deployments=[*]"
-      - "statefulsets=[*]"
-      - "daemonsets=[*]"
-      - "services=[*]"
-      - "nodes=[*]"
+      - "pods=[app,app.kubernetes.io/name]"
+      - "deployments=[app,app.kubernetes.io/name]"
+      - "statefulsets=[app,app.kubernetes.io/name]"
+      - "daemonsets=[app,app.kubernetes.io/name]"
+      - "services=[app,app.kubernetes.io/name]"
+      - "nodes=[kubernetes.io/hostname]"
     prometheus:
       monitor:
         metricRelabelings:
           # Drop rarely-used pod/container metadata metrics
           - sourceLabels: [__name__]
-            regex: "kube_pod_labels|kube_pod_status_phase_reason|kube_pod_status_reason|kube_pod_status_scheduled_time|kube_container_status_last_terminated_reason|kube_container_status_terminated_reason"
+            regex: "kube_pod_labels|kube_pod_annotations|kube_pod_ips|kube_pod_nodeselectors|kube_pod_status_phase_reason|kube_pod_status_reason|kube_pod_status_scheduled_time|kube_container_status_last_terminated_reason|kube_container_status_terminated_reason"
             action: drop
           # Drop per-pod resource limits we don't dashboard (use requests instead)
           - sourceLabels: [__name__]
             regex: "kube_pod_container_resource_limits"
+            action: drop
+          # Drop object metadata families that are too verbose for homelab use.
+          - sourceLabels: [__name__]
+            regex: "kube_(secret|configmap|job|cronjob|lease|role|rolebinding|clusterrole|clusterrolebinding|serviceaccount)_.*"
             action: drop
           # Don't need individual pod parent object references
           - sourceLabels: [__name__]
@@ -328,6 +368,10 @@ promstack:
           - sourceLabels: [__name__]
             regex: "go_.*|process_.*"
             action: drop
+          # Drop node_exporter networking/protocol internals we don't dashboard.
+          - sourceLabels: [__name__]
+            regex: "node_(nf_conntrack_.*|netstat_.*|sockstat_.*|ipvs_.*|softnet_.*|arp_.*|network_carrie.*|entropy_available_bits|timex_.*)"
+            action: drop
   
   # ── kubelet / cAdvisor filtering ────────────────────────────────────────────
   # Keep a single kubelet block. The plain kubelet endpoint (/metrics) gets a
@@ -335,10 +379,15 @@ promstack:
   # noise filtering.
   kubelet:
     serviceMonitor:
+      cAdvisorInterval: 30s
       metricRelabelings:
         # Reduce bucket cardinality of kubelet storage operations.
         - sourceLabels: [__name__, le]
           regex: "(csi_operations|storage_operation_duration)_seconds_bucket;(0.25|2.5|15|25|120|600)(\\.0)?"
+          action: drop
+        # Drop very verbose kubelet internals that are not used in dashboards.
+        - sourceLabels: [__name__]
+          regex: "kubelet_(runtime_operations_duration_seconds_bucket|pleg_relist_duration_seconds_bucket|pod_worker_duration_seconds_bucket|pod_start_duration_seconds_bucket|cgroup_manager_duration_seconds_bucket|eviction_stats_age_seconds_bucket)|rest_client_request_duration_seconds_bucket"
           action: drop
       cAdvisorMetricRelabelings:
         # Drop less useful container CPU metrics.
@@ -386,6 +435,9 @@ promstack:
         - sourceLabels: [__name__]
           regex: "container_perf.*|container_last_seen|container_last_recorded.*|container_start_time_seconds"
           action: drop
+        # Drop highly-unique cAdvisor identity labels to reduce cardinality.
+        - regex: "container_id|image_id"
+          action: labeldrop
   nameOverride: promstack
   cleanPrometheusOperatorObjectNames: true
   defaultRules:

@@ -1,0 +1,26 @@
+{{- /* Auto-publish every dashboard JSON in grafana-dashboards/ as a Grafana sidecar ConfigMap. */ -}}
+{{- $kubeTargetVersion := default .Capabilities.KubeVersion.GitVersion .Values.kubeTargetVersionOverride }}
+{{- if and (or .Values.promstack.grafana.enabled .Values.promstack.grafana.forceDeployDashboards) (semverCompare ">=1.14.0-0" $kubeTargetVersion) (semverCompare "<9.9.9-9" $kubeTargetVersion) .Values.promstack.grafana.defaultDashboardsEnabled }}
+{{- range $path, $_ := .Files.Glob "grafana-dashboards/*.json" }}
+{{- $base := base $path }}
+{{- $name := $base | trimSuffix ".json" | lower | replace " " "-" | trimSuffix "-dash" }}
+{{- $key := $base | lower | replace " " "-" }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: {{ $.Release.Namespace }}
+  name: {{ printf "%s-%s-dash" (include "kube-prometheus-stack.fullname" $) $name | trunc 63 | trimSuffix "-" }}
+  annotations:
+{{ toYaml $.Values.promstack.grafana.sidecar.dashboards.annotations | indent 4 }}
+  labels:
+    {{- if $.Values.promstack.grafana.sidecar.dashboards.label }}
+    {{ $.Values.promstack.grafana.sidecar.dashboards.label }}: {{ ternary $.Values.promstack.grafana.sidecar.dashboards.labelValue "1" (not (empty $.Values.promstack.grafana.sidecar.dashboards.labelValue)) | quote }}
+    {{- end }}
+    app: {{ template "kube-prometheus-stack.name" $ }}-grafana
+{{ include "kube-prometheus-stack.labels" $ | indent 4 }}
+data:
+  {{ $key }}: |-
+    {{- $.Files.Get $path | nindent 4 }}
+{{- end }}
+{{- end -}}
