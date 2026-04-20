@@ -24,9 +24,14 @@ metadata:
   namespace: monitoring
 spec:
   endpoints:
-  - interval: 10s
+  - interval: 30s
     port: metrics
     path: /metrics
+    metricRelabelings:
+    - action: drop
+      sourceLabels:
+      - __name__
+      regex: go_.*|process_.*|promhttp_.*
     relabelings:
     - action: replace
       regex: (.*)

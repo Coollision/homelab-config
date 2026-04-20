@@ -1,0 +1,127 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: longhorn-alerts
+  labels:
+    grafana_folder: Longhorn
+data:
+  longhorn.yaml: |
+    apiVersion: 1
+    groups:
+      - orgId: 1
+        name: longhorn-health
+        folder: Longhorn
+        interval: 1m
+        rules:
+          - uid: longhorn-rebuild-warning
+            title: Longhorn Volume Rebuild Active
+            condition: B
+            data:
+              - refId: A
+                datasourceUid: prometheus
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                model:
+                  datasource:
+                    type: prometheus
+                    uid: prometheus
+                  editorMode: code
+                  expr: max by (volume) (longhorn_volume_robustness == 2)
+                  instant: true
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+                  refId: A
+              - refId: B
+                datasourceUid: __expr__
+                relativeTimeRange:
+                  from: 0
+                  to: 0
+                model:
+                  conditions:
+                    - evaluator:
+                        params:
+                          - 0
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                          - A
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                  datasource:
+                    type: __expr__
+                    uid: __expr__
+                  expression: A
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+                  refId: B
+                  type: classic_conditions
+            for: 15m
+            noDataState: OK
+            execErrState: Alerting
+            annotations:
+              summary: Longhorn volume rebuild active
+              description: One or more Longhorn volumes are degraded and need replica rebuild.
+            labels:
+              severity: warning
+              category: storage
+          - uid: longhorn-faulted-critical
+            title: Longhorn Volume Faulted
+            condition: B
+            data:
+              - refId: A
+                datasourceUid: prometheus
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                model:
+                  datasource:
+                    type: prometheus
+                    uid: prometheus
+                  editorMode: code
+                  expr: max by (volume) (longhorn_volume_robustness == 3)
+                  instant: true
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+                  refId: A
+              - refId: B
+                datasourceUid: __expr__
+                relativeTimeRange:
+                  from: 0
+                  to: 0
+                model:
+                  conditions:
+                    - evaluator:
+                        params:
+                          - 0
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                          - A
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                  datasource:
+                    type: __expr__
+                    uid: __expr__
+                  expression: A
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+                  refId: B
+                  type: classic_conditions
+            for: 5m
+            noDataState: OK
+            execErrState: Alerting
+            annotations:
+              summary: Longhorn volume faulted
+              description: One or more Longhorn volumes have no healthy replicas available.
+            labels:
+              severity: critical
+              category: storage

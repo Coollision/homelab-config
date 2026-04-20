@@ -122,3 +122,40 @@ spec:
             sum by (namespace, pod) (
               rate(container_network_receive_bytes_total{device!~"lo|veth.*|docker.*|flannel.*|cni.*|cali.*|tunl.*"}[5m])
             )
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Longhorn alerts
+    #
+    # Robustness meanings used by Longhorn metrics:
+    #   1 = healthy
+    #   2 = degraded (missing healthy replica, rebuild/re-replication needed)
+    #   3 = faulted (no healthy replica left)
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: longhorn.alerts
+      interval: 1m
+      rules:
+        - alert: LonghornVolumeReplicaRebuildInProgress
+          expr: >-
+            max by (volume) (
+              longhorn_volume_robustness == 2
+            ) > 0
+          for: 15m
+          labels:
+            severity: warning
+            category: storage
+          annotations:
+            summary: "Longhorn volume {{`{{ $labels.volume }}`}} is degraded and needs replica rebuild"
+            description: "Longhorn reports volume {{`{{ $labels.volume }}`}} as degraded for more than 15 minutes. A replica is missing or unhealthy and Longhorn is rebuilding or re-replicating volume data."
+
+        - alert: LonghornVolumeFaulted
+          expr: >-
+            max by (volume) (
+              longhorn_volume_robustness == 3
+            ) > 0
+          for: 5m
+          labels:
+            severity: critical
+            category: storage
+          annotations:
+            summary: "Longhorn volume {{`{{ $labels.volume }}`}} is faulted"
+            description: "Longhorn reports volume {{`{{ $labels.volume }}`}} as faulted for more than 5 minutes. No healthy replica is currently available for this volume."

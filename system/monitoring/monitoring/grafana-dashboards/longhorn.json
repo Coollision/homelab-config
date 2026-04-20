@@ -276,7 +276,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Degraded volumes are volumes that have the number of healthy replicas smaller than the expected number of replicas. e.g. User creates a volume with 2 replicas but 1 replicas is failed.",
+      "description": "Degraded volumes have fewer healthy replicas than expected. In practice this is your main replica rebuild alarm: Longhorn is missing a healthy replica and needs to rebuild or re-replicate volume data.",
       "fieldConfig": {
         "defaults": {
           "mappings": [],
@@ -333,7 +333,7 @@
           "refId": "A"
         }
       ],
-      "title": "Number Of Degraded Volumes",
+      "title": "Replica Rebuild Alerts",
       "type": "stat"
     },
     {
@@ -503,7 +503,7 @@
         ]
       },
       "gridPos": {
-        "h": 9,
+        "h": 6,
         "w": 16,
         "x": 8,
         "y": 10
@@ -623,6 +623,76 @@
         }
       ],
       "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Volumes listed here are degraded and should be treated as active replica rebuild attention items.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 16,
+        "x": 8,
+        "y": 16
+      },
+      "id": 43,
+      "options": {
+        "displayMode": "basic",
+        "minVizHeight": 8,
+        "minVizWidth": 8,
+        "namePlacement": "left",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": false,
+        "sizing": "manual",
+        "valueMode": "color"
+      },
+      "pluginVersion": "12.4.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "max by (volume) (longhorn_volume_robustness{volume=~\"$volume\"} == 2)",
+          "instant": true,
+          "legendFormat": "{{ volume }}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Volumes Rebuilding",
+      "type": "bargauge"
     },
     {
       "datasource": {
