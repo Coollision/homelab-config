@@ -17,6 +17,7 @@ permissions:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ghcr.io/coollision/aws-tunnels-operator
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   test:
@@ -70,10 +71,10 @@ jobs:
             type=match,pattern=aws-tunnels-operator/v(\d+\.\d+\.\d+),group=1
             type=match,pattern=aws-tunnels-operator/v(\d+\.\d+),group=1
             type=match,pattern=aws-tunnels-operator/v(\d+),group=1
-            # sha tag on every commit to main
-            type=sha,prefix=sha-,format=short,enable={{is_default_branch}}
-            # edge tag tracks latest main commit
-            type=edge,branch=main
+            # always emit sha tag so branch pushes can publish images
+            type=sha,prefix=sha-,format=short
+            # emit branch tag for non-tag pushes
+            type=ref,event=branch,prefix=branch-
 
       - name: Build and push
         uses: docker/build-push-action@v6
