@@ -3,9 +3,9 @@ name: aws-tunnels-operator
 on:
   push:
     branches:
-      - main
+      - orphan/aws-tunnels-operator-standalone
     paths:
-      - "tests/proxies/aws-tunnels-operator/**"
+      - "aws-tunnels-operator/**"
       - ".github/workflows/aws-tunnels-operator.yaml"
     tags:
       - "aws-tunnels-operator/v*"
@@ -24,15 +24,15 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: tests/proxies/aws-tunnels-operator
+        working-directory: aws-tunnels-operator
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: tests/proxies/aws-tunnels-operator/go.mod
-          cache-dependency-path: tests/proxies/aws-tunnels-operator/go.sum
+          go-version-file: aws-tunnels-operator/go.mod
+          cache-dependency-path: aws-tunnels-operator/go.sum
 
       - name: Run tests
         run: go test ./...
@@ -78,48 +78,11 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: tests/proxies/aws-tunnels-operator
-          file: tests/proxies/aws-tunnels-operator/Dockerfile
+          context: aws-tunnels-operator
+          file: aws-tunnels-operator/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-  update-manifest:
-    name: Update deployment manifest
-    runs-on: ubuntu-latest
-    needs: build
-    # Only update manifest on semver git tags, not on every main commit
-    if: startsWith(github.ref, 'refs/tags/aws-tunnels-operator/v')
-    permissions:
-      contents: write
-      pull-requests: write
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract version from tag
-        id: version
-        run: echo "version=${GITHUB_REF_NAME#aws-tunnels-operator/}" >> "$GITHUB_OUTPUT"
-
-      - name: Update image tag in deployment manifest
-        run: |
-          sed -i "s|image: ghcr.io/coollision/aws-tunnels-operator:.*|image: ghcr.io/coollision/aws-tunnels-operator:${{ steps.version.outputs.version }}|" \
-            tests/proxies/aws-tunnels-operator/config/manager/deployment.yaml
-
-      - name: Commit and open PR
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: chore/bump-aws-tunnels-operator-${{ steps.version.outputs.version }}
-          commit-message: "chore: bump aws-tunnels-operator image to ${{ steps.version.outputs.version }}"
-          title: "chore: bump aws-tunnels-operator to ${{ steps.version.outputs.version }}"
-          body: |
-            Automated image tag bump triggered by git tag `${{ github.ref_name }}`.
-
-            Image: `ghcr.io/coollision/aws-tunnels-operator:${{ steps.version.outputs.version }}`
-          labels: dependencies,automated
