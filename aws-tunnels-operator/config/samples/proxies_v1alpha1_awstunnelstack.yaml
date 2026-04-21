@@ -1,0 +1,55 @@
+apiVersion: proxies.homelab.io/v1alpha1
+kind: AWSTunnelStack
+metadata:
+  name: aws-tunnels
+  namespace: proxies
+spec:
+  aws:
+    profile: awsprofile001
+    region: eu-central-1
+    ssoStartUrl: <secret:kv/data/proxies/aws-tunnel~sso-start-url>
+    accountId: <secret:kv/data/proxies/aws-tunnel~account-id>
+    roleName: <secret:kv/data/proxies/aws-tunnel~sso-role-name>
+    extraProfiles:
+      - name: awsprofile001-prod
+        region: eu-central-1
+        ssoStartUrl: <secret:kv/data/proxies/aws-tunnel~prod-sso-start-url>
+        accountId: <secret:kv/data/proxies/aws-tunnel~prod-account-id>
+        roleName: <secret:kv/data/proxies/aws-tunnel~prod-sso-role-name>
+  auth:
+    enabled: true
+    host: aws-auth.<secret:kv/data/domains~domain>
+    port: 8090
+  nodeAffinity:
+    excludedType: rpi
+  tunnelDefaults:
+    image: amazon/aws-cli:2.27.9
+    proxyImage: alpine/socat:1.8.0.3
+    servicePort: 8080
+  tunnels:
+    - name: gitlab-dev
+      bastionName: bastion-dev
+      remoteHost: <secret:kv/data/proxies/aws-tunnel~gitlab-dev-host>
+      remotePort: "81"
+      localPort: 18080
+      host: gitlab-work.<secret:kv/data/domains~domain>
+    - name: dev-db
+      bastionName: bastion-dev
+      remoteHost: <secret:kv/data/proxies/aws-tunnel~dev-db-host>
+      remotePort: <secret:kv/data/proxies/aws-tunnel~dev-db-port>
+      localPort: 15432
+      host: dev-db-work.<secret:kv/data/domains~domain>
+      ingressMode: tcp
+      tls:
+        passthrough: true
+    - name: prod-db
+      bastionName: bastion-prod
+      awsProfile: awsprofile001-prod
+      awsRegion: eu-central-1
+      remoteHost: <secret:kv/data/proxies/aws-tunnel~prod-db-host>
+      remotePort: <secret:kv/data/proxies/aws-tunnel~prod-db-port>
+      localPort: 35432
+      host: prod-db-work.<secret:kv/data/domains~domain>
+      ingressMode: tcp
+      tls:
+        passthrough: true

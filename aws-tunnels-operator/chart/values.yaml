@@ -1,0 +1,64 @@
+nameOverride: ""
+fullnameOverride: aws-tunnels-operator
+namespaceOverride: ""
+
+image:
+  repository: ghcr.io/coollision/aws-tunnels-operator
+  tag: v0.1.0
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+serviceAccount:
+  create: true
+  name: ""
+
+rbac:
+  create: true
+
+service:
+  create: true
+  authPort: 8090
+
+ingress:
+  enabled: true
+  entryPoints:
+    - websecure
+  host: aws-auth.<secret:kv/data/domains~domain>
+  tls: true
+
+operatorArgs:
+  metricsBindAddress: :8080
+  healthProbeBindAddress: :8081
+
+resources: {}
+
+affinity: {}
+tolerations: []
+nodeSelector: {}
+
+stacks: []
+# - name: aws-tunnels
+#   spec:
+#     aws:
+#       profile: awsprofile001
+#       region: eu-west-1
+#       ssoStartUrl: <secret:kv/data/aws~sso-start-url>
+#       accountId: <secret:kv/data/aws~account-id>
+#       roleName: Admin
+#     auth:
+#       enabled: true
+#       host: aws-auth.<secret:kv/data/domains~domain>
+#       port: 8090
+#     tunnelDefaults:
+#       image: ghcr.io/coollision/aws-tunnels-operator:v0.1.0
+#       proxyImage: ubuntu/squid:5.2-22.04_beta
+#       servicePort: 3128
+#     tunnels:
+#       - name: gitlab-dev
+#         host: gitlab-dev.<secret:kv/data/domains~domain>
+#         bastionName: bhnonprod
+#         remoteHost: localhost
+#         remotePort: "8181"
+#         localPort: 8181
+#         ingressMode: http

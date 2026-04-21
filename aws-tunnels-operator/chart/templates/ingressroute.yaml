@@ -1,0 +1,21 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ include "aws-tunnels-operator.fullname" . }}-auth
+  namespace: {{ include "aws-tunnels-operator.namespace" . }}
+spec:
+  entryPoints:
+{{ toYaml .Values.ingress.entryPoints | indent 4 }}
+  routes:
+    - kind: Rule
+      match: Host(`{{ .Values.ingress.host }}`)
+      services:
+        - kind: Service
+          name: {{ include "aws-tunnels-operator.fullname" . }}-auth
+          namespace: {{ include "aws-tunnels-operator.namespace" . }}
+          port: {{ .Values.service.authPort }}
+{{- if .Values.ingress.tls }}
+  tls: {}
+{{- end }}
+{{- end }}

@@ -1,0 +1,17 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: aws-tunnels-operator-auth
+  namespace: proxies
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`aws-auth.<secret:kv/data/domains~domain>`)
+      services:
+        - kind: Service
+          name: aws-tunnels-operator-auth
+          namespace: proxies
+          port: 8090
+  tls: {}

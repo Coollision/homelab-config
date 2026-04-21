@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: proxies
+resources:
+  - ../crd/bases/proxies.homelab.io_awstunnelstacks.yaml
+  - ../rbac/service_account.yaml
+  - ../rbac/role.yaml
+  - ../rbac/role_binding.yaml
+  - ../manager/deployment.yaml
+  - ../manager/service.yaml
+  - ../manager/ingressroute.yaml
+
+# Credential secrets (e.g. <stack>-creds-<profile>) are written by the operator at runtime.
+# ArgoCD should not prune them. Add the annotation in ignoreDifferences on the ArgoCD Application,
+# or exclude them here via a label selector. Runtime secrets are excluded from kustomize output
+# automatically because they are not listed as resources above.

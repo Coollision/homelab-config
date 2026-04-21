@@ -1,0 +1,10 @@
+{{- range .Values.stacks }}
+---
+apiVersion: proxies.homelab.io/v1alpha1
+kind: AWSTunnelStack
+metadata:
+  name: {{ .name }}
+  namespace: {{ default $.Values.namespaceOverride $.Release.Namespace }}
+spec:
+{{ toYaml .spec | indent 2 }}
+{{- end }}

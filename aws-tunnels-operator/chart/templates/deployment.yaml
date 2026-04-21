@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "aws-tunnels-operator.fullname" . }}
+  namespace: {{ include "aws-tunnels-operator.namespace" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "aws-tunnels-operator.name" . }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "aws-tunnels-operator.name" . }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "aws-tunnels-operator.name" . }}
+    spec:
+      serviceAccountName: {{ include "aws-tunnels-operator.serviceAccountName" . }}
+      containers:
+        - name: manager
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --metrics-bind-address={{ .Values.operatorArgs.metricsBindAddress }}
+            - --health-probe-bind-address={{ .Values.operatorArgs.healthProbeBindAddress }}
+          ports:
+            - name: metrics
+              containerPort: 8080
+            - name: probes
+              containerPort: 8081
+            - name: auth
+              containerPort: {{ .Values.service.authPort }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: probes
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: probes
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+{{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+{{- end }}

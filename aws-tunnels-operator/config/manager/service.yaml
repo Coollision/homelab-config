@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: aws-tunnels-operator-auth
+  namespace: proxies
+spec:
+  selector:
+    app.kubernetes.io/name: aws-tunnels-operator
+  ports:
+    - name: http
+      port: 8090
+      targetPort: auth
