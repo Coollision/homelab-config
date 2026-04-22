@@ -11,7 +11,7 @@ on:
       - "aws-tunnels-operator/v*"
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 env:
@@ -38,21 +38,172 @@ jobs:
       - name: Run tests
         run: go test ./...
 
-  build:
-    name: Build & Push
+  versioning:
+    name: Versioning
     runs-on: ubuntu-latest
     needs: test
     outputs:
-      image-tag: ${{ steps.meta.outputs.version }}
+      version: ${{ steps.version.outputs.version }}
+      image-tag: ${{ steps.version.outputs.image_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+
+      - name: Resolve semantic version and update chart files
+        id: version
+        shell: bash
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          chart_file="aws-tunnels-operator/chart/Chart.yaml"
+          values_file="aws-tunnels-operator/chart/values.yaml"
+
+          current_version=$(grep '^version:' "$chart_file" | awk '{print $2}')
+          current_major=${current_version%%.*}
+          current_minor_patch=${current_version#*.}
+          current_minor=${current_minor_patch%%.*}
+          current_patch=${current_version##*.}
+
+          if [[ "$REF_TYPE" == "tag" && "$REF_NAME" =~ ^aws-tunnels-operator/v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            next_version="${BASH_REMATCH[1]}"
+            bump_type="tag"
+          else
+            log_range=""
+            if [[ -n "${BEFORE_SHA:-}" && "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]]; then
+              log_range="${BEFORE_SHA}..${CURRENT_SHA}"
+            fi
+
+            commit_messages=""
+            if [[ -n "$log_range" ]]; then
+              commit_messages=$(git log --format='%s%n%b' "$log_range" -- aws-tunnels-operator .github/workflows/aws-tunnels-operator.yaml || true)
+            else
+              commit_messages=$(git log --format='%s%n%b' -n 20 -- aws-tunnels-operator .github/workflows/aws-tunnels-operator.yaml || true)
+            fi
+
+            bump_type="patch"
+            if echo "$commit_messages" | grep -Eiq 'BREAKING CHANGE|^[a-z]+(\([^)]+\))?!:'; then
+              bump_type="major"
+            elif echo "$commit_messages" | grep -Eiq '^feat(\([^)]+\))?:'; then
+              bump_type="minor"
+            fi
+
+            next_major=$current_major
+            next_minor=$current_minor
+            next_patch=$current_patch
+
+            case "$bump_type" in
+              major)
+                next_major=$((current_major + 1))
+                next_minor=0
+                next_patch=0
+                ;;
+              minor)
+                next_minor=$((current_minor + 1))
+                next_patch=0
+                ;;
+              patch)
+                next_patch=$((current_patch + 1))
+                ;;
+            esac
+
+            next_version="${next_major}.${next_minor}.${next_patch}"
+          fi
+
+          image_tag="v${next_version}"
+
+          sed -i -E "s/^version: .*/version: ${next_version}/" "$chart_file"
+          sed -i -E "s/^appVersion: .*/appVersion: ${next_version}/" "$chart_file"
+          sed -i -E "s/^  tag: .*/  tag: ${image_tag}/" "$values_file"
+          sed -i -E "s|^(#\s*      image: ghcr\.io/coollision/aws-tunnels-operator:).*|\1${image_tag}|" "$values_file"
+
+          echo "version=${next_version}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${image_tag}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version ${next_version} via ${bump_type} bump"
+
+      - name: Commit version updates
+        if: github.ref_type == 'branch'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- aws-tunnels-operator/chart/Chart.yaml aws-tunnels-operator/chart/values.yaml; then
+            echo "No version file updates to commit"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add aws-tunnels-operator/chart/Chart.yaml aws-tunnels-operator/chart/values.yaml
+          git commit -m "chore(release): bump aws-tunnels-operator to ${{ steps.version.outputs.image_tag }} [skip ci]"
+          git push
+
+  build-binaries:
+    name: Build Binaries
+    runs-on: ubuntu-latest
+    needs: [test, versioning]
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    defaults:
+      run:
+        working-directory: aws-tunnels-operator
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: aws-tunnels-operator/go.mod
+          cache-dependency-path: aws-tunnels-operator/go.sum
+
+      - name: Build linux/${{ matrix.arch }} binary
+        run: |
+          mkdir -p dist
+          CGO_ENABLED=0 GOOS=linux GOARCH=${{ matrix.arch }} go build -trimpath -ldflags="-s -w" -o dist/manager-linux-${{ matrix.arch }} ./
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: manager-linux-${{ matrix.arch }}
+          path: aws-tunnels-operator/dist/manager-linux-${{ matrix.arch }}
+          if-no-files-found: error
+
+  build:
+    name: Build & Push
+    runs-on: ubuntu-latest
+    needs: [test, versioning, build-binaries]
+    outputs:
+      image-tag: ${{ needs.versioning.outputs.image-tag }}
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Download amd64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: manager-linux-amd64
+          path: aws-tunnels-operator/dist
+
+      - name: Download arm64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: manager-linux-arm64
+          path: aws-tunnels-operator/dist
+
+      - name: Ensure binaries are executable
+        run: chmod +x aws-tunnels-operator/dist/manager-linux-amd64 aws-tunnels-operator/dist/manager-linux-arm64
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -61,21 +212,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE_NAME }}
-          tags: |
-            # semver tags from git tags (aws-tunnels-operator/v1.2.3 → v1.2.3, v1.2, v1)
-            type=match,pattern=aws-tunnels-operator/v(\d+\.\d+\.\d+),group=1
-            type=match,pattern=aws-tunnels-operator/v(\d+\.\d+),group=1
-            type=match,pattern=aws-tunnels-operator/v(\d+),group=1
-            # always emit sha tag so branch pushes can publish images
-            type=sha,prefix=sha-,format=short
-            # emit branch tag for non-tag pushes
-            type=ref,event=branch,prefix=branch-
-
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -83,39 +219,27 @@ jobs:
           file: aws-tunnels-operator/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ needs.versioning.outputs.image-tag }}
+            ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.version=${{ needs.versioning.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
   publish-chart:
     name: Publish Helm Chart (OCI)
     runs-on: ubuntu-latest
-    needs: build
+    needs: [versioning, build]
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Detect chart changes
-        id: chart_changes
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            chart:
-              - 'aws-tunnels-operator/chart/**'
-
-      - name: Skip when chart unchanged on branch push
-        if: github.ref_type == 'branch' && steps.chart_changes.outputs.chart != 'true'
-        run: |
-          echo "No chart changes detected on branch push; skipping chart publish."
-          exit 0
-
       - name: Set up Helm
-        if: github.ref_type == 'tag' || steps.chart_changes.outputs.chart == 'true'
         uses: azure/setup-helm@v4
 
       - name: Log in to GHCR for Helm OCI
-        if: github.ref_type == 'tag' || steps.chart_changes.outputs.chart == 'true'
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
 
@@ -127,10 +251,8 @@ jobs:
           helm push "$CHART_TGZ" oci://ghcr.io/coollision/charts
 
       - name: Package and push chart (branch chart changes)
-        if: github.ref_type == 'branch' && steps.chart_changes.outputs.chart == 'true'
+        if: github.ref_type == 'branch'
         run: |
-          BASE_VERSION=$(grep '^version:' aws-tunnels-operator/chart/Chart.yaml | awk '{print $2}')
-          BRANCH_VERSION="${BASE_VERSION}-${GITHUB_SHA::7}"
-          helm package aws-tunnels-operator/chart --version "$BRANCH_VERSION" --destination .
+          helm package aws-tunnels-operator/chart --destination .
           CHART_TGZ=$(ls aws-tunnels-operator-*.tgz | head -n 1)
           helm push "$CHART_TGZ" oci://ghcr.io/coollision/charts
