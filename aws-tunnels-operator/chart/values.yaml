@@ -4,7 +4,7 @@ namespaceOverride: ""
 
 image:
   repository: ghcr.io/coollision/aws-tunnels-operator
-  tag: v0.1.1
+  tag: v0.1.2
   pullPolicy: IfNotPresent
 
 replicaCount: 1
@@ -51,7 +51,7 @@ stacks: []
 #       host: aws-auth.<secret:kv/data/domains~domain>
 #       port: 8090
 #     tunnelDefaults:
-#       image: ghcr.io/coollision/aws-tunnels-operator:v0.1.1
+#       image: ghcr.io/coollision/aws-tunnels-operator:v0.1.2
 #       proxyImage: ubuntu/squid:5.2-22.04_beta
 #       servicePort: 3128
 #     tunnels:
