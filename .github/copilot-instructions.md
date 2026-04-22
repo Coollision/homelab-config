@@ -27,6 +27,7 @@ Use Conventional Commits to drive automated version bumps:
 - `feat:` -> minor bump
 - `fix:`, `chore:`, `refactor:`, `docs:`, `ci:`, `test:` -> patch bump
 - `!` or `BREAKING CHANGE:` -> major bump
+- CI enforces this convention on push for operator/workflow related commits.
 
 Examples:
 
@@ -40,6 +41,7 @@ Examples:
 - Build/push multi-arch image by copying prebuilt binaries into runtime image.
 - Publish chart to OCI using semver chart versions (no SHA-only chart versioning).
 - Keep image tags immutable and include commit SHA tags for traceability.
+- Automatically create release tags in the format `aws-tunnels-operator/vX.Y.Z` after successful pipeline runs.
 
 ## PR/Change Hygiene
 
