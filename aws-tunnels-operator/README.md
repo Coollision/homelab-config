@@ -83,10 +83,11 @@ docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/coollision/aws
 
 ## Versioning And Releases
 
+- CI enforces Conventional Commit messages for operator-related changes.
 - CI automatically bumps chart `version` and `appVersion` based on Conventional Commit messages on branch pushes.
 - `values.yaml` image tag is kept in sync as `vX.Y.Z`.
 - Container images are published with immutable tags:
   - `vX.Y.Z`
   - `sha-<commit>`
 - `latest` is intentionally not published.
-- Release tags should use `aws-tunnels-operator/vX.Y.Z`.
+- CI automatically creates and pushes release tags as `aws-tunnels-operator/vX.Y.Z`.
