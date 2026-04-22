@@ -67,3 +67,26 @@ See `API.md` for:
 ```bash
 go test ./...
 ```
+
+## Build Multi-Arch Image
+
+The container image now copies prebuilt Go binaries from `dist/` for each target architecture.
+
+Local example:
+
+```bash
+mkdir -p dist
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o dist/manager-linux-amd64 ./
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o dist/manager-linux-arm64 ./
+docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/coollision/aws-tunnels-operator:dev --load .
+```
+
+## Versioning And Releases
+
+- CI automatically bumps chart `version` and `appVersion` based on Conventional Commit messages on branch pushes.
+- `values.yaml` image tag is kept in sync as `vX.Y.Z`.
+- Container images are published with immutable tags:
+  - `vX.Y.Z`
+  - `sha-<commit>`
+- `latest` is intentionally not published.
+- Release tags should use `aws-tunnels-operator/vX.Y.Z`.
