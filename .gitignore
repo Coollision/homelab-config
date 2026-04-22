@@ -1,0 +1,20 @@
+﻿*.tgz
+**/Chart.lock
+**/charts/**
+workload/secrets/vault/test.yaml
+
+**test.yaml
+
+.ansible/
+
+ansible/playbooks/kubeconfig/
+
+# Python cache directories
+__pycache__/
+*.py[cod]
+*$py.class
+ZZ_Travel setup.md
+
+tmp/*
+.tmp
+.venv
