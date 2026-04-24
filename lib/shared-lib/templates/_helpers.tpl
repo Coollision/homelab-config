@@ -100,21 +100,51 @@ affinity:
           topologyKey: kubernetes.io/hostname
 */}}
 {{- define "shared-lib.affinity" -}}
-{{- if .Values.affinity }}
+{{- $affinity := .Values.affinity | default dict -}}
+{{- $nodeAffinity := $affinity.node | default dict -}}
+{{- $podAffinity := $affinity.pod | default dict -}}
+{{- $podAntiAffinity := $affinity.podAnti | default dict -}}
+{{- $autoNodeMatchExpressions := list -}}
+{{- if and .Values.multusNetworks (ne .Values.multusAutoNodeAffinity false) -}}
+  {{- range $network := .Values.multusNetworks -}}
+    {{- $labelKey := $network.nodeLabelKey | default "" -}}
+    {{- if not $labelKey -}}
+      {{- if hasPrefix "vlan" ($network.parentInterface | default "") -}}
+        {{- $labelKey = printf "%s-trunk" $network.parentInterface -}}
+      {{- else -}}
+        {{- $vlanFromName := regexFind "vlan[0-9]+" ($network.name | default "") -}}
+        {{- if $vlanFromName -}}
+          {{- $labelKey = printf "%s-trunk" $vlanFromName -}}
+        {{- end -}}
+      {{- end -}}
+    {{- end -}}
+    {{- if $labelKey -}}
+      {{- $autoNodeMatchExpressions = append $autoNodeMatchExpressions (dict "key" $labelKey "operator" "In" "values" (list "true")) -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+
+{{- if or $affinity (gt (len $autoNodeMatchExpressions) 0) }}
 affinity:
-  {{- if .Values.affinity.node }}
+  {{- if or $nodeAffinity (gt (len $autoNodeMatchExpressions) 0) }}
   nodeAffinity:
-    {{- if .Values.affinity.node.required }}
+    {{- if or $nodeAffinity.required (gt (len $autoNodeMatchExpressions) 0) }}
     requiredDuringSchedulingIgnoredDuringExecution:
       nodeSelectorTerms:
-        {{- range .Values.affinity.node.required }}
+        {{- if $nodeAffinity.required }}
+        {{- range $nodeAffinity.required }}
+        {{- $termExpressions := concat (.matchExpressions | default (list)) $autoNodeMatchExpressions }}
         - matchExpressions:
-            {{- toYaml .matchExpressions | nindent 12 }}
+            {{- toYaml $termExpressions | nindent 12 }}
+        {{- end }}
+        {{- else }}
+        - matchExpressions:
+            {{- toYaml $autoNodeMatchExpressions | nindent 12 }}
         {{- end }}
     {{- end }}
-    {{- if .Values.affinity.node.preferred }}
+    {{- if $nodeAffinity.preferred }}
     preferredDuringSchedulingIgnoredDuringExecution:
-      {{- range .Values.affinity.node.preferred }}
+      {{- range $nodeAffinity.preferred }}
       - weight: {{ .weight }}
         preference:
           matchExpressions:
@@ -122,26 +152,26 @@ affinity:
       {{- end }}
     {{- end }}
   {{- end }}
-  {{- if .Values.affinity.pod }}
+  {{- if $podAffinity }}
   podAffinity:
-    {{- if .Values.affinity.pod.required }}
+    {{- if $podAffinity.required }}
     requiredDuringSchedulingIgnoredDuringExecution:
-      {{- toYaml .Values.affinity.pod.required | nindent 6 }}
+      {{- toYaml $podAffinity.required | nindent 6 }}
     {{- end }}
-    {{- if .Values.affinity.pod.preferred }}
+    {{- if $podAffinity.preferred }}
     preferredDuringSchedulingIgnoredDuringExecution:
-      {{- toYaml .Values.affinity.pod.preferred | nindent 6 }}
+      {{- toYaml $podAffinity.preferred | nindent 6 }}
     {{- end }}
   {{- end }}
-  {{- if .Values.affinity.podAnti }}
+  {{- if $podAntiAffinity }}
   podAntiAffinity:
-    {{- if .Values.affinity.podAnti.required }}
+    {{- if $podAntiAffinity.required }}
     requiredDuringSchedulingIgnoredDuringExecution:
-      {{- toYaml .Values.affinity.podAnti.required | nindent 6 }}
+      {{- toYaml $podAntiAffinity.required | nindent 6 }}
     {{- end }}
-    {{- if .Values.affinity.podAnti.preferred }}
+    {{- if $podAntiAffinity.preferred }}
     preferredDuringSchedulingIgnoredDuringExecution:
-      {{- toYaml .Values.affinity.podAnti.preferred | nindent 6 }}
+      {{- toYaml $podAntiAffinity.preferred | nindent 6 }}
     {{- end }}
   {{- end }}
 {{- end }}

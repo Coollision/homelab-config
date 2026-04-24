@@ -1,2 +1,5 @@
 ACTION=="add", SUBSYSTEM=="usb", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", ATTRS{serial}=="54d39955bc39ec118f02e3680aac08d5", RUN="/bin/rm -r /dev/zigbee"
 ACTION=="add", SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", ATTRS{serial}=="54d39955bc39ec118f02e3680aac08d5", SYMLINK+="zigbee"
+
+ACTION=="add", SUBSYSTEM=="usb", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="831a", ATTRS{serial}=="E072A1FA7C7C", RUN="/bin/rm -r /dev/thread-border-router"
+ACTION=="add", SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="831a", ATTRS{serial}=="E072A1FA7C7C", SYMLINK+="thread-border-router"

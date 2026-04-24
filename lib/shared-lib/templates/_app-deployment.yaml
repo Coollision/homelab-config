@@ -36,10 +36,17 @@ spec:
       {{- include "helm.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- with .Values.podAnnotations }}
+      {{- $annotations := dict -}}
+      {{- if .Values.podAnnotations -}}
+      {{- $annotations = mergeOverwrite $annotations .Values.podAnnotations -}}
+      {{- end -}}
+      {{- if .Values.multusNetworks -}}
+      {{- $annotations = mergeOverwrite $annotations (dict "k8s.v1.cni.cncf.io/networks" (include "shared-lib.multusNetworkAnnotation" .)) -}}
+      {{- end -}}
+      {{- with $annotations }}
       annotations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+{{ toYaml . | nindent 8 }}
+      {{ end }}
       labels:
         {{- include "helm.labels" . | nindent 8 }}
         {{- with .Values.podLabels }}

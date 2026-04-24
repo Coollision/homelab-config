@@ -1,0 +1,6 @@
+apiVersion: v2
+name: multus
+description: Multus CNI thick plugin — enables secondary pod network interfaces (K3s compatible)
+type: application
+version: 0.1.0
+appVersion: "4.1.4"

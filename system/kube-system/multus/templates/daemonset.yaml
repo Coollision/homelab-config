@@ -1,0 +1,186 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: multus
+  namespace: kube-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  selector:
+    matchLabels:
+      app: multus
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: multus
+    spec:
+      hostNetwork: true
+      hostPID: true
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+      priorityClassName: system-node-critical
+      serviceAccountName: multus
+      initContainers:
+        # Copy the multus-shim CNI binary to the host so kubelet can call it.
+        - name: install-multus-shim
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          command:
+            - cp
+            - /usr/src/multus-cni/bin/multus-shim
+            - /host{{ .Values.cni.shimBinDir }}/multus-shim
+          volumeMounts:
+            - name: shim-bin
+              mountPath: /host{{ .Values.cni.shimBinDir }}
+        - name: install-extra-cni-plugins
+          image: {{ .Values.pluginsImage.repository }}:{{ .Values.pluginsImage.tag }}
+          command:
+            - sh
+            - -ec
+            - |
+              arch=$(uname -m)
+              case "$arch" in
+                x86_64) cni_arch=amd64 ;;
+                aarch64|arm64) cni_arch=arm64 ;;
+                *) echo "unsupported arch: $arch"; exit 1 ;;
+              esac
+              tmpdir=$(mktemp -d)
+              wget -O - "https://github.com/containernetworking/plugins/releases/download/{{ .Values.pluginsVersion }}/cni-plugins-linux-${cni_arch}-{{ .Values.pluginsVersion }}.tgz" \
+                | tar -xz -C "$tmpdir"
+              {{- range .Values.cni.extraDelegatePlugins }}
+              cp "$tmpdir"/{{ . }} /host{{ $.Values.cni.delegateBinDir }}/{{ . }}
+              {{- end }}
+              rm -rf "$tmpdir"
+          volumeMounts:
+            - name: delegate-bin
+              mountPath: /host{{ .Values.cni.delegateBinDir }}
+      containers:
+        - name: kube-multus
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          command:
+            - /usr/src/multus-cni/bin/multus-daemon
+          args:
+            - -config=/etc/cni/net.d/multus.d/daemon-config.json
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: cni-conf
+              mountPath: /host/etc/cni/net.d
+            - name: delegate-bin
+              mountPath: {{ .Values.cni.delegateBinDir }}
+            - name: host-root
+              mountPath: /hostroot
+              mountPropagation: HostToContainer
+            - name: host-run
+              mountPath: /host/run
+              mountPropagation: Bidirectional
+            - name: host-run-netns
+              mountPath: /run/netns
+              mountPropagation: HostToContainer
+            - name: host-run-netns
+              mountPath: /hostroot/var/run/netns
+              mountPropagation: HostToContainer
+            - name: host-run-k8s-cni-cncf-io
+              mountPath: /run/k8s.cni.cncf.io
+              mountPropagation: HostToContainer
+            - name: host-var-lib-cni
+              mountPath: /var/lib/cni
+            - name: host-var-lib-kubelet
+              mountPath: /var/lib/kubelet
+              mountPropagation: HostToContainer
+            - name: multus-daemon-config
+              mountPath: /etc/cni/net.d/multus.d
+              readOnly: true
+{{- if has "dhcp" .Values.cni.extraDelegatePlugins }}
+        - name: cni-dhcp-daemon
+          image: {{ .Values.pluginsImage.repository }}:{{ .Values.pluginsImage.tag }}
+          command:
+            - sh
+            - -ec
+            - |
+              mkdir -p /hostroot/run/cni
+              exec /host{{ .Values.cni.delegateBinDir }}/dhcp daemon -hostprefix /hostroot
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: delegate-bin
+              mountPath: /host{{ .Values.cni.delegateBinDir }}
+            - name: host-root
+              mountPath: /hostroot
+              mountPropagation: HostToContainer
+            - name: host-run-netns
+              mountPath: /hostroot/var/run/netns
+              mountPropagation: HostToContainer
+{{- end }}
+      volumes:
+        - name: cni-conf
+          hostPath:
+            # K3s writes CNI config here — this is the directory Multus must manage.
+            path: {{ .Values.cni.confDir }}
+        - name: shim-bin
+          hostPath:
+            path: {{ .Values.cni.shimBinDir }}
+        - name: delegate-bin
+          hostPath:
+            path: {{ .Values.cni.delegateBinDir }}
+        - name: host-root
+          hostPath:
+            path: /
+        - name: host-run
+          hostPath:
+            path: /run
+        - name: host-run-netns
+          hostPath:
+            path: /run/netns
+        - name: host-run-k8s-cni-cncf-io
+          hostPath:
+            path: /run/k8s.cni.cncf.io
+        - name: host-var-lib-cni
+          hostPath:
+            path: /var/lib/cni
+        - name: host-var-lib-kubelet
+          hostPath:
+            path: /var/lib/kubelet
+        - name: multus-daemon-config
+          configMap:
+            name: multus-daemon-config
+            items:
+              - key: daemon-config.json
+                path: daemon-config.json
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: multus-daemon-config
+  namespace: kube-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+data:
+  daemon-config.json: |
+    {
+      "chrootDir": "/hostroot",
+      "cniVersion": "0.3.1",
+      "confDir": "{{ .Values.cni.confDir }}",
+      "logToStderr": true,
+      "logLevel": "verbose",
+      "binDir": "{{ .Values.cni.delegateBinDir }}",
+      "cniDir": "/var/lib/cni/multus",
+      "socketDir": "/host/run/multus/",
+      "cniConfigDir": "/host/etc/cni/net.d",
+      "multusConfigFile": "auto",
+      "multusAutoconfigDir": "/host/etc/cni/net.d"
+    }

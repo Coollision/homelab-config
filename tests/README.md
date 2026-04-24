@@ -43,3 +43,6 @@ kubectl get application longhorn -n argocd \
 ## Maintenance mode
 
 All three ApplicationSets (`system-config`, `workloads`, `tests`) have `ignoreApplicationDifferences` set for `.spec.syncPolicy`. This means you can **disable auto-sync directly in the ArgoCD UI** and it will stick — the ApplicationSet won't overwrite it back.
+
+
+<!-- http://thread-border-router-service.smarthome.svc.cluster.local:8081 -->

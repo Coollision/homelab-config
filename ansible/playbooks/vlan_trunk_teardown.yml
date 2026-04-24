@@ -1,0 +1,6 @@
+---
+- name: Teardown VLAN trunk interfaces
+  hosts: k3scluster
+  become: true
+  roles:
+    - vlan-trunk-teardown

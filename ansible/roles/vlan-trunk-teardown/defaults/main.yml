@@ -1,0 +1,5 @@
+---
+vlan_trunk_interfaces: []
+vlan_trunk_validate_network_manager: true
+vlan_trunk_expected_network_manager: auto
+vlan_trunk_fail_when_networkmanager_active: true

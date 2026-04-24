@@ -1,0 +1,18 @@
+- name: Set maximum inotify instances
+  become: true
+  ansible.builtin.sysctl:
+    name: fs.inotify.max_user_instances
+    value: "{{ inotify_max_user_instances }}"
+    state: present
+    sysctl_set: true
+    reload: true
+
+- name: Set maximum inotify watches
+  become: true
+  ansible.builtin.sysctl:
+    name: fs.inotify.max_user_watches
+    value: "{{ inotify_max_user_watches }}"
+    state: present
+    sysctl_set: true
+    reload: true
+

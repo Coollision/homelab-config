@@ -4,6 +4,7 @@
   become_user: root
   roles:
     - k3s_teardown
+    - vlan-trunk-teardown
     - role: dns_teardown
       vars:
         dns_set_record: "{{ k3s_master_domain_name }}"
