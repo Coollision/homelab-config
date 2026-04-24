@@ -42,6 +42,15 @@ node-feature-discovery:
                   vendor: {op: In, value: ["10c4"]}
                   device: {op: In, value: ["ea60"]}
                   serial: {op: In, value: ["54d39955bc39ec118f02e3680aac08d5"]}
+          - name: "thread-border-router"
+            labels:
+              feature.node.kubernetes.io/iot-thread-border-router: "true"
+            matchFeatures:
+              - feature: usb.device
+                matchExpressions:
+                  vendor: {op: In, value: ["303a"]}
+                  device: {op: In, value: ["831a"]}
+                  serial: {op: In, value: ["E072A1FA7C7C"]}
 
 descheduler:
   fullnameOverride: descheduler
