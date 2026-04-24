@@ -17,6 +17,7 @@ jobs:
       charts: ${{ steps.detect.outputs.charts }}
       chart-count: ${{ steps.detect.outputs.chart-count }}
       yaml-changed: ${{ steps.detect.outputs.yaml-changed }}
+      lib-fanout: ${{ steps.detect.outputs.lib-fanout }}
 
     steps:
       - name: Checkout code
@@ -55,6 +56,17 @@ jobs:
 
           # Find all chart directories that have changes
           CHANGED_CHART_DIRS=""
+          LIB_FANOUT="false"
+
+          add_chart_dir() {
+            local dir="$1"
+            [ -z "$dir" ] && return
+            if [ -z "$CHANGED_CHART_DIRS" ]; then
+              CHANGED_CHART_DIRS="$dir"
+            else
+              CHANGED_CHART_DIRS="$CHANGED_CHART_DIRS"$'\n'"$dir"
+            fi
+          }
 
           # Check for any YAML changes for yaml-lint job
           YAML_CHANGED="false"
@@ -75,7 +87,7 @@ jobs:
               if [ -f "$current_dir/Chart.yaml" ]; then
                 # Exclude charts in the charts/ subdirectory (dependencies)
                 if ! echo "$current_dir" | grep -q "/charts/"; then
-                  CHANGED_CHART_DIRS="$CHANGED_CHART_DIRS$current_dir"$'\n'
+                  add_chart_dir "$current_dir"
                 fi
                 break
               fi
@@ -86,7 +98,7 @@ jobs:
             if [ "$(basename "$changed_file")" = "Chart.yaml" ] && [ -f "$changed_file" ]; then
               chart_dir=$(dirname "$changed_file")
               if ! echo "$chart_dir" | grep -q "/charts/"; then
-                CHANGED_CHART_DIRS="$CHANGED_CHART_DIRS$chart_dir"$'\n'
+                add_chart_dir "$chart_dir"
               fi
             fi
           done <<< "$CHANGED_FILES"
@@ -94,32 +106,57 @@ jobs:
           # Remove duplicates and empty lines
           CHANGED_CHART_DIRS=$(echo "$CHANGED_CHART_DIRS" | sort -u | grep -v '^$' || true)
 
-          # If any of the shared library charts were modified, also mark every chart
-          # that depends on them. Currently we only have `lib/shared-lib` but we
-          # structure this so additional base libraries can be handled later.
+          # If a local library under lib/* changes, also validate every chart that
+          # depends on that library (via dependency name or file:// repository path).
           if echo "$CHANGED_FILES" | grep -qE '^lib/[^/]+/'; then
-            # detect all top‑level library directories that changed (e.g. lib/shared-lib)
+            LIB_FANOUT="true"
             LIB_DIRS=$(echo "$CHANGED_FILES" | grep -oE '^lib/[^/]+/' | sort -u)
+
+            # Collect candidate (non-vendored) chart directories once.
+            ALL_CHART_DIRS=$(find . -name Chart.yaml | sed 's|^\./||' | sed 's|/Chart.yaml$||' | grep -v '/charts/' || true)
+
             for lib in $LIB_DIRS; do
-              echo "Library changed: $lib"
-              # find all charts which declare a dependency on this library by name
-              # (chart dependencies are listed in Chart.yaml). We'll pick up any
-              # chart with "name: shared-lib" (or similar) and add the containing
-              # directory to the list of charts to validate.
-              while IFS= read -r chartfile; do
-                # skip the library chart itself
-                chart_dir=$(dirname "$chartfile")
-                if [ "$chart_dir" = "${lib%/}" ]; then
+              lib_dir="${lib%/}"
+              lib_name=$(basename "$lib_dir")
+              lib_chart_name=$(awk -F': *' '/^name:/ {print $2; exit}' "$lib_dir/Chart.yaml" 2>/dev/null || true)
+
+              echo "Library changed: $lib_dir (chart name: ${lib_chart_name:-unknown})"
+
+              while IFS= read -r chart_dir; do
+                [ -z "$chart_dir" ] && continue
+
+                # Skip the library chart itself.
+                if [ "$chart_dir" = "$lib_dir" ]; then
                   continue
                 fi
-                libname=$(basename "${lib%/}")
-                if grep -qE "^[[:space:]]*name:[[:space:]]*$libname" "$chartfile"; then
-                  CHANGED_CHART_DIRS="$CHANGED_CHART_DIRS$chart_dir"$'\n'
+
+                chart_file="$chart_dir/Chart.yaml"
+                [ ! -f "$chart_file" ] && continue
+
+                # Match either by dependency name or by local file:// repository path.
+                MATCH_BY_NAME=false
+                MATCH_BY_REPO=false
+
+                if [ -n "$lib_chart_name" ] && grep -qE "^[[:space:]]*-[[:space:]]*name:[[:space:]]*$lib_chart_name([[:space:]]*#.*)?$|^[[:space:]]*name:[[:space:]]*$lib_chart_name([[:space:]]*#.*)?$" "$chart_file"; then
+                  MATCH_BY_NAME=true
                 fi
-              done < <(find . -name Chart.yaml | sed 's|^\./||')
+
+                if grep -qE "^[[:space:]]*repository:[[:space:]]*file://.*lib/$lib_name([[:space:]]*#.*)?$" "$chart_file"; then
+                  MATCH_BY_REPO=true
+                fi
+
+                if [ "$MATCH_BY_NAME" = true ] || [ "$MATCH_BY_REPO" = true ]; then
+                  add_chart_dir "$chart_dir"
+                fi
+              done <<< "$ALL_CHART_DIRS"
             done
-            # dedupe again after adding dependent charts
+
             CHANGED_CHART_DIRS=$(echo "$CHANGED_CHART_DIRS" | sort -u | grep -v '^$' || true)
+
+            echo ""
+            echo "Library fan-out mode enabled"
+            echo "Affected libraries:"
+            echo "$LIB_DIRS"
           fi
 
           if [ -z "$CHANGED_CHART_DIRS" ]; then
@@ -127,6 +164,7 @@ jobs:
             echo "charts=[]" >> $GITHUB_OUTPUT
             echo "chart-count=0" >> $GITHUB_OUTPUT
             echo "yaml-changed=$YAML_CHANGED" >> $GITHUB_OUTPUT
+            echo "lib-fanout=$LIB_FANOUT" >> $GITHUB_OUTPUT
           else
             echo "Changed charts detected:"
             echo "$CHANGED_CHART_DIRS"
@@ -150,9 +188,15 @@ jobs:
             echo "charts=$CHARTS_JSON" >> $GITHUB_OUTPUT
             echo "chart-count=$CHART_COUNT" >> $GITHUB_OUTPUT
             echo "yaml-changed=$YAML_CHANGED" >> $GITHUB_OUTPUT
+            echo "lib-fanout=$LIB_FANOUT" >> $GITHUB_OUTPUT
 
             echo ""
             echo "Will validate $CHART_COUNT chart(s)"
+            if [ "$LIB_FANOUT" = "true" ]; then
+              echo "Selection source: library dependency fan-out + direct changes"
+            else
+              echo "Selection source: direct chart changes"
+            fi
           fi
 
   yaml-lint:
@@ -301,6 +345,11 @@ jobs:
 
           CHART_COUNT=${{ needs.detect-changes.outputs.chart-count }}
           echo "Validating $CHART_COUNT changed chart(s)"
+          if [ "${{ needs.detect-changes.outputs.lib-fanout }}" = "true" ]; then
+            echo "Selection includes fan-out from changed library dependencies"
+          fi
+          echo "Charts selected for validation:"
+          echo "$CHART_DIRS"
           echo ""
 
           FAILED_CHARTS=()

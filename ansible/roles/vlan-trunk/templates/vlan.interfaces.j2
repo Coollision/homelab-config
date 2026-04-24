@@ -1,0 +1,3 @@
+auto {{ item.interface_name }}
+iface {{ item.interface_name }} inet manual
+    vlan-raw-device {{ item.parent_interface }}

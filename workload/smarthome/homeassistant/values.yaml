@@ -108,8 +108,36 @@ homeassistant:
       storageClass: longhorn-shared
       protect: true
 
-  hostNetwork: true
-  dnsPolicy: ClusterFirstWithHostNet
+  # Home Assistant needs normal pod networking for Multus secondary interfaces.
+  # net1 is attached on VLAN40 to allow IoT mDNS/Thread/Matter discovery on L2.
+  multusNetworks:
+    - name: homeassistant-vlan40
+      interface: net1
+      mac: 02:40:67:9d:64:62
+      dhcpHostname: _stub_homeassistant-iot
+      parentInterface: vlan40
+      nodeLabelKey: vlan40-trunk
+      type: macvlan
+      mode: bridge
+      chainedPlugins:
+        - type: sbr
+      ipam:
+        type: dhcp
+    - name: homeassistant-vlan5
+      interface: net2
+      mac: 02:40:67:9d:64:65
+      dhcpHostname: _stub_homeassistant-lan
+      parentInterface: vlan5
+      nodeLabelKey: vlan5-trunk
+      type: macvlan
+      mode: bridge
+      chainedPlugins:
+        - type: sbr
+      ipam:
+        type: dhcp
+
+  hostNetwork: false
+  dnsPolicy: ClusterFirst
   imagePreSync: true
   serviceIp: <secret:kv/data/smarthome/homeassistant~ip>
   probes:

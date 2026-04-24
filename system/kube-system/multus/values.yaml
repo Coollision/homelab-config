@@ -1,0 +1,24 @@
+image:
+  repository: ghcr.io/k8snetworkplumbingwg/multus-cni
+  tag: stable-thick
+
+pluginsImage:
+  repository: docker.io/library/busybox
+  tag: "1.36.1"
+
+pluginsVersion: v1.6.2
+
+# K3s stores CNI config at a non-standard path.
+# Standard path (/etc/cni/net.d) is NOT used by K3s.
+cni:
+  confDir: /var/lib/rancher/k3s/agent/etc/cni/net.d
+  # K3s looks up the primary Multus shim here.
+  shimBinDir: /var/lib/rancher/k3s/data/cni
+  # K3s ships the delegate CNI plugins (flannel, portmap, bridge, etc.) here.
+  delegateBinDir: /var/lib/rancher/k3s/data/current/bin
+  extraDelegatePlugins:
+    - macvlan
+    - dhcp
+    - ipvlan
+    - sbr
+    - tuning

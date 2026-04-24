@@ -1,0 +1,114 @@
+{{- define "shared-lib.multusNetworkNamesCsv" -}}
+{{- $names := list -}}
+{{- range $network := .Values.multusNetworks -}}
+{{- if not $network.name -}}
+{{- "multusNetworks entry missing required field: name" | fail -}}
+{{- end -}}
+{{- $names = append $names $network.name -}}
+{{- end -}}
+{{- join ", " $names -}}
+{{- end -}}
+
+{{- define "shared-lib.multusNetworkSelectionElement" -}}
+{{- $network := . -}}
+{{- if not $network.name -}}
+{{- "multusNetworks entry missing required field: name" | fail -}}
+{{- end -}}
+{{- $element := dict "name" $network.name -}}
+{{- if $network.namespace -}}
+{{- $_ := set $element "namespace" $network.namespace -}}
+{{- end -}}
+{{- if $network.interface -}}
+{{- $_ := set $element "interface" $network.interface -}}
+{{- end -}}
+{{- if $network.mac -}}
+{{- $_ := set $element "mac" $network.mac -}}
+{{- end -}}
+{{- if $network.ips -}}
+{{- $_ := set $element "ips" $network.ips -}}
+{{- end -}}
+{{- if $network.defaultRoute -}}
+{{- $_ := set $element "default-route" $network.defaultRoute -}}
+{{- end -}}
+{{- if $network.cniArgs -}}
+{{- $_ := set $element "cni-args" $network.cniArgs -}}
+{{- end -}}
+{{- $element | toJson -}}
+{{- end -}}
+
+{{- define "shared-lib.multusNetworkAnnotation" -}}
+{{- $attachments := list -}}
+{{- $hasOverrides := false -}}
+{{- range $network := .Values.multusNetworks -}}
+{{- if or $network.namespace $network.interface $network.mac $network.ips $network.defaultRoute $network.cniArgs -}}
+{{- $hasOverrides = true -}}
+{{- end -}}
+{{- $attachments = append $attachments (include "shared-lib.multusNetworkSelectionElement" $network | fromJson) -}}
+{{- end -}}
+{{- if $hasOverrides -}}
+{{- $attachments | toJson -}}
+{{- else -}}
+{{- include "shared-lib.multusNetworkNamesCsv" . -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "shared-lib.multusNads" -}}
+{{- $root := . -}}
+{{- range $index, $network := .Values.multusNetworks }}
+{{- if not $network.name -}}
+{{- "multusNetworks entry missing required field: name" | fail -}}
+{{- end -}}
+{{- if not $network.parentInterface -}}
+{{- printf "multusNetworks[%d] missing required field: parentInterface" $index | fail -}}
+{{- end -}}
+{{- $ipam := mergeOverwrite (dict "type" (default "dhcp" $network.ipam.type)) ($network.ipam | default dict) -}}
+{{- if and $network.dhcpHostname $network.dhcpHostnameFromPodName -}}
+{{- printf "multusNetworks[%d] cannot set both dhcpHostname and dhcpHostnameFromPodName" $index | fail -}}
+{{- end -}}
+{{- $provide := list -}}
+{{- if $ipam.provide -}}
+{{- $provide = concat $provide $ipam.provide -}}
+{{- end -}}
+{{- if $network.dhcpHostname -}}
+{{- $provide = append $provide (dict "option" "host-name" "value" $network.dhcpHostname) -}}
+{{- end -}}
+{{- if $network.dhcpHostnameFromPodName -}}
+{{- $provide = append $provide (dict "option" "host-name" "fromArg" "K8S_POD_NAME") -}}
+{{- end -}}
+{{- if gt (len $provide) 0 -}}
+{{- $_ := set $ipam "provide" $provide -}}
+{{- end -}}
+{{- $basePlugin := dict "type" (default "macvlan" $network.type) "master" $network.parentInterface "mode" (default "bridge" $network.mode) "ipam" $ipam -}}
+{{- $plugins := list $basePlugin -}}
+{{- if $network.mac -}}
+{{- $plugins = append $plugins (dict "type" "tuning" "capabilities" (dict "mac" true)) -}}
+{{- end -}}
+{{- if $network.chainedPlugins -}}
+{{- $plugins = concat $plugins $network.chainedPlugins -}}
+{{- end -}}
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: {{ $network.name }}
+  namespace: {{ $root.Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ default "0" $network.syncWave | quote }}
+spec:
+  config: |
+    {
+      "cniVersion": {{ default "0.3.1" $network.cniVersion | quote }},
+      "name": {{ $network.name | quote }},
+{{- if or $network.mac $network.chainedPlugins }}
+      "plugins": {{ $plugins | toJson }}
+{{- else }}
+      "type": {{ default "macvlan" $network.type | quote }},
+      "master": {{ $network.parentInterface | quote }},
+      "mode": {{ default "bridge" $network.mode | quote }},
+      "ipam": {{ $ipam | toJson }}
+{{ end }}
+    }
+{{- if lt (add1 $index) (len $root.Values.multusNetworks) }}
+---
+{{ end }}
+{{- end }}
+{{- end -}}

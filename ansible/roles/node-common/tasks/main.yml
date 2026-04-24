@@ -43,6 +43,9 @@
       - cryptsetup
       - dmsetup
 
+- name: Configure inotify limits
+  ansible.builtin.include_tasks: updateInotifyLimits.yml
+
 - name: Load NFS kernel modules
   become: true
   community.general.modprobe:

@@ -3,6 +3,17 @@
 # Node labels are applied during registration via config.yaml node-label
 # But annotations must be applied post-registration as K3s doesn't support --register-with-annotations
 
+- name: Wait for Kubernetes API to become ready
+  ansible.builtin.command:
+    cmd: kubectl get --raw=/readyz
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  register: apiserver_ready
+  until: apiserver_ready.rc == 0 and 'ok' in apiserver_ready.stdout
+  retries: 60
+  delay: 2
+  changed_when: false
+
 - name: Wait for node to be registered
   ansible.builtin.command:
     cmd: kubectl get node {{ k3s_node_name }} --no-headers
@@ -10,7 +21,7 @@
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
   register: node_check
   until: node_check.rc == 0
-  retries: 30
+  retries: 60
   delay: 2
   changed_when: false
 

@@ -38,6 +38,10 @@ Main entrypoint for the shared library chart. It will render all underlying temp
 ---
 {{ include "shared-lib.servicemonitor" . }}
 {{- end }}
+{{- if .Values.multusNetworks }}
+---
+{{ include "shared-lib.multusNads" . }}
+{{- end }}
 {{- if .Values.storage }}
 ---
 {{ include "shared-lib.storage" . }}
