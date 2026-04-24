@@ -12,7 +12,7 @@ dependencies:
     version: 6.55.0
     repository: https://grafana.github.io/helm-charts
   - name: alloy
-    version: 1.7.0
+    version: 1.8.0
     repository: https://grafana.github.io/helm-charts
   - name: longhorn-storage-lib
     version: 0.1.0
