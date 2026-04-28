@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: thread-border-router
+spec:
+  template:
+    spec:
+      containers:
+        - name: thread-border-router
+          volumeMounts:
+            - name: usb
+              mountPath: /dev/thread-border-router
+            - name: tun
+              mountPath: /dev/net/tun
+          securityContext:
+            privileged: true
+      volumes:
+        - name: usb
+          hostPath:
+            path: /dev/thread-border-router
+            type: CharDevice
+        - name: tun
+          hostPath:
+            path: /dev/net/tun
+            type: CharDevice

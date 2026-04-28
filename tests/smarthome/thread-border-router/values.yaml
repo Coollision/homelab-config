@@ -1,0 +1,73 @@
+fullnameOverride: thread-border-router
+
+statefulset:
+  image:
+    repository: openthread/border-router
+    tag: latest
+  ports:
+    web: 8080
+    rest: 8081
+
+config:
+  TZ: Europe/Brussels
+  # OT_RCP_DEVICE: serial URL to the ZBT-2 Thread radio (symlink set by udev ansible role)
+  OT_RCP_DEVICE: spinel+hdlc+uart:///dev/thread-border-router?uart-baudrate=460800
+  # OT_INFRA_IF: backbone/infrastructure interface (Multus MACVLAN on VLAN 40)
+  OT_INFRA_IF: net1
+  # OT_THREAD_IF: virtual Thread network interface created by otbr-agent
+  OT_THREAD_IF: wpan0
+  # Force OTBR to use Avahi backend so Border Agent is advertised via mDNS.
+  OTBR_MDNS: avahi
+  OT_LOG_LEVEL: "7"
+  # Bind REST API to all interfaces so HA can reach it over the cluster network
+  OT_REST_LISTEN_ADDR: 0.0.0.0
+  OT_REST_LISTEN_PORT: "8081"
+
+# Multus attaches dedicated MACVLAN interfaces for both VLANs.
+#   net1 = VLAN 40 (IoT / Thread backbone - OT_INFRA_IF, mDNS for IoT devices)
+#   net2 = VLAN 5  (LAN - mDNS only, so the HA companion app on LAN/VLAN5
+#                   can discover the border router via _meshcop._udp.local
+#                   without needing a Unifi mDNS repeater which breaks Matter)
+# Avahi advertises on all non-loopback interfaces automatically.
+multusNetworks:
+  - name: thread-border-router-vlan40
+    interface: net1
+    mac: 02:40:67:9d:64:64
+    dhcpHostname: _stub_thread-border-router-iot
+    parentInterface: vlan40
+    nodeLabelKey: vlan40-trunk
+    type: macvlan
+    mode: bridge
+    chainedPlugins:
+      - type: sbr
+    ipam:
+      type: dhcp
+  - name: thread-border-router-vlan5
+    interface: net2
+    mac: 02:05:67:9d:64:64
+    dhcpHostname: _stub_thread-border-router-lan
+    parentInterface: vlan5
+    nodeLabelKey: vlan5-trunk
+    type: macvlan
+    mode: bridge
+    ipam:
+      type: dhcp
+
+storage:
+  - mountPath: /data
+    type: longhorn
+    volumeName: thread-border-router
+    storageClass: longhorn-shared
+    size: 256Mi
+    protect: true
+
+affinity:
+  node:
+    required:
+      - matchExpressions:
+          - key: feature.node.kubernetes.io/iot-thread-border-router
+            operator: In
+            values: ["true"]
+          - key: kubernetes.io/hostname
+            operator: In
+            values: ["worker-blue"]
