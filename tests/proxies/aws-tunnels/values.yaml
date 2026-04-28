@@ -1,0 +1,66 @@
+aws-tunnels-operator:
+  namespaceOverride: proxies
+  fullnameOverride: aws-tunnels
+
+  stackConfig:
+    name: aws-tunnel-config
+
+  ingress:
+    enabled: true
+
+  stack:
+    aws:
+      region: eu-central-1
+      ssoStartUrl: <secret:kv/data/proxies/aws-tunnel~sso-start-url>
+      accountId: <secret:kv/data/proxies/aws-tunnel~account-id>
+      roleName: <secret:kv/data/proxies/aws-tunnel~sso-role-name>
+      extraProfiles:
+        - name: awsprofile001-prod
+          region: eu-central-1
+          ssoStartUrl: <secret:kv/data/proxies/aws-tunnel~prod-sso-start-url>
+          accountId: <secret:kv/data/proxies/aws-tunnel~prod-account-id>
+          roleName: <secret:kv/data/proxies/aws-tunnel~prod-sso-role-name>
+    auth:
+      host: aws-auth.<secret:kv/data/domains~domain>
+    tunnels:
+      - name: gitlab-dev
+        bastionName: bastion-dev
+        remoteHost: <secret:kv/data/proxies/aws-tunnel~gitlab-dev-host>
+        remotePort: "81"
+        localPort: 18080
+        host: gitlab-work.<secret:kv/data/domains~domain>
+      - name: dev-db
+        bastionName: bastion-dev
+        remoteHost: ""
+        remotePort: <secret:kv/data/proxies/aws-tunnel~dev-db-port>
+        localPort: 15432
+        host: dev-db-work.<secret:kv/data/domains~domain>
+        ingressMode: tcp
+        tls:
+          passthrough: true
+        rds:
+          clusterPrefix: <secret:kv/data/proxies/aws-tunnel~dev-db-cluster-prefix>
+      - name: preprod-db
+        bastionName: bastion-preprod
+        remoteHost: ""
+        remotePort: <secret:kv/data/proxies/aws-tunnel~preprod-db-port>
+        localPort: 25432
+        host: preprod-db-work.<secret:kv/data/domains~domain>
+        ingressMode: tcp
+        tls:
+          passthrough: true
+        rds:
+          clusterPrefix: <secret:kv/data/proxies/aws-tunnel~preprod-db-cluster-prefix>
+      - name: prod-db
+        bastionName: bastion-prod
+        awsProfile: awsprofile001-prod
+        awsRegion: eu-central-1
+        remoteHost: ""
+        remotePort: <secret:kv/data/proxies/aws-tunnel~prod-db-port>
+        localPort: 35432
+        host: prod-db-work.<secret:kv/data/domains~domain>
+        ingressMode: tcp
+        tls:
+          passthrough: true
+        rds:
+          clusterPrefix: <secret:kv/data/proxies/aws-tunnel~prod-db-cluster-prefix>
