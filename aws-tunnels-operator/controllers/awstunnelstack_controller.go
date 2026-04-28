@@ -23,6 +23,12 @@ type SingleStackRunner struct {
 	Interval      time.Duration
 }
 
+const (
+	awsConfigVolumeName = "aws-config"
+	awsConfigMountPath  = "/aws-config"
+	awsConfigFilePath   = awsConfigMountPath + "/config"
+)
+
 func ProfileKey(profile string) string {
 	replacer := strings.NewReplacer("/", "_", ":", "_", " ", "_", "@", "_", "\\", "_")
 	return replacer.Replace(profile)
@@ -83,16 +89,12 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 	}
 	stackName := cfg.Name
 	stack := cfg.Spec
+	awsConfigMapName, _, _, err := SyncAWSConfigMap(ctx, r.Client, cfg)
+	if err != nil {
+		return err
+	}
 
-	profiles := []string{}
-	if stack.AWS.Profile != "" {
-		profiles = append(profiles, stack.AWS.Profile)
-	}
-	for _, p := range stack.AWS.ExtraProfile {
-		if p.Name != "" {
-			profiles = append(profiles, p.Name)
-		}
-	}
+	profiles := cfg.DefinedAWSProfiles()
 
 	for _, profile := range profiles {
 		secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: credsSecretName(stackName, profile), Namespace: cfg.Namespace}}
@@ -189,6 +191,8 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 				Env: []corev1.EnvVar{
 					{Name: "AWS_REGION", Value: awsRegion},
 					{Name: "AWS_PROFILE", Value: profile},
+					{Name: "AWS_SDK_LOAD_CONFIG", Value: "1"},
+					{Name: "AWS_CONFIG_FILE", Value: awsConfigFilePath},
 					{Name: "BASTION_NAME", Value: tunnel.BastionName},
 					{Name: "REMOTE_HOST", Value: tunnel.RemoteHost},
 					{Name: "REMOTE_PORT", Value: tunnel.RemotePort},
@@ -196,10 +200,11 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 					{Name: "RDS_INSTANCE_PREFIX", Value: tunnel.RDS.InstancePrefix},
 					{Name: "RDS_CLUSTER_PREFIX", Value: tunnel.RDS.ClusterPrefix},
 				},
-				EnvFrom:   []corev1.EnvFromSource{{SecretRef: &corev1.SecretEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: profileSecretName}}}},
-				Command:   []string{"/bin/sh", "-ec"},
-				Args:      []string{`if [ -n "$RDS_CLUSTER_PREFIX" ]; then REMOTE_HOST=$(aws rds describe-db-clusters --region "$AWS_REGION" --query "DBClusters[?Status=='available'].[DBClusterIdentifier,Endpoint]" --output text | awk -v p="$RDS_CLUSTER_PREFIX" '$1 ~ "^"p {print $2}' | tail -n1); fi; if [ -z "$REMOTE_HOST" ] && [ -n "$RDS_INSTANCE_PREFIX" ]; then REMOTE_HOST=$(aws rds describe-db-instances --region "$AWS_REGION" --query "DBInstances[?DBInstanceStatus=='available'].[DBInstanceIdentifier,Endpoint.Address]" --output text | awk -v p="$RDS_INSTANCE_PREFIX" '$1 ~ "^"p {print $2}' | tail -n1); fi; INSTANCE_ID=$(aws ec2 describe-instances --region "$AWS_REGION" --filters "Name=tag:Name,Values=${BASTION_NAME}" "Name=instance-state-name,Values=running" --query "Reservations[0].Instances[0].InstanceId" --output text); if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ]; then echo "no running bastion"; exit 1; fi; if [ -z "${REMOTE_HOST}" ] || [ "$REMOTE_HOST" = "None" ]; then echo "REMOTE_HOST is required or resolvable via RDS prefix"; exit 1; fi; exec aws ssm start-session --region "$AWS_REGION" --target "$INSTANCE_ID" --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters "{\"host\":[\"${REMOTE_HOST}\"],\"portNumber\":[\"${REMOTE_PORT}\"],\"localPortNumber\":[\"${LOCAL_PORT}\"]}"`},
-				Resources: resources,
+				EnvFrom:      []corev1.EnvFromSource{{SecretRef: &corev1.SecretEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: profileSecretName}}}},
+				VolumeMounts: []corev1.VolumeMount{{Name: awsConfigVolumeName, MountPath: awsConfigMountPath, ReadOnly: true}},
+				Command:      []string{"/bin/sh", "-ec"},
+				Args:         []string{`if [ -n "$RDS_CLUSTER_PREFIX" ]; then REMOTE_HOST=$(aws rds describe-db-clusters --region "$AWS_REGION" --query "DBClusters[?Status=='available'].[DBClusterIdentifier,Endpoint]" --output text | awk -v p="$RDS_CLUSTER_PREFIX" '$1 ~ "^"p {print $2}' | tail -n1); fi; if [ -z "$REMOTE_HOST" ] && [ -n "$RDS_INSTANCE_PREFIX" ]; then REMOTE_HOST=$(aws rds describe-db-instances --region "$AWS_REGION" --query "DBInstances[?DBInstanceStatus=='available'].[DBInstanceIdentifier,Endpoint.Address]" --output text | awk -v p="$RDS_INSTANCE_PREFIX" '$1 ~ "^"p {print $2}' | tail -n1); fi; INSTANCE_ID=$(aws ec2 describe-instances --region "$AWS_REGION" --filters "Name=tag:Name,Values=${BASTION_NAME}" "Name=instance-state-name,Values=running" --query "Reservations[0].Instances[0].InstanceId" --output text); if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ]; then echo "no running bastion"; exit 1; fi; if [ -z "${REMOTE_HOST}" ] || [ "$REMOTE_HOST" = "None" ]; then echo "REMOTE_HOST is required or resolvable via RDS prefix"; exit 1; fi; exec aws ssm start-session --region "$AWS_REGION" --target "$INSTANCE_ID" --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters "{\"host\":[\"${REMOTE_HOST}\"],\"portNumber\":[\"${REMOTE_PORT}\"],\"localPortNumber\":[\"${LOCAL_PORT}\"]}"`},
+				Resources:    resources,
 			}
 
 			dep.Spec.Template.Spec.Containers[1] = corev1.Container{
@@ -210,6 +215,13 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 				Ports:           []corev1.ContainerPort{{Name: "tunnel", ContainerPort: svcPort, Protocol: corev1.ProtocolTCP}},
 				Resources:       proxyResources,
 			}
+			dep.Spec.Template.Spec.Volumes = upsertVolume(dep.Spec.Template.Spec.Volumes, corev1.Volume{
+				Name: awsConfigVolumeName,
+				VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: awsConfigMapName},
+					Items:                []corev1.KeyToPath{{Key: awsConfigDataKey, Path: "config"}},
+				}},
+			})
 
 			if stack.NodeAffinity.ExcludedType != "" {
 				dep.Spec.Template.Spec.Affinity = &corev1.Affinity{NodeAffinity: &corev1.NodeAffinity{RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{NodeSelectorTerms: []corev1.NodeSelectorTerm{{MatchExpressions: []corev1.NodeSelectorRequirement{{Key: "type", Operator: corev1.NodeSelectorOpNotIn, Values: []string{stack.NodeAffinity.ExcludedType}}}}}}}}
@@ -267,4 +279,14 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func upsertVolume(volumes []corev1.Volume, volume corev1.Volume) []corev1.Volume {
+	for i := range volumes {
+		if volumes[i].Name == volume.Name {
+			volumes[i] = volume
+			return volumes
+		}
+	}
+	return append(volumes, volume)
 }

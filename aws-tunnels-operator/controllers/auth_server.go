@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"regexp"
 	"sort"
@@ -218,18 +219,24 @@ func (s *AuthServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	authLog.Info("login requested", "profile", req.Profile, "namespace", req.Namespace, "stack", req.Stack, "formMode", formMode)
+	_, awsConfigText, awsProfiles, err := SyncAWSConfigMap(r.Context(), s.Client, cfg)
+	if err != nil {
+		authLog.Error(err, "failed to sync aws config configmap for login", "profile", req.Profile)
+		s.redirectOrError(w, r, formMode, fmt.Sprintf("failed to build aws config: %v", err), http.StatusBadRequest)
+		return
+	}
 
 	if formMode {
 		sid := fmt.Sprintf("%d", time.Now().UTC().UnixNano())
 		sess := &ssoSession{Profile: req.Profile, Namespace: req.Namespace, Stack: req.Stack, done: make(chan struct{})}
 		s.ssoSessions.Store(sid, sess)
 		authLog.Info("started async sso session", "sid", sid, "profile", req.Profile)
-		go s.runSSOLogin(req, sess)
+		go s.runSSOLogin(req, sess, awsConfigText, awsProfiles)
 		http.Redirect(w, r, "/login-wait?sid="+url.QueryEscape(sid), http.StatusSeeOther)
 		return
 	}
 
-	creds, err := s.loginAndExport(req.Profile)
+	creds, err := s.loginAndExport(req.Profile, awsConfigText, awsProfiles)
 	if err != nil {
 		authLog.Error(err, "sync login failed", "profile", req.Profile)
 		s.redirectOrError(w, r, formMode, err.Error(), http.StatusBadRequest)
@@ -329,11 +336,22 @@ func (s *AuthServer) handleLoginPoll(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"status": "waiting", "url": ssoURL, "code": code})
 }
 
-func (s *AuthServer) runSSOLogin(req loginRequest, sess *ssoSession) {
+func (s *AuthServer) runSSOLogin(req loginRequest, sess *ssoSession, awsConfigText string, awsProfiles []string) {
 	defer close(sess.done)
 	authLog.Info("running async aws sso login", "profile", req.Profile, "stack", req.Stack)
 
+	awsEnv, cleanupAWSConfig, err := buildAWSCLIEnv(req.Profile, awsConfigText, awsProfiles)
+	if err != nil {
+		sess.mu.Lock()
+		sess.loginErr = err
+		sess.mu.Unlock()
+		authLog.Error(err, "failed to prepare aws cli config", "profile", req.Profile)
+		return
+	}
+	defer cleanupAWSConfig()
+
 	cmd := exec.Command("aws", "sso", "login", "--profile", req.Profile, "--no-browser")
+	cmd.Env = append(os.Environ(), awsEnv...)
 	pr, pw := io.Pipe()
 	cmd.Stdout = pw
 	cmd.Stderr = pw
@@ -374,11 +392,11 @@ func (s *AuthServer) runSSOLogin(req loginRequest, sess *ssoSession) {
 		sess.mu.Lock()
 		sess.loginErr = fmt.Errorf("aws sso login failed: %w\n%s", cmdErr, rawOutput)
 		sess.mu.Unlock()
-		authLog.Error(cmdErr, "aws sso login command failed", "profile", req.Profile)
+		authLog.Error(cmdErr, "aws sso login command failed", "profile", req.Profile, "output", clipLogOutput(rawOutput))
 		return
 	}
 
-	creds, err := s.exportCredentials(req.Profile)
+	creds, err := s.exportCredentials(req.Profile, awsEnv)
 	if err != nil {
 		sess.mu.Lock()
 		sess.loginErr = err
@@ -410,17 +428,80 @@ func (s *AuthServer) runSSOLogin(req loginRequest, sess *ssoSession) {
 	authLog.Info("async login flow completed", "profile", req.Profile, "stack", req.Stack, "restarted", restarted)
 }
 
-func (s *AuthServer) loginAndExport(profile string) (exportCredentials, error) {
+func (s *AuthServer) loginAndExport(profile string, awsConfigText string, awsProfiles []string) (exportCredentials, error) {
+	awsEnv, cleanupAWSConfig, err := buildAWSCLIEnv(profile, awsConfigText, awsProfiles)
+	if err != nil {
+		return exportCredentials{}, err
+	}
+	defer cleanupAWSConfig()
+
 	loginCmd := exec.Command("aws", "sso", "login", "--profile", profile, "--no-browser")
+	loginCmd.Env = append(os.Environ(), awsEnv...)
 	loginOut, err := loginCmd.CombinedOutput()
 	if err != nil {
+		authLog.Error(err, "sync aws sso login command failed", "profile", profile, "output", clipLogOutput(string(loginOut)))
 		return exportCredentials{}, fmt.Errorf("aws sso login failed: %v\n%s", err, string(loginOut))
 	}
-	return s.exportCredentials(profile)
+	return s.exportCredentials(profile, awsEnv)
 }
 
-func (s *AuthServer) exportCredentials(profile string) (exportCredentials, error) {
+func buildAWSCLIEnv(targetProfile string, awsConfigText string, availableProfiles []string) ([]string, func(), error) {
+	targetProfile = strings.TrimSpace(targetProfile)
+	if targetProfile == "" {
+		return nil, nil, fmt.Errorf("aws profile is required")
+	}
+	if strings.TrimSpace(awsConfigText) == "" {
+		return nil, nil, fmt.Errorf("aws config is empty")
+	}
+
+	found := false
+	for _, p := range availableProfiles {
+		if p == targetProfile {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil, nil, fmt.Errorf("aws profile %q not found in stack config. Available profiles: %s", targetProfile, strings.Join(availableProfiles, ", "))
+	}
+
+	tmp, err := os.CreateTemp("", "aws-config-*.ini")
+	if err != nil {
+		return nil, nil, fmt.Errorf("create temp aws config file: %w", err)
+	}
+	if _, err := tmp.WriteString(awsConfigText); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmp.Name())
+		return nil, nil, fmt.Errorf("write temp aws config file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmp.Name())
+		return nil, nil, fmt.Errorf("close temp aws config file: %w", err)
+	}
+
+	cleanup := func() {
+		_ = os.Remove(tmp.Name())
+	}
+
+	env := []string{
+		"AWS_CONFIG_FILE=" + tmp.Name(),
+		"AWS_SDK_LOAD_CONFIG=1",
+	}
+	return env, cleanup, nil
+}
+
+func clipLogOutput(s string) string {
+	s = strings.TrimSpace(s)
+	const maxLen = 600
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
+
+func (s *AuthServer) exportCredentials(profile string, awsEnv []string) (exportCredentials, error) {
 	exportCmd := exec.Command("aws", "configure", "export-credentials", "--profile", profile, "--format", "process")
+	exportCmd.Env = append(os.Environ(), awsEnv...)
 	exportOut, err := exportCmd.CombinedOutput()
 	if err != nil {
 		return exportCredentials{}, fmt.Errorf("aws configure export-credentials failed: %v\n%s", err, string(exportOut))
@@ -550,23 +631,9 @@ func (s *AuthServer) discoverTargets(ctx context.Context) ([]loginTarget, error)
 		return nil, err
 	}
 
-	profiles := map[string]struct{}{}
-	if cfg.Spec.AWS.Profile != "" {
-		profiles[cfg.Spec.AWS.Profile] = struct{}{}
-	}
-	for _, p := range cfg.Spec.AWS.ExtraProfile {
-		if p.Name != "" {
-			profiles[p.Name] = struct{}{}
-		}
-	}
-	for _, tunnel := range cfg.Spec.Tunnels {
-		if tunnel.AWSProfile != "" {
-			profiles[tunnel.AWSProfile] = struct{}{}
-		}
-	}
-
+	profiles := cfg.ReferencedAWSProfiles()
 	targets := make([]loginTarget, 0, len(profiles))
-	for profile := range profiles {
+	for _, profile := range profiles {
 		secretName := credsSecretName(cfg.Name, profile)
 		t := loginTarget{Namespace: cfg.Namespace, Stack: cfg.Name, Profile: profile, Secret: secretName}
 		secret := &corev1.Secret{}
