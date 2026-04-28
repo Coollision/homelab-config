@@ -1,0 +1,161 @@
+{{- range $index, $tunnel := .Values.tunnels }}
+{{- $name := include "aws-tunnels.tunnelFullName" $tunnel }}
+{{- $rds := default (dict) $tunnel.rds }}
+{{- $tls := default (dict) $tunnel.tls }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ $name }}
+    app.kubernetes.io/part-of: {{ include "aws-tunnels.partOf" $ }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  selector:
+    matchLabels:
+      app: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}
+        app.kubernetes.io/part-of: {{ include "aws-tunnels.partOf" $ }}
+      annotations:
+        checksum/entrypoint: {{ $.Files.Get "source/entrypoint.sh" | sha256sum }}
+        checksum/awsconfig: {{ tpl ($.Files.Get "source/aws-config") $ | sha256sum }}
+    spec:
+      affinity:
+{{ include "aws-tunnels.excludedNodeAffinity" $ | indent 8 }}
+      containers:
+        - name: tunnel
+          image: {{ default $.Values.tunnelDefaults.image $tunnel.image }}
+          command: ["/bin/sh", "/scripts/entrypoint.sh"]
+          env:
+            - name: AWS_PROFILE
+              value: {{ default $.Values.aws.profile $tunnel.awsProfile | quote }}
+            - name: AWS_REGION
+              value: {{ default $.Values.aws.region $tunnel.awsRegion | quote }}
+            - name: AWS_CONFIG_FILE
+              value: /root/.aws/config
+            - name: HOME
+              value: /root
+            - name: BASTION_NAME
+              value: {{ $tunnel.bastionName | quote }}
+            - name: REMOTE_HOST
+              value: {{ default "" $tunnel.remoteHost | quote }}
+            - name: REMOTE_PORT
+              value: {{ $tunnel.remotePort | quote }}
+            - name: LOCAL_PORT
+              value: {{ $tunnel.localPort | quote }}
+            - name: TUNNEL_NAME
+              value: {{ $tunnel.name | quote }}
+            - name: RDS_INSTANCE_PREFIX
+              value: {{ default "" $rds.instancePrefix | quote }}
+            - name: RDS_CLUSTER_PREFIX
+              value: {{ default "" $rds.clusterPrefix | quote }}
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+            - name: aws-config
+              mountPath: /root/.aws/config
+              subPath: config
+            - name: credentials
+              mountPath: /root/.aws/sso
+              subPath: sso
+            - name: credentials
+              mountPath: /aws-creds
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - >-
+                  STATE_FILE=/aws-creds/tunnel-status/{{ $tunnel.name }}.state;
+                  if [ -f "$STATE_FILE" ]; then
+                    STATE=$(cat "$STATE_FILE");
+                    if [ "$STATE" = "auth_required" ] || [ "$STATE" = "starting" ] || [ "$STATE" = "reconnecting" ]; then
+                      exit 0;
+                    fi;
+                  fi;
+                  {{- if eq (default "http" $tunnel.ingressMode) "tcp" }}
+                  exit 0
+                  {{- else }}
+                  curl -fsS --max-time 3 http://127.0.0.1:{{ $tunnel.localPort }}/ >/dev/null
+                  {{- end }}
+            initialDelaySeconds: {{ $.Values.tunnelDefaults.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ $.Values.tunnelDefaults.livenessProbe.periodSeconds }}
+            failureThreshold: {{ $.Values.tunnelDefaults.livenessProbe.failureThreshold }}
+          resources:
+{{ toYaml (default $.Values.tunnelDefaults.resources $tunnel.resources) | indent 12 }}
+        - name: proxy
+          image: {{ default $.Values.tunnelDefaults.proxyImage $tunnel.proxyImage }}
+          args:
+            - tcp-listen:{{ default $.Values.tunnelDefaults.servicePort $tunnel.servicePort }},fork,reuseaddr,bind=0.0.0.0
+            - tcp:127.0.0.1:{{ $tunnel.localPort }}
+          ports:
+            - name: tunnel
+              containerPort: {{ default $.Values.tunnelDefaults.servicePort $tunnel.servicePort }}
+              protocol: TCP
+          resources:
+{{ toYaml (default $.Values.tunnelDefaults.proxyResources $tunnel.proxyResources) | indent 12 }}
+      volumes:
+        - name: script
+          configMap:
+            name: {{ $.Values.shared.scriptConfigMapName }}
+            defaultMode: 0755
+        - name: aws-config
+          configMap:
+            name: {{ $.Values.shared.awsConfigMapName }}
+        - name: credentials
+          persistentVolumeClaim:
+            claimName: {{ $.Values.pvc.name }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Values.namespace }}
+spec:
+  selector:
+    app: {{ $name }}
+  ports:
+    - name: tunnel
+      port: {{ default $.Values.tunnelDefaults.servicePort $tunnel.servicePort }}
+      targetPort: {{ default $.Values.tunnelDefaults.servicePort $tunnel.servicePort }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: {{ if eq (default "http" $tunnel.ingressMode) "tcp" }}IngressRouteTCP{{ else }}IngressRoute{{ end }}
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Values.namespace }}
+spec:
+{{- if eq (default "http" $tunnel.ingressMode) "tcp" }}
+  entryPoints:
+    - websecure
+  routes:
+    - match: HostSNI(`{{ $tunnel.host }}`)
+      services:
+        - name: {{ $name }}
+          namespace: {{ $.Values.namespace }}
+          port: {{ default $.Values.tunnelDefaults.servicePort $tunnel.servicePort }}
+  tls:
+    passthrough: {{ default true $tls.passthrough }}
+{{- else }}
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`{{ $tunnel.host }}`)
+      services:
+        - kind: Service
+          name: {{ $name }}
+          namespace: {{ $.Values.namespace }}
+          port: {{ default $.Values.tunnelDefaults.servicePort $tunnel.servicePort }}
+          scheme: http
+  tls: {}
+{{- end }}
+{{- if lt (add1 $index) (len $.Values.tunnels) }}
+---
+{{- end }}
+{{- end }}

@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.shared.scriptConfigMapName }}
+  namespace: {{ include "aws-tunnels.namespace" . }}
+data:
+  entrypoint.sh: |
+{{ .Files.Get "source/entrypoint.sh" | indent 4 }}
