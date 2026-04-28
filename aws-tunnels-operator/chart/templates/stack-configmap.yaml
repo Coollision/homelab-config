@@ -8,4 +8,4 @@ metadata:
 data:
   stackName: {{ .Values.stack.name | quote }}
   spec.json: |
-    {{ dict "aws" .Values.stack.aws "auth" .Values.stack.auth "nodeAffinity" .Values.stack.nodeAffinity "shared" .Values.stack.shared "tunnelDefaults" .Values.stack.tunnelDefaults "tunnels" .Values.stack.tunnels | toJson }}
+    {{ dict "aws" .Values.stack.aws "auth" .Values.stack.auth "nodeAffinity" .Values.stack.nodeAffinity "shared" .Values.stack.shared "tunnelDefaults" .Values.stack.tunnelDefaults "tunnels" .Values.stack.tunnels | toRawJson }}
