@@ -109,12 +109,18 @@
     .url-box a{color:#9ad2ff;font-weight:600;text-decoration:none}
     .url-box a:hover{text-decoration:underline}
     .code{
-      margin:14px 0 10px;
+      display:block;
+      background:var(--url-bg);
+      border:1px solid var(--line);
+      border-radius:10px;
+      padding:14px 52px 14px 18px;
       font-size:1.9rem;
       font-family:"IBM Plex Mono","Cascadia Mono",monospace;
       letter-spacing:.17em;
       color:#d5edff;
       font-weight:700;
+      user-select:all;
+      cursor:default;
     }
     .btn{
       display:inline-block;
@@ -135,21 +141,31 @@
       color:var(--ok);
     }
     .btn-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
-    .code-row{display:flex;align-items:center;gap:12px;margin:14px 0 4px}
+    .code-wrap{
+      position:relative;
+      display:block;
+      margin:14px 0 4px;
+    }
     .copy-btn{
+      position:absolute;
+      right:10px;
+      top:50%;
+      transform:translateY(-50%);
       background:var(--toggle-bg);
       border:1px solid var(--line);
-      border-radius:8px;
+      border-radius:7px;
       color:var(--muted);
-      padding:6px 10px;
-      font-size:.82rem;
+      padding:5px 10px;
+      font-size:.8rem;
       font-weight:700;
       cursor:pointer;
-      transition:color .15s, border-color .15s;
+      opacity:0;
+      transition:opacity .15s, color .15s, border-color .15s;
       white-space:nowrap;
     }
+    .code-wrap:hover .copy-btn{opacity:1}
     .copy-btn:hover{color:var(--accent);border-color:var(--accent)}
-    .copy-btn.copied{color:var(--ok);border-color:var(--ok)}
+    .copy-btn.copied{opacity:1;color:var(--ok);border-color:var(--ok)}
     .status{
       margin:18px 0 0;
       color:var(--muted);
@@ -200,9 +216,9 @@
           <a href="{{.URL}}" target="_blank" rel="noopener">{{.URL}}</a>
         </div>
         {{if .Code}}
-        <div class="code-row">
+        <div class="code-wrap">
           <span class="code" id="sso-code">{{.Code}}</span>
-          <button class="copy-btn" type="button" onclick="copyCode()">Copy</button>
+          <button class="copy-btn" type="button" onclick="copyCode()" title="Copy to clipboard">Copy</button>
         </div>
         {{end}}
         <div class="btn-row">
@@ -269,8 +285,8 @@
         var html = '<div class="url-box">Open this URL in a browser to approve the login request:<br><br>' +
                    '<a href="' + data.url + '" target="_blank" rel="noopener">' + data.url + '</a></div>';
         if (data.code) {
-          html += '<div class="code-row"><span class="code" id="sso-code">' + data.code + '</span>' +
-                  '<button class="copy-btn" type="button" onclick="copyCode()">Copy</button></div>';
+          html += '<div class="code-wrap"><span class="code" id="sso-code">' + data.code + '</span>' +
+                  '<button class="copy-btn" type="button" onclick="copyCode()" title="Copy to clipboard">Copy</button></div>';
         }
         html += '<div class="btn-row"><a class="btn" href="' + data.url + '" target="_blank" rel="noopener">Open Login Page</a>';
         if (data.code) {

@@ -159,6 +159,13 @@
     .footer h2{margin:0 0 6px;font-size:1rem;color:#deecfa}
     .meta{margin-top:14px;color:#7f94ab;font-size:.9rem}
     code{padding:2px 6px;border-radius:7px;background:var(--code-bg);color:var(--code-text)}
+    .dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0}
+    .dot-ok{background:#57d5a1;box-shadow:0 0 6px rgba(87,213,161,.55)}
+    .dot-warn{background:#ffcc66;box-shadow:0 0 6px rgba(255,204,102,.45)}
+    .dot-bad{background:#ff6f91;box-shadow:0 0 6px rgba(255,111,145,.45)}
+    .dot-grey{background:#4a6070}
+    .restarts{display:inline-block;padding:2px 7px;border-radius:999px;font-size:.75rem;font-weight:700;background:rgba(255,204,102,.13);color:#ffe1a5;border:1px solid rgba(255,204,102,.3)}
+    .section-title{font-size:.82rem;text-transform:uppercase;letter-spacing:.08em;color:#7fa6c4;margin:20px 0 8px}
     @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
     @media (max-width:780px){
       .frame{margin:18px auto;padding:0 12px 20px}
@@ -236,6 +243,50 @@
     </section>
 
     <p class="meta">API: <code>POST /login</code>, <code>POST /restart</code>, <code>GET /status.json</code>, <code>GET /healthz</code>.</p>
+
+    {{if .Tunnels}}
+    <p class="section-title">Tunnel Status</p>
+    <section class="card table-wrap" style="margin-bottom:18px">
+      <table>
+        <thead>
+          <tr>
+            <th>Tunnel</th>
+            <th>Profile</th>
+            <th>Bastion</th>
+            <th>Ready</th>
+            <th>Restarts</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Tunnels}}
+          <tr>
+            <td><code>{{.Name}}</code></td>
+            <td>{{.Profile}}</td>
+            <td>{{.Bastion}}</td>
+            <td>
+              {{if eq .Desired 0}}
+                <span style="display:inline-flex;align-items:center;gap:7px"><span class="dot dot-grey"></span> pending</span>
+              {{else if eq .Ready .Desired}}
+                <span style="display:inline-flex;align-items:center;gap:7px"><span class="dot dot-ok"></span> {{.Ready}}/{{.Desired}}</span>
+              {{else if eq .Ready 0}}
+                <span style="display:inline-flex;align-items:center;gap:7px"><span class="dot dot-bad"></span> {{.Ready}}/{{.Desired}}</span>
+              {{else}}
+                <span style="display:inline-flex;align-items:center;gap:7px"><span class="dot dot-warn"></span> {{.Ready}}/{{.Desired}}</span>
+              {{end}}
+            </td>
+            <td>
+              {{if gt .Restarts 0}}
+                <span class="restarts">{{.Restarts}}</span>
+              {{else}}
+                <span style="color:#4a6070">0</span>
+              {{end}}
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </section>
+    {{end}}
   </main>
   <script>
     (function() {
