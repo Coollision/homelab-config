@@ -260,7 +260,7 @@
       var sid = "{{.SessionID}}";
       var pollURL = "/login-poll.json?sid=" + encodeURIComponent(sid);
 
-      function copyCode() {
+      window.copyCode = function copyCode() {
         var el = document.getElementById("sso-code");
         if (!el) return;
         var text = el.textContent.trim();
