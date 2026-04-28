@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AWS Tunnels Auth</title>
+  <style>
+    body{font-family:system-ui,sans-serif;max-width:1100px;margin:32px auto;padding:0 16px}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px;border-bottom:1px solid #ddd;text-align:left}
+    button{padding:6px 10px}
+    code{background:#f2f2f2;padding:2px 4px;border-radius:4px}
+    .ok{color:#0a7}
+    .err{color:#b00}
+  </style>
+</head>
+<body>
+  <h1>AWS Tunnels Auth</h1>
+  <p>Use profile-scoped login to refresh credentials and restart only matching tunnels.</p>
+
+  {{if .Msg}}<p class="ok">{{.Msg}}</p>{{end}}
+  {{if .Err}}<p class="err">{{.Err}}</p>{{end}}
+
+  <table>
+    <thead>
+      <tr>
+        <th>Namespace</th>
+        <th>Stack</th>
+        <th>Profile</th>
+        <th>Status</th>
+        <th>Expiration</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{if .Targets}}
+        {{range .Targets}}
+          <tr>
+            <td>{{.Namespace}}</td>
+            <td>{{.Stack}}</td>
+            <td>{{.Profile}}</td>
+            <td>{{if .Valid}}valid{{else if .Expiration}}expired{{else}}missing{{end}}</td>
+            <td>{{.Expiration}}</td>
+            <td>
+              <form method="POST" action="/login" style="display:inline">
+                <input type="hidden" name="namespace" value="{{.Namespace}}">
+                <input type="hidden" name="stack" value="{{.Stack}}">
+                <input type="hidden" name="profile" value="{{.Profile}}">
+                <button type="submit">Login</button>
+              </form>
+            </td>
+          </tr>
+        {{end}}
+      {{else}}
+        <tr><td colspan="6">No stack configuration found. Configure the operator stack values so the stack ConfigMap includes tunnels.</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+
+  <h2>Global Restart</h2>
+  <p>Restart all tunnels in a stack without re-login.</p>
+  <form method="POST" action="/restart">
+    <label>Namespace <input name="namespace" required></label>
+    <label>Stack <input name="stack" required></label>
+    <button type="submit">Restart Stack</button>
+  </form>
+
+  <p>API: <code>POST /login</code>, <code>POST /restart</code>, <code>GET /status.json</code>, <code>GET /healthz</code>.</p>
+</body>
+</html>

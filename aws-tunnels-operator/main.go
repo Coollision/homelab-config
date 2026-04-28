@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"embed"
 	"flag"
 	"net/http"
 	"os"
@@ -13,9 +14,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	proxyv1alpha1 "homelab/aws-tunnels-operator/api/v1alpha1"
 	"homelab/aws-tunnels-operator/controllers"
 )
+
+//go:embed templates
+var templateDir embed.FS
 
 // httpRunnable wraps an http.Server so it satisfies manager.Runnable.
 type httpRunnable struct {
@@ -45,7 +48,6 @@ func main() {
 
 	scheme := runtime.NewScheme()
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(proxyv1alpha1.AddToScheme(scheme))
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
@@ -56,10 +58,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (&controllers.AWSTunnelStackReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+	stackNamespace := os.Getenv("POD_NAMESPACE")
+	if stackNamespace == "" {
+		stackNamespace = "default"
+	}
+	stackConfigName := os.Getenv("STACK_CONFIGMAP_NAME")
+	if stackConfigName == "" {
+		stackConfigName = "aws-tunnels-operator-stack"
+	}
+
+	if err := mgr.Add(&controllers.SingleStackRunner{
+		Client:        mgr.GetClient(),
+		Namespace:     stackNamespace,
+		ConfigMapName: stackConfigName,
+	}); err != nil {
 		os.Exit(1)
 	}
 
@@ -71,7 +83,7 @@ func main() {
 	}
 
 	authMux := http.NewServeMux()
-	authSrv := &controllers.AuthServer{Client: mgr.GetClient()}
+	authSrv := &controllers.AuthServer{Client: mgr.GetClient(), TemplateFS: templateDir, StackNamespace: stackNamespace, StackConfigName: stackConfigName}
 	authSrv.Register(authMux)
 	if err := mgr.Add(&httpRunnable{addr: ":8090", handler: authMux}); err != nil {
 		os.Exit(1)

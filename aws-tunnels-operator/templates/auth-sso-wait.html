@@ -1,0 +1,84 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AWS SSO Login</title>
+  <style>
+    body{font-family:system-ui,sans-serif;max-width:700px;margin:64px auto;padding:0 16px;text-align:center}
+    h1{margin-bottom:8px}
+    .url-box{background:#f5f5f5;border:1px solid #ddd;border-radius:6px;padding:16px 20px;margin:20px 0;word-break:break-all;text-align:left;font-size:0.9rem}
+    .url-box a{color:#007aff;font-weight:500}
+    .code{font-size:2.2rem;font-family:monospace;letter-spacing:0.15em;color:#222;margin:16px 0;font-weight:700}
+    .btn{display:inline-block;padding:10px 24px;background:#007aff;color:#fff;border-radius:6px;text-decoration:none;margin-top:8px;font-size:1rem}
+    .status{color:#888;margin-top:28px;font-size:0.9rem}
+    .spinner{display:inline-block;width:13px;height:13px;border:2px solid #ccc;border-top-color:#666;border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:middle;margin-right:6px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .err{color:#b00;margin-top:16px}
+  </style>
+</head>
+<body>
+  <h1>AWS SSO Login</h1>
+  <p>Authorizing profile <strong>{{.Profile}}</strong> in stack <strong>{{.Stack}}</strong>.</p>
+
+  <div id="sso-section">
+    {{if .URL}}
+      <div class="url-box">
+        Open this URL in a browser to approve the login request:<br><br>
+        <a href="{{.URL}}" target="_blank" rel="noopener">{{.URL}}</a>
+      </div>
+      {{if .Code}}<div class="code">{{.Code}}</div>{{end}}
+      <a class="btn" href="{{.URL}}" target="_blank" rel="noopener">Open Login Page</a>
+    {{else}}
+      <p>Waiting for AWS to generate the login URL&hellip;</p>
+    {{end}}
+  </div>
+
+  <p class="status"><span class="spinner"></span> <span id="status-text">Waiting for you to complete authorization&hellip;</span></p>
+  <p id="err-text" class="err" style="display:none"></p>
+
+  <script>
+    (function() {
+      var ns   = {{.Namespace | printf "%q"}};
+      var stk  = {{.Stack     | printf "%q"}};
+      var prof = {{.Profile   | printf "%q"}};
+      var pollURL = "/login-poll.json?namespace=" + encodeURIComponent(ns) +
+                    "&stack=" + encodeURIComponent(stk) +
+                    "&profile=" + encodeURIComponent(prof);
+
+      function renderSSO(data) {
+        if (!data.url) return;
+        var section = document.getElementById("sso-section");
+        var html = '<div class="url-box">Open this URL in a browser to approve the login request:<br><br>' +
+                   '<a href="' + data.url + '" target="_blank" rel="noopener">' + data.url + '</a></div>';
+        if (data.code) html += '<div class="code">' + data.code + '</div>';
+        html += '<a class="btn" href="' + data.url + '" target="_blank" rel="noopener">Open Login Page</a>';
+        section.innerHTML = html;
+      }
+
+      function poll() {
+        fetch(pollURL)
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (data.status === "done") {
+              document.getElementById("status-text").textContent = "Login complete, redirecting\u2026";
+              window.location = data.redirect;
+              return;
+            }
+            if (data.status === "error") {
+              document.getElementById("err-text").textContent = data.message;
+              document.getElementById("err-text").style.display = "";
+              document.getElementById("status-text").textContent = "Login failed.";
+              return;
+            }
+            renderSSO(data);
+            setTimeout(poll, 3000);
+          })
+          .catch(function() { setTimeout(poll, 5000); });
+      }
+
+      setTimeout(poll, 1500);
+    })();
+  </script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 # aws-tunnels-operator Helm Chart
 
-This chart deploys the operator and can optionally create one or more `AWSTunnelStack` custom resources from values.
+This chart deploys the operator and writes one stack config ConfigMap consumed by the operator runtime.
 
 ## Install
 
@@ -10,43 +10,39 @@ helm upgrade --install aws-tunnels-operator \
   -n proxies --create-namespace
 ```
 
-## Enable stack creation from values
+## Minimal Single-Stack Values (Recommended)
 
-Set `stacks` in values:
+For a single instance, use `stack` values:
 
 ```yaml
-stacks:
-  - name: aws-tunnels
-    spec:
-      aws:
-        profile: awsprofile001
-        region: eu-west-1
-        ssoStartUrl: <secret:kv/data/aws~sso-start-url>
-        accountId: <secret:kv/data/aws~account-id>
-        roleName: Admin
-      auth:
-        enabled: true
-        host: aws-auth.<secret:kv/data/domains~domain>
-        port: 8090
-      tunnelDefaults:
-        image: ghcr.io/coollision/aws-tunnels-operator:v0.1.0
-        proxyImage: ubuntu/squid:5.2-22.04_beta
-        servicePort: 3128
-      tunnels:
-        - name: gitlab-dev
-          host: gitlab-dev.<secret:kv/data/domains~domain>
-          bastionName: bhnonprod
-          remoteHost: localhost
-          remotePort: "8181"
-          localPort: 8181
-          ingressMode: http
+stack:
+  name: aws-tunnels
+  aws:
+    profile: awsprofile001
+    region: eu-west-1
+    ssoStartUrl: <secret:kv/data/aws~sso-start-url>
+    accountId: <secret:kv/data/aws~account-id>
+    roleName: Admin
+  auth:
+    enabled: true
+    host: aws-auth.<secret:kv/data/domains~domain>
+    port: 8090
+  tunnels:
+    - name: gitlab-dev
+      host: gitlab-dev.<secret:kv/data/domains~domain>
+      bastionName: bhnonprod
+      remoteHost: localhost
+      remotePort: "8181"
+      localPort: 8181
+      ingressMode: http
 ```
 
-## API entrypoint
+## Auth API/UI Endpoints
 
-Auth endpoint (inside operator pod):
-
-`POST /login`
+- `GET /` - login/status UI
+- `GET /status.json` - machine-readable status
+- `POST /login` - login and restart matching profile tunnels
+- `POST /restart` - restart all tunnels in a stack
 
 Body:
 

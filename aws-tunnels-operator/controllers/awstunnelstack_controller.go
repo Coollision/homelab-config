@@ -10,20 +10,17 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	proxyv1alpha1 "homelab/aws-tunnels-operator/api/v1alpha1"
 )
 
-type AWSTunnelStackReconciler struct {
-	client.Client
-	Scheme *runtime.Scheme
+type SingleStackRunner struct {
+	Client        client.Client
+	Namespace     string
+	ConfigMapName string
+	Interval      time.Duration
 }
 
 func ProfileKey(profile string) string {
@@ -59,27 +56,52 @@ func desiredReplicas(validCreds bool) *int32 {
 	return &v
 }
 
-func (r *AWSTunnelStackReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
-	var stack proxyv1alpha1.AWSTunnelStack
-	if err := r.Get(ctx, req.NamespacedName, &stack); err != nil {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+func (r *SingleStackRunner) Start(ctx context.Context) error {
+	interval := r.Interval
+	if interval <= 0 {
+		interval = 30 * time.Second
 	}
 
-	profiles := []string{stack.Spec.AWS.Profile}
-	for _, p := range stack.Spec.AWS.ExtraProfile {
-		profiles = append(profiles, p.Name)
+	_ = r.reconcileOnce(ctx)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			_ = r.reconcileOnce(ctx)
+		}
+	}
+}
+
+func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
+	cfg, err := LoadStackConfig(ctx, r.Client, r.Namespace, r.ConfigMapName)
+	if err != nil {
+		return err
+	}
+	stackName := cfg.Name
+	stack := cfg.Spec
+
+	profiles := []string{}
+	if stack.AWS.Profile != "" {
+		profiles = append(profiles, stack.AWS.Profile)
+	}
+	for _, p := range stack.AWS.ExtraProfile {
+		if p.Name != "" {
+			profiles = append(profiles, p.Name)
+		}
 	}
 
 	for _, profile := range profiles {
-		secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: credsSecretName(stack.Name, profile), Namespace: stack.Namespace}}
+		secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: credsSecretName(stackName, profile), Namespace: cfg.Namespace}}
 		_, err := controllerutil.CreateOrUpdate(ctx, r.Client, secret, func() error {
 			if secret.Labels == nil {
 				secret.Labels = map[string]string{}
 			}
 			secret.Labels["app.kubernetes.io/managed-by"] = "aws-tunnels-operator"
-			secret.Labels["proxies.homelab.io/stack"] = stack.Name
+			secret.Labels["proxies.homelab.io/stack"] = stackName
 			secret.Type = corev1.SecretTypeOpaque
 			if secret.Data == nil {
 				secret.Data = map[string][]byte{}
@@ -87,74 +109,76 @@ func (r *AWSTunnelStackReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			if _, ok := secret.Data["expiration"]; !ok {
 				secret.Data["expiration"] = []byte("1970-01-01T00:00:00Z")
 			}
-			return controllerutil.SetControllerReference(&stack, secret, r.Scheme)
+			return nil
 		})
 		if err != nil {
-			return ctrl.Result{}, err
+			return err
 		}
 	}
 
-	for _, tunnel := range stack.Spec.Tunnels {
+	for _, tunnel := range stack.Tunnels {
 		profile := tunnel.AWSProfile
 		if profile == "" {
-			profile = stack.Spec.AWS.Profile
+			profile = stack.AWS.Profile
 		}
-		profileSecretName := credsSecretName(stack.Name, profile)
+		profileSecretName := credsSecretName(stackName, profile)
 
 		credSecret := &corev1.Secret{}
-		err := r.Get(ctx, types.NamespacedName{Namespace: stack.Namespace, Name: profileSecretName}, credSecret)
+		err := r.Client.Get(ctx, types.NamespacedName{Namespace: cfg.Namespace, Name: profileSecretName}, credSecret)
 		validCreds := err == nil && IsCredentialValid(credSecret)
 
-		tunnelName := fmt.Sprintf("%s-%s", stack.Name, tunnel.Name)
+		tunnelName := fmt.Sprintf("%s-%s", stackName, tunnel.Name)
 		svcPort := tunnel.ServicePort
 		if svcPort == 0 {
-			svcPort = stack.Spec.TunnelDefaults.ServicePort
+			svcPort = stack.TunnelDefaults.ServicePort
 		}
 		if svcPort == 0 {
 			svcPort = 8080
 		}
+
 		image := tunnel.Image
 		if image == "" {
-			image = stack.Spec.TunnelDefaults.Image
+			image = stack.TunnelDefaults.Image
 		}
 		if image == "" {
 			image = "amazon/aws-cli:2.27.9"
 		}
+
 		proxyImage := tunnel.ProxyImage
 		if proxyImage == "" {
-			proxyImage = stack.Spec.TunnelDefaults.ProxyImage
+			proxyImage = stack.TunnelDefaults.ProxyImage
 		}
 		if proxyImage == "" {
 			proxyImage = "alpine/socat:1.8.0.3"
 		}
+
 		awsRegion := tunnel.AWSRegion
 		if awsRegion == "" {
-			awsRegion = stack.Spec.AWS.Region
+			awsRegion = stack.AWS.Region
 		}
 
-		dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: tunnelName, Namespace: stack.Namespace}}
+		dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: tunnelName, Namespace: cfg.Namespace}}
 		_, err = controllerutil.CreateOrUpdate(ctx, r.Client, dep, func() error {
 			labels := map[string]string{
-				"app.kubernetes.io/name": tunnelName,
-				"app.kubernetes.io/part-of": stack.Name,
-				"proxies.homelab.io/stack": stack.Name,
+				"app.kubernetes.io/name":    tunnelName,
+				"app.kubernetes.io/part-of": stackName,
+				"proxies.homelab.io/stack":  stackName,
 			}
 			dep.Labels = labels
 			dep.Spec.Selector = &metav1.LabelSelector{MatchLabels: map[string]string{"app": tunnelName}}
 			dep.Spec.Replicas = desiredReplicas(validCreds)
-			dep.Spec.Template.ObjectMeta.Labels = map[string]string{"app": tunnelName, "proxies.homelab.io/stack": stack.Name}
+			dep.Spec.Template.ObjectMeta.Labels = map[string]string{"app": tunnelName, "proxies.homelab.io/stack": stackName}
 
 			resources := tunnel.Resources
 			if resources.Requests == nil && resources.Limits == nil {
-				resources = stack.Spec.TunnelDefaults.Resources
+				resources = stack.TunnelDefaults.Resources
 			}
-
 			proxyResources := tunnel.ProxyResources
 			if proxyResources.Requests == nil && proxyResources.Limits == nil {
-				proxyResources = stack.Spec.TunnelDefaults.ProxyResources
+				proxyResources = stack.TunnelDefaults.ProxyResources
 			}
 
-			if dep.Spec.Template.Spec.Containers == nil || len(dep.Spec.Template.Spec.Containers) == 0 {
+			if dep.Spec.Template.Spec.Containers == nil || len(dep.Spec.Template.Spec.Containers) < 2 {
 				dep.Spec.Template.Spec.Containers = []corev1.Container{{}, {}}
 			}
 
@@ -164,14 +188,17 @@ func (r *AWSTunnelStackReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				Env: []corev1.EnvVar{
 					{Name: "AWS_REGION", Value: awsRegion},
+					{Name: "AWS_PROFILE", Value: profile},
 					{Name: "BASTION_NAME", Value: tunnel.BastionName},
 					{Name: "REMOTE_HOST", Value: tunnel.RemoteHost},
 					{Name: "REMOTE_PORT", Value: tunnel.RemotePort},
 					{Name: "LOCAL_PORT", Value: fmt.Sprintf("%d", tunnel.LocalPort)},
+					{Name: "RDS_INSTANCE_PREFIX", Value: tunnel.RDS.InstancePrefix},
+					{Name: "RDS_CLUSTER_PREFIX", Value: tunnel.RDS.ClusterPrefix},
 				},
-				EnvFrom: []corev1.EnvFromSource{{SecretRef: &corev1.SecretEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: profileSecretName}}}},
-				Command: []string{"/bin/sh", "-ec"},
-				Args: []string{`INSTANCE_ID=$(aws ec2 describe-instances --region "$AWS_REGION" --filters "Name=tag:Name,Values=${BASTION_NAME}" "Name=instance-state-name,Values=running" --query "Reservations[0].Instances[0].InstanceId" --output text); if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ]; then echo "no running bastion"; exit 1; fi; if [ -z "${REMOTE_HOST}" ]; then echo "REMOTE_HOST is required"; exit 1; fi; exec aws ssm start-session --region "$AWS_REGION" --target "$INSTANCE_ID" --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters "{\"host\":[\"${REMOTE_HOST}\"],\"portNumber\":[\"${REMOTE_PORT}\"],\"localPortNumber\":[\"${LOCAL_PORT}\"]}"`},
+				EnvFrom:   []corev1.EnvFromSource{{SecretRef: &corev1.SecretEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: profileSecretName}}}},
+				Command:   []string{"/bin/sh", "-ec"},
+				Args:      []string{`if [ -n "$RDS_CLUSTER_PREFIX" ]; then REMOTE_HOST=$(aws rds describe-db-clusters --region "$AWS_REGION" --query "DBClusters[?Status=='available'].[DBClusterIdentifier,Endpoint]" --output text | awk -v p="$RDS_CLUSTER_PREFIX" '$1 ~ "^"p {print $2}' | tail -n1); fi; if [ -z "$REMOTE_HOST" ] && [ -n "$RDS_INSTANCE_PREFIX" ]; then REMOTE_HOST=$(aws rds describe-db-instances --region "$AWS_REGION" --query "DBInstances[?DBInstanceStatus=='available'].[DBInstanceIdentifier,Endpoint.Address]" --output text | awk -v p="$RDS_INSTANCE_PREFIX" '$1 ~ "^"p {print $2}' | tail -n1); fi; INSTANCE_ID=$(aws ec2 describe-instances --region "$AWS_REGION" --filters "Name=tag:Name,Values=${BASTION_NAME}" "Name=instance-state-name,Values=running" --query "Reservations[0].Instances[0].InstanceId" --output text); if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ]; then echo "no running bastion"; exit 1; fi; if [ -z "${REMOTE_HOST}" ] || [ "$REMOTE_HOST" = "None" ]; then echo "REMOTE_HOST is required or resolvable via RDS prefix"; exit 1; fi; exec aws ssm start-session --region "$AWS_REGION" --target "$INSTANCE_ID" --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters "{\"host\":[\"${REMOTE_HOST}\"],\"portNumber\":[\"${REMOTE_PORT}\"],\"localPortNumber\":[\"${LOCAL_PORT}\"]}"`},
 				Resources: resources,
 			}
 
@@ -184,25 +211,24 @@ func (r *AWSTunnelStackReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 				Resources:       proxyResources,
 			}
 
-			if stack.Spec.NodeAffinity.ExcludedType != "" {
-				dep.Spec.Template.Spec.Affinity = &corev1.Affinity{NodeAffinity: &corev1.NodeAffinity{RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{NodeSelectorTerms: []corev1.NodeSelectorTerm{{MatchExpressions: []corev1.NodeSelectorRequirement{{Key: "type", Operator: corev1.NodeSelectorOpNotIn, Values: []string{stack.Spec.NodeAffinity.ExcludedType}}}}}}}}
+			if stack.NodeAffinity.ExcludedType != "" {
+				dep.Spec.Template.Spec.Affinity = &corev1.Affinity{NodeAffinity: &corev1.NodeAffinity{RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{NodeSelectorTerms: []corev1.NodeSelectorTerm{{MatchExpressions: []corev1.NodeSelectorRequirement{{Key: "type", Operator: corev1.NodeSelectorOpNotIn, Values: []string{stack.NodeAffinity.ExcludedType}}}}}}}}
 			}
-
-			return controllerutil.SetControllerReference(&stack, dep, r.Scheme)
+			return nil
 		})
 		if err != nil {
-			return ctrl.Result{}, err
+			return err
 		}
 
-		svc := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: tunnelName, Namespace: stack.Namespace}}
+		svc := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: tunnelName, Namespace: cfg.Namespace}}
 		_, err = controllerutil.CreateOrUpdate(ctx, r.Client, svc, func() error {
-			svc.Labels = map[string]string{"proxies.homelab.io/stack": stack.Name}
+			svc.Labels = map[string]string{"proxies.homelab.io/stack": stackName}
 			svc.Spec.Selector = map[string]string{"app": tunnelName}
 			svc.Spec.Ports = []corev1.ServicePort{{Name: "tunnel", Port: svcPort, TargetPort: intstr.FromInt32(svcPort)}}
-			return controllerutil.SetControllerReference(&stack, svc, r.Scheme)
+			return nil
 		})
 		if err != nil {
-			return ctrl.Result{}, err
+			return err
 		}
 
 		ingressMode := tunnel.IngressMode
@@ -213,53 +239,32 @@ func (r *AWSTunnelStackReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			ing := &unstructured.Unstructured{}
 			ing.SetAPIVersion("traefik.io/v1alpha1")
 			ing.SetKind("IngressRouteTCP")
-			ing.SetNamespace(stack.Namespace)
+			ing.SetNamespace(cfg.Namespace)
 			ing.SetName(tunnelName)
-			_, err := controllerutil.CreateOrUpdate(ctx, r.Client, ing, func() error {
+			_, _ = controllerutil.CreateOrUpdate(ctx, r.Client, ing, func() error {
 				ing.Object["spec"] = map[string]any{
 					"entryPoints": []any{"websecure"},
-					"routes": []any{map[string]any{"match": fmt.Sprintf("HostSNI(`%s`)", tunnel.Host), "services": []any{map[string]any{"name": tunnelName, "namespace": stack.Namespace, "port": svcPort}}}},
-					"tls": map[string]any{"passthrough": tunnel.TLS.Passthrough},
+					"routes":      []any{map[string]any{"match": fmt.Sprintf("HostSNI(`%s`)", tunnel.Host), "services": []any{map[string]any{"name": tunnelName, "namespace": cfg.Namespace, "port": svcPort}}}},
+					"tls":         map[string]any{"passthrough": tunnel.TLS.Passthrough},
 				}
-				return controllerutil.SetControllerReference(&stack, ing, r.Scheme)
+				return nil
 			})
-			if err != nil {
-				logger.Error(err, "failed to reconcile IngressRouteTCP", "tunnel", tunnelName)
-			}
 		} else {
 			ing := &unstructured.Unstructured{}
 			ing.SetAPIVersion("traefik.io/v1alpha1")
 			ing.SetKind("IngressRoute")
-			ing.SetNamespace(stack.Namespace)
+			ing.SetNamespace(cfg.Namespace)
 			ing.SetName(tunnelName)
-			_, err := controllerutil.CreateOrUpdate(ctx, r.Client, ing, func() error {
+			_, _ = controllerutil.CreateOrUpdate(ctx, r.Client, ing, func() error {
 				ing.Object["spec"] = map[string]any{
 					"entryPoints": []any{"websecure"},
-					"routes": []any{map[string]any{"kind": "Rule", "match": fmt.Sprintf("Host(`%s`)", tunnel.Host), "services": []any{map[string]any{"kind": "Service", "name": tunnelName, "namespace": stack.Namespace, "port": svcPort, "scheme": "http"}}}},
-					"tls": map[string]any{},
+					"routes":      []any{map[string]any{"kind": "Rule", "match": fmt.Sprintf("Host(`%s`)", tunnel.Host), "services": []any{map[string]any{"kind": "Service", "name": tunnelName, "namespace": cfg.Namespace, "port": svcPort, "scheme": "http"}}}},
+					"tls":         map[string]any{},
 				}
-				return controllerutil.SetControllerReference(&stack, ing, r.Scheme)
+				return nil
 			})
-			if err != nil {
-				logger.Error(err, "failed to reconcile IngressRoute", "tunnel", tunnelName)
-			}
 		}
 	}
 
-	stack.Status.ObservedGeneration = stack.Generation
-	stack.Status.ManagedTunnels = int32(len(stack.Spec.Tunnels))
-	if err := r.Status().Update(ctx, &stack); err != nil {
-		logger.Error(err, "failed to update status")
-	}
-
-	return ctrl.Result{RequeueAfter: 2 * time.Minute}, nil
-}
-
-func (r *AWSTunnelStackReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&proxyv1alpha1.AWSTunnelStack{}).
-		Owns(&appsv1.Deployment{}).
-		Owns(&corev1.Service{}).
-		Owns(&corev1.Secret{}).
-		Complete(r)
+	return nil
 }

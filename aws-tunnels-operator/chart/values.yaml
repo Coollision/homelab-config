@@ -37,28 +37,27 @@ affinity: {}
 tolerations: []
 nodeSelector: {}
 
-stacks: []
-# - name: aws-tunnels
-#   spec:
-#     aws:
-#       profile: awsprofile001
-#       region: eu-west-1
-#       ssoStartUrl: <secret:kv/data/aws~sso-start-url>
-#       accountId: <secret:kv/data/aws~account-id>
-#       roleName: Admin
-#     auth:
-#       enabled: true
-#       host: aws-auth.<secret:kv/data/domains~domain>
-#       port: 8090
-#     tunnelDefaults:
-#       image: ghcr.io/coollision/aws-tunnels-operator:v0.1.2
-#       proxyImage: ubuntu/squid:5.2-22.04_beta
-#       servicePort: 3128
-#     tunnels:
-#       - name: gitlab-dev
-#         host: gitlab-dev.<secret:kv/data/domains~domain>
-#         bastionName: bhnonprod
-#         remoteHost: localhost
-#         remotePort: "8181"
-#         localPort: 8181
-#         ingressMode: http
+stackConfig:
+  name: aws-tunnels-operator-stack
+
+# Single stack desired state consumed by the operator from ConfigMap.
+stack:
+  name: aws-tunnels
+  aws:
+    profile: awsprofile001
+    region: eu-west-1
+    ssoStartUrl: ""
+    accountId: ""
+    roleName: ""
+    extraProfiles: []
+  auth:
+    enabled: true
+    host: aws-auth.<secret:kv/data/domains~domain>
+    port: 8090
+  nodeAffinity:
+    excludedType: ""
+  tunnelDefaults:
+    image: amazon/aws-cli:2.27.9
+    proxyImage: alpine/socat:1.8.0.3
+    servicePort: 8080
+  tunnels: []

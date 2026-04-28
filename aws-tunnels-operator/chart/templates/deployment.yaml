@@ -20,6 +20,13 @@ spec:
         - name: manager
           image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: STACK_CONFIGMAP_NAME
+              value: {{ .Values.stackConfig.name | quote }}
           args:
             - --metrics-bind-address={{ .Values.operatorArgs.metricsBindAddress }}
             - --health-probe-bind-address={{ .Values.operatorArgs.healthProbeBindAddress }}
