@@ -33,8 +33,10 @@ const (
 	tunnelStateMountPath  = "/tmp/tunnel-state"
 )
 
-// argoTrackingID builds the argocd.argoproj.io/tracking-id annotation value used
-// by ArgoCD's default annotation tracking mode. Format: <app>:<group>/<kind>:<ns>/<name>.
+// argoTrackingID builds a NON-SELF-REFERENCING argocd.argoproj.io/tracking-id annotation.
+// By pointing every operator-managed resource at the stack ConfigMap (which ArgoCD already
+// owns), the resources appear in the ArgoCD UI but are never diffed or pruned by ArgoCD.
+// See: https://argo-cd.readthedocs.io/en/stable/user-guide/resource_tracking/#non-self-referencing-annotations
 func argoTrackingID(appName, group, kind, namespace, name string) string {
 	if group == "" {
 		return fmt.Sprintf("%s:/%s:%s/%s", appName, kind, namespace, name)
@@ -122,7 +124,7 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 				if secret.Annotations == nil {
 					secret.Annotations = map[string]string{}
 				}
-				secret.Annotations["argocd.argoproj.io/tracking-id"] = argoTrackingID(r.ArgoAppName, "", "Secret", cfg.Namespace, secret.Name)
+				secret.Annotations["argocd.argoproj.io/tracking-id"] = argoTrackingID(r.ArgoAppName, "", "ConfigMap", r.Namespace, r.ConfigMapName)
 			}
 			secret.Type = corev1.SecretTypeOpaque
 			if secret.Data == nil {
@@ -194,7 +196,7 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 				if dep.Annotations == nil {
 					dep.Annotations = map[string]string{}
 				}
-				dep.Annotations["argocd.argoproj.io/tracking-id"] = argoTrackingID(r.ArgoAppName, "apps", "Deployment", cfg.Namespace, tunnelName)
+				dep.Annotations["argocd.argoproj.io/tracking-id"] = argoTrackingID(r.ArgoAppName, "", "ConfigMap", r.Namespace, r.ConfigMapName)
 			}
 			dep.Spec.Selector = &metav1.LabelSelector{MatchLabels: map[string]string{"app": tunnelName}}
 			dep.Spec.Replicas = desiredReplicas(validCreds)
@@ -300,7 +302,7 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 				if svc.Annotations == nil {
 					svc.Annotations = map[string]string{}
 				}
-				svc.Annotations["argocd.argoproj.io/tracking-id"] = argoTrackingID(r.ArgoAppName, "", "Service", cfg.Namespace, tunnelName)
+				svc.Annotations["argocd.argoproj.io/tracking-id"] = argoTrackingID(r.ArgoAppName, "", "ConfigMap", r.Namespace, r.ConfigMapName)
 			}
 			svc.Spec.Selector = map[string]string{"app": tunnelName}
 			svc.Spec.Ports = []corev1.ServicePort{{Name: "tunnel", Port: svcPort, TargetPort: intstr.FromInt32(svcPort)}}
@@ -323,7 +325,7 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 			_, _ = controllerutil.CreateOrUpdate(ctx, r.Client, ing, func() error {
 				if r.ArgoAppName != "" {
 					ing.SetLabels(map[string]string{"app.kubernetes.io/instance": r.ArgoAppName})
-					ing.SetAnnotations(map[string]string{"argocd.argoproj.io/tracking-id": argoTrackingID(r.ArgoAppName, "traefik.io", "IngressRouteTCP", cfg.Namespace, tunnelName)})
+					ing.SetAnnotations(map[string]string{"argocd.argoproj.io/tracking-id": argoTrackingID(r.ArgoAppName, "", "ConfigMap", r.Namespace, r.ConfigMapName)})
 				}
 				ing.Object["spec"] = map[string]any{
 					"entryPoints": []any{"websecure"},
@@ -341,7 +343,7 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 			_, _ = controllerutil.CreateOrUpdate(ctx, r.Client, ing, func() error {
 				if r.ArgoAppName != "" {
 					ing.SetLabels(map[string]string{"app.kubernetes.io/instance": r.ArgoAppName})
-					ing.SetAnnotations(map[string]string{"argocd.argoproj.io/tracking-id": argoTrackingID(r.ArgoAppName, "traefik.io", "IngressRoute", cfg.Namespace, tunnelName)})
+					ing.SetAnnotations(map[string]string{"argocd.argoproj.io/tracking-id": argoTrackingID(r.ArgoAppName, "", "ConfigMap", r.Namespace, r.ConfigMapName)})
 				}
 				ing.Object["spec"] = map[string]any{
 					"entryPoints": []any{"websecure"},
