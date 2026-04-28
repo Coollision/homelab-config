@@ -1,4 +1,4 @@
-{{- if .Values.ingress.enabled }}
+{{- if and .Values.ingress.enabled .Values.stack.auth.enabled .Values.stack.auth.host }}
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -9,7 +9,7 @@ spec:
 {{ toYaml .Values.ingress.entryPoints | indent 4 }}
   routes:
     - kind: Rule
-      match: Host(`{{ .Values.ingress.host }}`)
+      match: Host(`{{ .Values.stack.auth.host }}`)
       services:
         - kind: Service
           name: {{ include "aws-tunnels-operator.fullname" . }}-auth
