@@ -4,7 +4,7 @@ namespaceOverride: ""
 
 image:
   repository: ghcr.io/coollision/aws-tunnels-operator
-  tag: v0.4.1
+  tag: v0.5.0
   pullPolicy: IfNotPresent
 
 replicaCount: 1
@@ -80,7 +80,7 @@ stack:
   nodeAffinity:
     excludedType: ""
   tunnelDefaults:
-    image: ghcr.io/coollision/aws-tunnel-runner:v0.4.1
+    image: ghcr.io/coollision/aws-tunnel-runner:v0.5.0
     proxyImage: alpine/socat:1.8.0.3
     servicePort: 8080
     livenessProbe:
