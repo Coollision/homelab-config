@@ -4,47 +4,216 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AWS SSO Login</title>
+  <script>
+    (function() {
+      var theme = "dark";
+      try {
+        theme = localStorage.getItem("authTheme") || "dark";
+      } catch (e) {}
+      document.documentElement.setAttribute("data-theme", theme);
+    })();
+  </script>
   <style>
-    body{font-family:system-ui,sans-serif;max-width:700px;margin:64px auto;padding:0 16px;text-align:center}
-    h1{margin-bottom:8px}
-    .url-box{background:#f5f5f5;border:1px solid #ddd;border-radius:6px;padding:16px 20px;margin:20px 0;word-break:break-all;text-align:left;font-size:0.9rem}
-    .url-box a{color:#007aff;font-weight:500}
-    .code{font-size:2.2rem;font-family:monospace;letter-spacing:0.15em;color:#222;margin:16px 0;font-weight:700}
-    .btn{display:inline-block;padding:10px 24px;background:#007aff;color:#fff;border-radius:6px;text-decoration:none;margin-top:8px;font-size:1rem}
-    .status{color:#888;margin-top:28px;font-size:0.9rem}
-    .spinner{display:inline-block;width:13px;height:13px;border:2px solid #ccc;border-top-color:#666;border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:middle;margin-right:6px}
+    :root{
+      --bg:#080d13;
+      --panel:#101a26;
+      --line:#22354a;
+      --text:#dce8f4;
+      --muted:#90a6bc;
+      --accent:#67b7ff;
+      --ok:#57d5a1;
+      --bad:#ff6f91;
+      --radius:14px;
+      --shadow:0 24px 48px rgba(0,0,0,.45);
+      --panel-grad:linear-gradient(150deg, rgba(16,26,38,.95), rgba(10,17,26,.95));
+      --page-bg:
+        radial-gradient(circle at 15% 10%, rgba(103,183,255,.2), transparent 40%),
+        radial-gradient(circle at 80% 14%, rgba(87,213,161,.16), transparent 42%),
+        linear-gradient(165deg, #05080c, #08111c 44%, #0a141e 100%);
+      --url-bg:#0d1825;
+      --button-bg:linear-gradient(160deg, rgba(103,183,255,.32), rgba(103,183,255,.18));
+      --button-color:#dff1ff;
+      --spinner-ring:#355170;
+      --toggle-bg:#1a2a3b;
+      --toggle-text:#d8e8f7;
+    }
+    [data-theme="light"]{
+      --bg:#eef4fb;
+      --panel:#ffffff;
+      --line:#d2dce8;
+      --text:#1f2b38;
+      --muted:#4b6177;
+      --accent:#216bb6;
+      --ok:#1a8b62;
+      --bad:#bc2f55;
+      --shadow:0 20px 44px rgba(39,62,84,.16);
+      --panel-grad:linear-gradient(150deg, rgba(255,255,255,.98), rgba(247,251,255,.98));
+      --page-bg:
+        radial-gradient(circle at 12% 10%, rgba(81,142,205,.22), transparent 38%),
+        radial-gradient(circle at 82% 14%, rgba(44,170,125,.2), transparent 40%),
+        linear-gradient(165deg, #f1f6fc, #eef4fb 48%, #e8f0f9 100%);
+      --url-bg:#f3f8fe;
+      --button-bg:linear-gradient(160deg, rgba(33,107,182,.2), rgba(33,107,182,.14));
+      --button-color:#163450;
+      --spinner-ring:#aac3db;
+      --toggle-bg:#e7eef7;
+      --toggle-text:#163450;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      min-height:100vh;
+      color:var(--text);
+      font-family:"Space Grotesk","Segoe UI Variable","Noto Sans",sans-serif;
+      background:var(--page-bg);
+      display:grid;
+      place-items:center;
+      padding:18px;
+    }
+    .panel{
+      width:min(760px, 100%);
+      background:var(--panel-grad);
+      border:1px solid var(--line);
+      border-radius:calc(var(--radius) + 2px);
+      box-shadow:var(--shadow);
+      padding:22px;
+      animation:rise .45s ease;
+      position:relative;
+    }
+    .panel-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+    .theme-toggle{
+      border:1px solid var(--line);
+      border-radius:999px;
+      background:var(--toggle-bg);
+      color:var(--toggle-text);
+      padding:7px 12px;
+      font-size:.82rem;
+      font-weight:700;
+      letter-spacing:.03em;
+      cursor:pointer;
+      flex-shrink:0;
+    }
+    h1{margin:0 0 6px;font-size:1.6rem}
+    .sub{margin:0;color:var(--muted)}
+    .url-box{
+      margin:18px 0 0;
+      background:var(--url-bg);
+      border:1px solid var(--line);
+      border-radius:12px;
+      padding:14px;
+      word-break:break-all;
+      text-align:left;
+      line-height:1.55;
+      font-size:.94rem;
+    }
+    .url-box a{color:#9ad2ff;font-weight:600;text-decoration:none}
+    .url-box a:hover{text-decoration:underline}
+    .code{
+      margin:14px 0 10px;
+      font-size:1.9rem;
+      font-family:"IBM Plex Mono","Cascadia Mono",monospace;
+      letter-spacing:.17em;
+      color:#d5edff;
+      font-weight:700;
+    }
+    .btn{
+      display:inline-block;
+      margin-top:8px;
+      text-decoration:none;
+      border-radius:10px;
+      border:1px solid rgba(103,183,255,.45);
+      background:var(--button-bg);
+      color:var(--button-color);
+      padding:10px 18px;
+      font-weight:600;
+      transition:transform .15s ease, filter .15s ease;
+    }
+    .btn:hover{transform:translateY(-1px);filter:brightness(1.1)}
+    .status{
+      margin:18px 0 0;
+      color:var(--muted);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+    }
+    .spinner{
+      width:14px;
+      height:14px;
+      border:2px solid var(--spinner-ring);
+      border-top-color:var(--ok);
+      border-radius:50%;
+      animation:spin .8s linear infinite;
+    }
+    .err{
+      margin-top:12px;
+      color:#ffd2de;
+      background:rgba(255,111,145,.12);
+      border:1px solid rgba(255,111,145,.38);
+      border-radius:10px;
+      padding:10px 12px;
+    }
     @keyframes spin{to{transform:rotate(360deg)}}
-    .err{color:#b00;margin-top:16px}
+    @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+    @media (max-width:640px){
+      .panel{padding:16px}
+      .code{font-size:1.55rem;letter-spacing:.14em}
+      .btn{display:block;text-align:center}
+    }
   </style>
 </head>
 <body>
-  <h1>AWS SSO Login</h1>
-  <p>Authorizing profile <strong>{{.Profile}}</strong> in stack <strong>{{.Stack}}</strong>.</p>
-
-  <div id="sso-section">
-    {{if .URL}}
-      <div class="url-box">
-        Open this URL in a browser to approve the login request:<br><br>
-        <a href="{{.URL}}" target="_blank" rel="noopener">{{.URL}}</a>
+  <main class="panel">
+    <div class="panel-top">
+      <div>
+        <h1>AWS SSO Login</h1>
+        <p class="sub">Authorizing profile <strong>{{.Profile}}</strong> in stack <strong>{{.Stack}}</strong>.</p>
       </div>
-      {{if .Code}}<div class="code">{{.Code}}</div>{{end}}
-      <a class="btn" href="{{.URL}}" target="_blank" rel="noopener">Open Login Page</a>
-    {{else}}
-      <p>Waiting for AWS to generate the login URL&hellip;</p>
-    {{end}}
-  </div>
+      <button id="theme-toggle" class="theme-toggle" type="button">Light</button>
+    </div>
 
-  <p class="status"><span class="spinner"></span> <span id="status-text">Waiting for you to complete authorization&hellip;</span></p>
-  <p id="err-text" class="err" style="display:none"></p>
+    <div id="sso-section">
+      {{if .URL}}
+        <div class="url-box">
+          Open this URL in a browser to approve the login request:<br><br>
+          <a href="{{.URL}}" target="_blank" rel="noopener">{{.URL}}</a>
+        </div>
+        {{if .Code}}<div class="code">{{.Code}}</div>{{end}}
+        <a class="btn" href="{{.URL}}" target="_blank" rel="noopener">Open Login Page</a>
+      {{else}}
+        <p class="sub" style="margin-top:16px">Waiting for AWS to generate the login URL&hellip;</p>
+      {{end}}
+    </div>
+
+    <p class="status"><span class="spinner"></span> <span id="status-text">Waiting for you to complete authorization&hellip;</span></p>
+    <p id="err-text" class="err" style="display:none"></p>
+  </main>
 
   <script>
     (function() {
-      var ns   = {{.Namespace | printf "%q"}};
-      var stk  = {{.Stack     | printf "%q"}};
-      var prof = {{.Profile   | printf "%q"}};
-      var pollURL = "/login-poll.json?namespace=" + encodeURIComponent(ns) +
-                    "&stack=" + encodeURIComponent(stk) +
-                    "&profile=" + encodeURIComponent(prof);
+      var key = "authTheme";
+      var root = document.documentElement;
+      var themeButton = document.getElementById("theme-toggle");
+      function applyTheme(theme) {
+        root.setAttribute("data-theme", theme);
+        if (themeButton) {
+          themeButton.textContent = theme === "dark" ? "Light" : "Dark";
+        }
+      }
+      var currentTheme = root.getAttribute("data-theme") || "dark";
+      applyTheme(currentTheme);
+      if (themeButton) {
+        themeButton.addEventListener("click", function() {
+          currentTheme = currentTheme === "dark" ? "light" : "dark";
+          applyTheme(currentTheme);
+          try {
+            localStorage.setItem(key, currentTheme);
+          } catch (e) {}
+        });
+      }
+
+      var sid = "{{.SessionID}}";
+      var pollURL = "/login-poll.json?sid=" + encodeURIComponent(sid);
 
       function renderSSO(data) {
         if (!data.url) return;

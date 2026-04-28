@@ -4,67 +4,262 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AWS Tunnels Auth</title>
+  <script>
+    (function() {
+      var theme = "dark";
+      try {
+        theme = localStorage.getItem("authTheme") || "dark";
+      } catch (e) {}
+      document.documentElement.setAttribute("data-theme", theme);
+    })();
+  </script>
   <style>
-    body{font-family:system-ui,sans-serif;max-width:1100px;margin:32px auto;padding:0 16px}
-    table{width:100%;border-collapse:collapse}
-    th,td{padding:8px;border-bottom:1px solid #ddd;text-align:left}
-    button{padding:6px 10px}
-    code{background:#f2f2f2;padding:2px 4px;border-radius:4px}
-    .ok{color:#0a7}
-    .err{color:#b00}
+    :root{
+      --bg:#090e13;
+      --bg-soft:#101822;
+      --panel:#111d2a;
+      --panel-2:#0d1722;
+      --line:#24364a;
+      --text:#dfeaf6;
+      --muted:#90a4ba;
+      --accent:#57d5a1;
+      --accent-2:#67b7ff;
+      --warn:#ffcc66;
+      --bad:#ff6f91;
+      --radius:14px;
+      --shadow:0 18px 48px rgba(0,0,0,.45);
+      --hero-grad:linear-gradient(145deg, rgba(17,29,42,.92), rgba(11,18,27,.92));
+      --card-grad:linear-gradient(145deg, rgba(16,24,34,.95), rgba(10,16,24,.95));
+      --page-bg:
+        radial-gradient(circle at 12% 8%, rgba(103,183,255,.2), transparent 38%),
+        radial-gradient(circle at 86% 18%, rgba(87,213,161,.16), transparent 40%),
+        linear-gradient(160deg, #05080c, #090f16 42%, #08111c 100%);
+      --code-bg:#122031;
+      --code-text:#c6e2ff;
+      --toggle-bg:#1a2a3b;
+      --toggle-text:#d8e8f7;
+    }
+    [data-theme="light"]{
+      --bg:#eef3f9;
+      --bg-soft:#ffffff;
+      --panel:#ffffff;
+      --panel-2:#f4f8fc;
+      --line:#d2dce8;
+      --text:#1f2b38;
+      --muted:#4b6177;
+      --accent:#1a8b62;
+      --accent-2:#216bb6;
+      --warn:#a96b00;
+      --bad:#bc2f55;
+      --shadow:0 18px 42px rgba(39,62,84,.16);
+      --hero-grad:linear-gradient(145deg, rgba(255,255,255,.98), rgba(246,251,255,.98));
+      --card-grad:linear-gradient(145deg, rgba(255,255,255,.98), rgba(248,251,255,.98));
+      --page-bg:
+        radial-gradient(circle at 10% 8%, rgba(81,142,205,.2), transparent 36%),
+        radial-gradient(circle at 88% 16%, rgba(44,170,125,.2), transparent 40%),
+        linear-gradient(165deg, #f1f6fc, #eef4fb 48%, #e9f1fa 100%);
+      --code-bg:#e7eef7;
+      --code-text:#163450;
+      --toggle-bg:#e7eef7;
+      --toggle-text:#163450;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      color:var(--text);
+      font-family:"Space Grotesk","Segoe UI Variable","Noto Sans",sans-serif;
+      background:var(--page-bg);
+    }
+    .frame{
+      max-width:1120px;
+      margin:32px auto;
+      padding:0 16px 28px;
+      animation:fadeIn .45s ease;
+    }
+    .hero{
+      background:var(--hero-grad);
+      border:1px solid var(--line);
+      border-radius:calc(var(--radius) + 4px);
+      box-shadow:var(--shadow);
+      padding:24px;
+      margin-bottom:18px;
+      position:relative;
+      overflow:hidden;
+    }
+    .hero:after{
+      content:"";
+      position:absolute;
+      right:-80px;
+      top:-80px;
+      width:220px;
+      height:220px;
+      border-radius:50%;
+      background:radial-gradient(circle, rgba(103,183,255,.22), transparent 68%);
+      pointer-events:none;
+    }
+    h1{margin:0 0 8px;font-size:1.9rem;letter-spacing:.02em}
+    p{margin:0;color:var(--muted)}
+    .hero-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+    .theme-toggle{
+      border:1px solid var(--line);
+      border-radius:999px;
+      background:var(--toggle-bg);
+      color:var(--toggle-text);
+      padding:7px 12px;
+      font-size:.82rem;
+      font-weight:700;
+      letter-spacing:.03em;
+      cursor:pointer;
+    }
+    .flash{margin-top:14px;padding:12px 14px;border-radius:10px;border:1px solid}
+    .flash-ok{background:rgba(87,213,161,.1);border-color:rgba(87,213,161,.4);color:#baf3db}
+    .flash-err{background:rgba(255,111,145,.12);border-color:rgba(255,111,145,.44);color:#ffd2de}
+    .card{
+      background:var(--card-grad);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+    .table-wrap{overflow-x:auto}
+    table{width:100%;border-collapse:collapse;min-width:720px}
+    th,td{padding:12px 14px;border-bottom:1px solid rgba(36,54,74,.72);text-align:left}
+    th{font-size:.77rem;text-transform:uppercase;letter-spacing:.08em;color:#9bb2c9;background:rgba(8,13,20,.6)}
+    tr:hover td{background:rgba(255,255,255,.015)}
+    .badge{display:inline-flex;align-items:center;gap:7px;padding:4px 10px;border-radius:999px;font-size:.78rem;font-weight:600}
+    .badge-valid{background:rgba(87,213,161,.13);color:#baf3db}
+    .badge-expired{background:rgba(255,204,102,.12);color:#ffe1a5}
+    .badge-missing{background:rgba(255,111,145,.14);color:#ffd2de}
+    .btn{
+      border:1px solid rgba(103,183,255,.35);
+      color:#d9ecff;
+      background:linear-gradient(160deg, rgba(103,183,255,.3), rgba(103,183,255,.18));
+      padding:8px 13px;
+      border-radius:10px;
+      font-weight:600;
+      letter-spacing:.02em;
+      cursor:pointer;
+      transition:transform .15s ease, filter .15s ease;
+    }
+    .btn:hover{filter:brightness(1.12);transform:translateY(-1px)}
+    .btn:active{transform:translateY(0)}
+    .footer{
+      margin-top:18px;
+      padding:16px;
+      border-radius:12px;
+      border:1px solid var(--line);
+      background:var(--panel-2);
+      display:flex;
+      flex-wrap:wrap;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+    }
+    .footer h2{margin:0 0 6px;font-size:1rem;color:#deecfa}
+    .meta{margin-top:14px;color:#7f94ab;font-size:.9rem}
+    code{padding:2px 6px;border-radius:7px;background:var(--code-bg);color:var(--code-text)}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+    @media (max-width:780px){
+      .frame{margin:18px auto;padding:0 12px 20px}
+      h1{font-size:1.55rem}
+      .hero,.footer{padding:16px}
+      .btn{width:100%}
+      .footer{display:block}
+    }
   </style>
 </head>
 <body>
-  <h1>AWS Tunnels Auth</h1>
-  <p>Use profile-scoped login to refresh credentials and restart only matching tunnels.</p>
+  <main class="frame">
+    <section class="hero">
+      <h1>AWS Tunnels Auth</h1>
+      <div class="hero-top">
+        <p>Refresh profile credentials and recycle only the deployments bound to each profile.</p>
+        <button id="theme-toggle" class="theme-toggle" type="button">Light</button>
+      </div>
+      {{if .Msg}}<div class="flash flash-ok">{{.Msg}}</div>{{end}}
+      {{if .Err}}<div class="flash flash-err">{{.Err}}</div>{{end}}
+    </section>
 
-  {{if .Msg}}<p class="ok">{{.Msg}}</p>{{end}}
-  {{if .Err}}<p class="err">{{.Err}}</p>{{end}}
-
-  <table>
-    <thead>
-      <tr>
-        <th>Namespace</th>
-        <th>Stack</th>
-        <th>Profile</th>
-        <th>Status</th>
-        <th>Expiration</th>
-        <th>Action</th>
-      </tr>
-    </thead>
-    <tbody>
-      {{if .Targets}}
-        {{range .Targets}}
+    <section class="card table-wrap">
+      <table>
+        <thead>
           <tr>
-            <td>{{.Namespace}}</td>
-            <td>{{.Stack}}</td>
-            <td>{{.Profile}}</td>
-            <td>{{if .Valid}}valid{{else if .Expiration}}expired{{else}}missing{{end}}</td>
-            <td>{{.Expiration}}</td>
-            <td>
-              <form method="POST" action="/login" style="display:inline">
-                <input type="hidden" name="namespace" value="{{.Namespace}}">
-                <input type="hidden" name="stack" value="{{.Stack}}">
-                <input type="hidden" name="profile" value="{{.Profile}}">
-                <button type="submit">Login</button>
-              </form>
-            </td>
+            <th>Namespace</th>
+            <th>Stack</th>
+            <th>Profile</th>
+            <th>Status</th>
+            <th>Expiration</th>
+            <th>Action</th>
           </tr>
-        {{end}}
-      {{else}}
-        <tr><td colspan="6">No stack configuration found. Configure the operator stack values so the stack ConfigMap includes tunnels.</td></tr>
-      {{end}}
-    </tbody>
-  </table>
+        </thead>
+        <tbody>
+          {{if .Targets}}
+            {{range .Targets}}
+              <tr>
+                <td>{{.Namespace}}</td>
+                <td>{{.Stack}}</td>
+                <td>{{.Profile}}</td>
+                <td>
+                  {{if .Valid}}
+                    <span class="badge badge-valid">valid</span>
+                  {{else if .Expiration}}
+                    <span class="badge badge-expired">expired</span>
+                  {{else}}
+                    <span class="badge badge-missing">missing</span>
+                  {{end}}
+                </td>
+                <td>{{.Expiration}}</td>
+                <td>
+                  <form method="POST" action="/login" style="display:inline">
+                    <input type="hidden" name="profile" value="{{.Profile}}">
+                    <button class="btn" type="submit">Start Login</button>
+                  </form>
+                </td>
+              </tr>
+            {{end}}
+          {{else}}
+            <tr><td colspan="6">No stack configuration found. Configure stack values so the stack ConfigMap includes tunnels.</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </section>
 
-  <h2>Global Restart</h2>
-  <p>Restart all tunnels in a stack without re-login.</p>
-  <form method="POST" action="/restart">
-    <label>Namespace <input name="namespace" required></label>
-    <label>Stack <input name="stack" required></label>
-    <button type="submit">Restart Stack</button>
-  </form>
+    <section class="footer">
+      <div>
+        <h2>Global Restart</h2>
+        <p>Restart all tunnels in the configured stack without re-login.</p>
+      </div>
+      <form method="POST" action="/restart" style="margin:0">
+        <button class="btn" type="submit">Restart Stack</button>
+      </form>
+    </section>
 
-  <p>API: <code>POST /login</code>, <code>POST /restart</code>, <code>GET /status.json</code>, <code>GET /healthz</code>.</p>
+    <p class="meta">API: <code>POST /login</code>, <code>POST /restart</code>, <code>GET /status.json</code>, <code>GET /healthz</code>.</p>
+  </main>
+  <script>
+    (function() {
+      var key = "authTheme";
+      var root = document.documentElement;
+      var btn = document.getElementById("theme-toggle");
+      if (!btn) return;
+
+      function apply(theme) {
+        root.setAttribute("data-theme", theme);
+        btn.textContent = theme === "dark" ? "Light" : "Dark";
+      }
+
+      var current = root.getAttribute("data-theme") || "dark";
+      apply(current);
+
+      btn.addEventListener("click", function() {
+        current = current === "dark" ? "light" : "dark";
+        apply(current);
+        try {
+          localStorage.setItem(key, current);
+        } catch (e) {}
+      });
+    })();
+  </script>
 </body>
 </html>

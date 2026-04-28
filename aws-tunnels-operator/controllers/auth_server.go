@@ -22,7 +22,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var authLog = log.Log.WithName("auth-server")
 
 type AuthServer struct {
 	Client          client.Client
@@ -30,7 +33,7 @@ type AuthServer struct {
 	StackNamespace  string
 	StackConfigName string
 
-	ssoSessions sync.Map
+	ssoSessions sync.Map // sid -> *ssoSession
 	tmplOnce    sync.Once
 	tmplErr     error
 	templates   map[string]*template.Template
@@ -102,7 +105,7 @@ type authRootPageData struct {
 }
 
 type authSSOWaitPageData struct {
-	Namespace string
+	SessionID string
 	Stack     string
 	Profile   string
 	URL       string
@@ -145,12 +148,14 @@ func (s *AuthServer) handleRoot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.loadTemplates(); err != nil {
+		authLog.Error(err, "failed to load templates")
 		http.Error(w, fmt.Sprintf("failed to load templates: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	targets, err := s.discoverTargets(r.Context())
 	if err != nil {
+		authLog.Error(err, "failed to discover login targets")
 		http.Error(w, fmt.Sprintf("failed to load targets: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -163,6 +168,7 @@ func (s *AuthServer) handleRoot(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.templates["auth-root"].Execute(w, data); err != nil {
+		authLog.Error(err, "failed to render auth-root template")
 		http.Error(w, fmt.Sprintf("failed to render page: %v", err), http.StatusInternalServerError)
 	}
 }
@@ -174,6 +180,7 @@ func (s *AuthServer) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	targets, err := s.discoverTargets(r.Context())
 	if err != nil {
+		authLog.Error(err, "failed to discover targets in status")
 		http.Error(w, fmt.Sprintf("failed to load status: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -192,48 +199,55 @@ func (s *AuthServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 		s.redirectOrError(w, r, formMode, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if req.Namespace == "" {
-		req.Namespace = s.StackNamespace
-	}
-
-	if req.Namespace == "" || req.Stack == "" || req.Profile == "" {
-		s.redirectOrError(w, r, formMode, "namespace, stack and profile are required", http.StatusBadRequest)
+	if req.Profile == "" {
+		s.redirectOrError(w, r, formMode, "profile is required", http.StatusBadRequest)
 		return
 	}
 
+	cfg, err := LoadStackConfig(r.Context(), s.Client, s.StackNamespace, s.StackConfigName)
+	if err != nil {
+		authLog.Error(err, "failed to load stack config for login", "profile", req.Profile)
+		s.redirectOrError(w, r, formMode, fmt.Sprintf("failed to load stack config: %v", err), http.StatusInternalServerError)
+		return
+	}
+	if req.Namespace == "" {
+		req.Namespace = cfg.Namespace
+	}
+	if req.Stack == "" {
+		req.Stack = cfg.Name
+	}
+
+	authLog.Info("login requested", "profile", req.Profile, "namespace", req.Namespace, "stack", req.Stack, "formMode", formMode)
+
 	if formMode {
-		key := req.Namespace + "/" + req.Stack + "/" + req.Profile
-		if existing, ok := s.ssoSessions.Load(key); ok {
-			sess := existing.(*ssoSession)
-			_, _, isDone, _, _, _ := sess.snapshot()
-			if !isDone {
-				http.Redirect(w, r, "/login-wait?namespace="+url.QueryEscape(req.Namespace)+"&stack="+url.QueryEscape(req.Stack)+"&profile="+url.QueryEscape(req.Profile), http.StatusSeeOther)
-				return
-			}
-			s.ssoSessions.Delete(key)
-		}
+		sid := fmt.Sprintf("%d", time.Now().UTC().UnixNano())
 		sess := &ssoSession{Profile: req.Profile, Namespace: req.Namespace, Stack: req.Stack, done: make(chan struct{})}
-		s.ssoSessions.Store(key, sess)
+		s.ssoSessions.Store(sid, sess)
+		authLog.Info("started async sso session", "sid", sid, "profile", req.Profile)
 		go s.runSSOLogin(req, sess)
-		http.Redirect(w, r, "/login-wait?namespace="+url.QueryEscape(req.Namespace)+"&stack="+url.QueryEscape(req.Stack)+"&profile="+url.QueryEscape(req.Profile), http.StatusSeeOther)
+		http.Redirect(w, r, "/login-wait?sid="+url.QueryEscape(sid), http.StatusSeeOther)
 		return
 	}
 
 	creds, err := s.loginAndExport(req.Profile)
 	if err != nil {
+		authLog.Error(err, "sync login failed", "profile", req.Profile)
 		s.redirectOrError(w, r, formMode, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if err := s.storeCredentials(context.Background(), req, creds); err != nil {
+		authLog.Error(err, "failed storing credentials", "profile", req.Profile)
 		s.redirectOrError(w, r, formMode, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	restarted, err := s.restartStackTunnels(context.Background(), req.Namespace, req.Stack, req.Profile)
 	if err != nil {
+		authLog.Error(err, "failed restart after sync login", "profile", req.Profile)
 		s.redirectOrError(w, r, formMode, fmt.Sprintf("credentials updated, but failed to restart tunnels: %v", err), http.StatusInternalServerError)
 		return
 	}
 	message := fmt.Sprintf("credentials updated; restarted %d matching tunnel deployment(s)", restarted)
+	authLog.Info("sync login complete", "profile", req.Profile, "restarted", restarted)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"ok":         true,
@@ -255,16 +269,24 @@ func (s *AuthServer) handleLoginWait(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	namespace := r.URL.Query().Get("namespace")
-	stack := r.URL.Query().Get("stack")
-	profile := r.URL.Query().Get("profile")
-	ssoURL := ""
-	code := ""
-	if val, ok := s.ssoSessions.Load(namespace + "/" + stack + "/" + profile); ok {
-		ssoURL, code, _, _, _, _ = val.(*ssoSession).snapshot()
+	sid := strings.TrimSpace(r.URL.Query().Get("sid"))
+	if sid == "" {
+		http.Error(w, "missing sid", http.StatusBadRequest)
+		return
 	}
 
-	data := authSSOWaitPageData{Namespace: namespace, Stack: stack, Profile: profile, URL: ssoURL, Code: code}
+	ssoURL := ""
+	code := ""
+	profile := ""
+	stack := ""
+	if val, ok := s.ssoSessions.Load(sid); ok {
+		sess := val.(*ssoSession)
+		ssoURL, code, _, _, _, _ = sess.snapshot()
+		profile = sess.Profile
+		stack = sess.Stack
+	}
+
+	data := authSSOWaitPageData{SessionID: sid, Stack: stack, Profile: profile, URL: ssoURL, Code: code}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.templates["auth-sso-wait"].Execute(w, data); err != nil {
 		http.Error(w, fmt.Sprintf("failed to render page: %v", err), http.StatusInternalServerError)
@@ -276,26 +298,30 @@ func (s *AuthServer) handleLoginPoll(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	namespace := r.URL.Query().Get("namespace")
-	stack := r.URL.Query().Get("stack")
-	profile := r.URL.Query().Get("profile")
-	key := namespace + "/" + stack + "/" + profile
 
-	val, ok := s.ssoSessions.Load(key)
+	sid := strings.TrimSpace(r.URL.Query().Get("sid"))
+	w.Header().Set("Content-Type", "application/json")
+	if sid == "" {
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": "error", "message": "missing sid"})
+		return
+	}
+
+	val, ok := s.ssoSessions.Load(sid)
 	if !ok {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"status": "unknown"})
+		authLog.Info("poll for unknown sid", "sid", sid)
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": "error", "message": "login session not found or expired"})
 		return
 	}
 
 	ssoURL, code, isDone, loginErr, restarted, expiration := val.(*ssoSession).snapshot()
-	w.Header().Set("Content-Type", "application/json")
 	if isDone {
-		s.ssoSessions.Delete(key)
+		s.ssoSessions.Delete(sid)
 		if loginErr != nil {
+			authLog.Error(loginErr, "async login failed", "sid", sid)
 			_ = json.NewEncoder(w).Encode(map[string]any{"status": "error", "message": loginErr.Error()})
 			return
 		}
+		authLog.Info("async login complete", "sid", sid, "restarted", restarted)
 		msg := fmt.Sprintf("credentials updated (expires %s); restarted %d tunnel(s)", expiration, restarted)
 		_ = json.NewEncoder(w).Encode(map[string]any{"status": "done", "redirect": "/?msg=" + url.QueryEscape(msg)})
 		return
@@ -305,6 +331,7 @@ func (s *AuthServer) handleLoginPoll(w http.ResponseWriter, r *http.Request) {
 
 func (s *AuthServer) runSSOLogin(req loginRequest, sess *ssoSession) {
 	defer close(sess.done)
+	authLog.Info("running async aws sso login", "profile", req.Profile, "stack", req.Stack)
 
 	cmd := exec.Command("aws", "sso", "login", "--profile", req.Profile, "--no-browser")
 	pr, pw := io.Pipe()
@@ -316,6 +343,7 @@ func (s *AuthServer) runSSOLogin(req loginRequest, sess *ssoSession) {
 		sess.mu.Lock()
 		sess.loginErr = fmt.Errorf("failed to start aws sso login: %w", err)
 		sess.mu.Unlock()
+		authLog.Error(err, "failed to start aws sso login", "profile", req.Profile)
 		return
 	}
 
@@ -329,7 +357,12 @@ func (s *AuthServer) runSSOLogin(req loginRequest, sess *ssoSession) {
 		for scanner.Scan() {
 			line := scanner.Text()
 			all.WriteString(line + "\n")
-			sess.setURLCode(urlRe.FindString(line), codeRe.FindString(line))
+			urlMatch := urlRe.FindString(line)
+			codeMatch := codeRe.FindString(line)
+			sess.setURLCode(urlMatch, codeMatch)
+			if urlMatch != "" {
+				authLog.Info("discovered sso URL", "profile", req.Profile)
+			}
 		}
 		outputDone <- all.String()
 	}()
@@ -341,6 +374,7 @@ func (s *AuthServer) runSSOLogin(req loginRequest, sess *ssoSession) {
 		sess.mu.Lock()
 		sess.loginErr = fmt.Errorf("aws sso login failed: %w\n%s", cmdErr, rawOutput)
 		sess.mu.Unlock()
+		authLog.Error(cmdErr, "aws sso login command failed", "profile", req.Profile)
 		return
 	}
 
@@ -349,12 +383,14 @@ func (s *AuthServer) runSSOLogin(req loginRequest, sess *ssoSession) {
 		sess.mu.Lock()
 		sess.loginErr = err
 		sess.mu.Unlock()
+		authLog.Error(err, "failed to export credentials", "profile", req.Profile)
 		return
 	}
 	if err := s.storeCredentials(context.Background(), req, creds); err != nil {
 		sess.mu.Lock()
 		sess.loginErr = err
 		sess.mu.Unlock()
+		authLog.Error(err, "failed to store credentials", "profile", req.Profile)
 		return
 	}
 
@@ -363,6 +399,7 @@ func (s *AuthServer) runSSOLogin(req loginRequest, sess *ssoSession) {
 		sess.mu.Lock()
 		sess.loginErr = fmt.Errorf("credentials stored, but failed to restart tunnels: %w", err)
 		sess.mu.Unlock()
+		authLog.Error(err, "failed restarting tunnels after async login", "profile", req.Profile)
 		return
 	}
 
@@ -370,6 +407,7 @@ func (s *AuthServer) runSSOLogin(req loginRequest, sess *ssoSession) {
 	sess.restarted = restarted
 	sess.expiration = creds.Expiration
 	sess.mu.Unlock()
+	authLog.Info("async login flow completed", "profile", req.Profile, "stack", req.Stack, "restarted", restarted)
 }
 
 func (s *AuthServer) loginAndExport(profile string) (exportCredentials, error) {
@@ -445,13 +483,20 @@ func (s *AuthServer) handleRestart(w http.ResponseWriter, r *http.Request) {
 	if namespace == "" {
 		namespace = s.StackNamespace
 	}
+	if stack == "" {
+		if cfg, err := LoadStackConfig(r.Context(), s.Client, namespace, s.StackConfigName); err == nil {
+			stack = cfg.Name
+		}
+	}
 	if namespace == "" || stack == "" {
 		s.redirectOrError(w, r, formMode, "namespace and stack are required", http.StatusBadRequest)
 		return
 	}
 
+	authLog.Info("restart requested", "namespace", namespace, "stack", stack, "formMode", formMode)
 	restarted, err := s.restartStackTunnels(r.Context(), namespace, stack, "")
 	if err != nil {
+		authLog.Error(err, "restart request failed", "namespace", namespace, "stack", stack)
 		s.redirectOrError(w, r, formMode, fmt.Sprintf("failed to restart tunnels: %v", err), http.StatusInternalServerError)
 		return
 	}
