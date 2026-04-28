@@ -1,0 +1,78 @@
+fullnameOverride: matter-server
+
+statefulset:
+  image:
+    repository: ghcr.io/matter-js/matterjs-server
+    tag: stable
+  ports:
+    ws: 5580
+
+config:
+  TZ: Europe/Brussels
+  STORAGE_PATH: /data
+  # net1 is the Multus-attached MACVLAN interface on VLAN 40 (IoT).
+  # Matter uses this primary interface for mDNS multicast so IoT devices are
+  # discovered directly on their VLAN without any proxy or forwarder.
+  PRIMARY_INTERFACE: net1
+
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+
+# Multus attaches a dedicated MACVLAN interface for the IoT VLAN.
+#   net1 = VLAN 40 (IoT / Matter device discovery)
+# Home Assistant still reaches the server over the normal cluster interface
+# (`eth0`) via the Kubernetes service.
+multusNetworks:
+  - name: matter-server-vlan40
+    interface: net1
+    mac: 02:40:67:9d:64:63
+    dhcpHostname: _stub_matter-server-iot
+    parentInterface: vlan40
+    nodeLabelKey: vlan40-trunk
+    type: macvlan
+    mode: bridge
+    chainedPlugins:
+      - type: sbr
+    ipam:
+      type: dhcp
+
+storage:
+  - mountPath: /data
+    type: longhorn
+    size: 1Gi
+    volumeName: matter-server
+    nameSuffix: data
+    protect: true
+
+probes:
+  liveness:
+    httpGet:
+      path: /health
+      port: ws
+    initialDelaySeconds: 30
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 5
+  readiness:
+    httpGet:
+      path: /health
+      port: ws
+    initialDelaySeconds: 15
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+labels:
+  app.kubernetes.io/component: matter-server
