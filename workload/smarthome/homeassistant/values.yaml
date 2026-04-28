@@ -90,6 +90,22 @@ homeassistant:
         - NET_RAW
         - NET_ADMIN
 
+  initContainers:
+    - name: setup-thread-route
+      image: busybox:1.35
+      command:
+        - sh
+        - -c
+        - |
+          sleep 5
+          ip -6 route replace fd77:3621:418:1::/64 via 2a02:a03f:f412:d601:40:67ff:fe9d:6464 dev net2 || true
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 0
+        capabilities:
+          add:
+            - NET_ADMIN
+
   ingress_internal:
     host: homeassistant.<secret:kv/data/domains~local>
     port: web
@@ -108,24 +124,7 @@ homeassistant:
       storageClass: longhorn-shared
       protect: true
 
-  # Home Assistant needs normal pod networking for Multus secondary interfaces.
-  # net1 is attached on VLAN40 to allow IoT mDNS/Thread/Matter discovery on L2.
   multusNetworks:
-    - name: homeassistant-vlan40
-      interface: net1
-      mac: 02:40:67:9d:64:62
-      dhcpHostname: _stub_homeassistant-iot
-      parentInterface: vlan40
-      nodeLabelKey: vlan40-trunk
-      type: macvlan
-      mode: bridge
-      chainedPlugins:
-        - type: sbr
-      ipam:
-        type: dhcp
-        routes:
-          - dst: "::/0"
-            gw: ""
     - name: homeassistant-vlan5
       interface: net2
       mac: 02:40:67:9d:64:65

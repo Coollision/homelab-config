@@ -1,0 +1,85 @@
+fullnameOverride: mdns-reflector
+
+deployment:
+  image:
+    repository: flungo/avahi
+    tag: latest
+  command:
+    - /bin/sh
+    - -c
+    - |
+      cat > /etc/avahi/avahi-daemon.conf <<'EOF'
+      [server]
+      use-ipv4=yes
+      use-ipv6=yes
+      allow-interfaces=net1,net2
+      deny-interfaces=lo,eth0
+      ratelimit-interval-usec=1000000
+      ratelimit-burst=1000
+      enable-dbus=no
+      [wide-area]
+      enable-wide-area=no
+      [publish]
+      publish-hinfo=no
+      publish-workstation=no
+      publish-domain=no
+      publish-aaaa-on-ipv4=no
+      publish-a-on-ipv6=no
+      [reflector]
+      enable-reflector=yes
+      reflect-ipv=yes
+      EOF
+      exec avahi-daemon --no-drop-root --no-rlimits --no-chroot
+
+config:
+  TZ: Europe/Brussels
+
+securityContext:
+  capabilities:
+    add:
+      - NET_BIND_SERVICE
+      - NET_RAW
+      - NET_ADMIN
+
+disableService: true
+
+# Multus attaches both VLANs in MACVLAN bridge mode. Avahi binds to net1 and
+# net2 (per allow-interfaces in the config above) and reflects mDNS between
+# them so the Matter commissionable services advertised by the Thread Border
+# Router on VLAN 40 are visible to phones/commissioners on VLAN 5.
+multusNetworks:
+  - name: mdns-reflector-vlan40
+    interface: net1
+    mac: 02:40:67:9d:64:61
+    dhcpHostname: _stub_mdns-reflector-iot
+    parentInterface: vlan40
+    nodeLabelKey: vlan40-trunk
+    type: macvlan
+    mode: bridge
+    chainedPlugins:
+      - type: sbr
+    ipam:
+      type: dhcp
+  - name: mdns-reflector-vlan5
+    interface: net2
+    mac: 02:05:67:9d:64:61
+    dhcpHostname: _stub_mdns-reflector-lan
+    parentInterface: vlan5
+    nodeLabelKey: vlan5-trunk
+    type: macvlan
+    mode: bridge
+    chainedPlugins:
+      - type: sbr
+    ipam:
+      type: dhcp
+
+resources:
+  requests:
+    memory: "32Mi"
+    cpu: "20m"
+  limits:
+    memory: "128Mi"
+    cpu: "200m"
+
+labels:
+  app.kubernetes.io/component: mdns-reflector

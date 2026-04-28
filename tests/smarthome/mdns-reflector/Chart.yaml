@@ -1,0 +1,11 @@
+apiVersion: v2
+name: mdns-reflector
+description: Avahi mDNS reflector bridging VLAN 40 (IoT) and VLAN 5 (Intern) so Matter/Thread device announcements are visible to phones on the LAN.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies:
+  - name: shared-lib
+    version: 0.1.0
+    repository: file://../../../lib/shared-lib
