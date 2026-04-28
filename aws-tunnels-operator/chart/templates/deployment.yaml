@@ -39,12 +39,22 @@ spec:
               containerPort: {{ .Values.service.authPort }}
           readinessProbe:
             httpGet:
-              path: /readyz
+              path: {{ .Values.probes.readiness.path | quote }}
               port: probes
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+            successThreshold: {{ .Values.probes.readiness.successThreshold }}
           livenessProbe:
             httpGet:
-              path: /healthz
+              path: {{ .Values.probes.liveness.path | quote }}
               port: probes
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+            successThreshold: {{ .Values.probes.liveness.successThreshold }}
           resources:
 {{ toYaml .Values.resources | indent 12 }}
 {{- with .Values.affinity }}
