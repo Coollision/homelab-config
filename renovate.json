@@ -7,6 +7,10 @@
   "schedule": [
     "after 7pm and before 10pm"
   ],
+  "baseBranchPatterns": [
+    "$default",
+    "orphan/aws-tunnels-operator-standalone"
+  ],
   "kubernetes": {
     "managerFilePatterns": [
       "/\\.yaml$/"
@@ -18,6 +22,9 @@
   "packageRules": [
     {
       "description": "System & ArgoCD - automerge patch and minor",
+      "matchBaseBranches": [
+        "master"
+      ],
       "matchFileNames": [
         "system/**",
         "argocd/**"
@@ -35,6 +42,9 @@
     },
     {
       "description": "Workload - automerge patch only",
+      "matchBaseBranches": [
+        "master"
+      ],
       "matchFileNames": [
         "workload/**"
       ],
@@ -47,6 +57,13 @@
       "automergeSchedule": [
         "after 1am and before 4am"
       ]
+    },
+    {
+      "description": "Operator branch - separate behavior",
+      "matchBaseBranches": [
+        "orphan/aws-tunnels-operator-standalone"
+      ],
+      "automerge": false
     }
   ]
 }
