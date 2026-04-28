@@ -75,6 +75,8 @@ stack:
     enabled: true
     host: ""
     port: 8090
+  shared:
+    awsConfigMapName: ""
   nodeAffinity:
     excludedType: ""
   tunnelDefaults:

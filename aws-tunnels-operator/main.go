@@ -13,6 +13,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"homelab/aws-tunnels-operator/controllers"
 )
@@ -41,6 +42,8 @@ func (h *httpRunnable) Start(ctx context.Context) error {
 func main() {
 	var metricsAddr string
 	var probeAddr string
+
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to")
