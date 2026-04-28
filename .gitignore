@@ -18,3 +18,4 @@ ZZ_Travel setup.md
 tmp/*
 .tmp
 .venv
+.claude/settings.local.json
