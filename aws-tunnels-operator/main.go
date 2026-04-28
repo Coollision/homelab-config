@@ -69,11 +69,13 @@ func main() {
 	if stackConfigName == "" {
 		stackConfigName = "aws-tunnels-operator-stack"
 	}
+	argoAppName := os.Getenv("ARGOCD_APP_NAME")
 
 	if err := mgr.Add(&controllers.SingleStackRunner{
 		Client:        mgr.GetClient(),
 		Namespace:     stackNamespace,
 		ConfigMapName: stackConfigName,
+		ArgoAppName:   argoAppName,
 	}); err != nil {
 		os.Exit(1)
 	}
