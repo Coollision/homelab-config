@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.stackConfig.name }}
+  namespace: {{ include "aws-tunnels-operator.namespace" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "aws-tunnels-operator.name" . }}
+data:
+  stackName: {{ .Values.stack.name | quote }}
+  spec.json: |
+    {{ dict "aws" .Values.stack.aws "auth" .Values.stack.auth "nodeAffinity" .Values.stack.nodeAffinity "tunnelDefaults" .Values.stack.tunnelDefaults "tunnels" .Values.stack.tunnels | toJson }}
