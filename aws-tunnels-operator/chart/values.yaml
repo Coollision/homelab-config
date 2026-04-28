@@ -4,7 +4,7 @@ namespaceOverride: ""
 
 image:
   repository: ghcr.io/coollision/aws-tunnels-operator
-  tag: v0.1.2
+  tag: v0.2.0
   pullPolicy: IfNotPresent
 
 replicaCount: 1
