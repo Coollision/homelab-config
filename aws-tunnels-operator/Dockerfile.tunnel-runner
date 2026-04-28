@@ -1,0 +1,31 @@
+# syntax=docker/dockerfile:1
+#
+# aws-tunnel-runner image
+#
+# Extends amazon/aws-cli with:
+#   - session-manager-plugin pre-installed for both amd64 and arm64
+#   - the tunnel-runner Go binary as the sole entrypoint
+#
+# The base image pin provides reproducibility; the 'latest' SSM plugin URL is
+# intentional so a fresh build always picks up the latest plugin release.
+
+FROM amazon/aws-cli:2.27.9
+
+ARG TARGETARCH
+
+# Install the session-manager-plugin. Amazon Linux ships with rpm and curl.
+RUN set -eux; \
+    case "$TARGETARCH" in \
+      arm64) arch_path="linux_arm64" ;; \
+      *)     arch_path="linux_64bit" ;; \
+    esac; \
+    curl -fsSL \
+      "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/${arch_path}/session-manager-plugin.rpm" \
+      -o /tmp/ssm-plugin.rpm; \
+    rpm -i /tmp/ssm-plugin.rpm; \
+    rm -f /tmp/ssm-plugin.rpm
+
+COPY dist/tunnel-runner-linux-${TARGETARCH} /usr/local/bin/tunnel-runner
+RUN chmod +x /usr/local/bin/tunnel-runner
+
+ENTRYPOINT ["/usr/local/bin/tunnel-runner"]

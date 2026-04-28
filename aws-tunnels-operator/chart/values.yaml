@@ -80,7 +80,25 @@ stack:
   nodeAffinity:
     excludedType: ""
   tunnelDefaults:
-    image: amazon/aws-cli:2.27.9
+    image: ghcr.io/coollision/aws-tunnel-runner:v0.3.0
     proxyImage: alpine/socat:1.8.0.3
     servicePort: 8080
+    livenessProbe:
+      initialDelaySeconds: 30
+      periodSeconds: 30
+      failureThreshold: 3
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+    proxyResources:
+      requests:
+        cpu: 10m
+        memory: 16Mi
+      limits:
+        cpu: 50m
+        memory: 32Mi
   tunnels: []

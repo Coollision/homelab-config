@@ -170,6 +170,7 @@ jobs:
           sed -i -E "s/^appVersion: .*/appVersion: ${next_version}/" "$chart_file"
           sed -i -E "s/^  tag: .*/  tag: ${image_tag}/" "$values_file"
           sed -i -E "s|^(#\s*      image: ghcr\.io/coollision/aws-tunnels-operator:).*|\1${image_tag}|" "$values_file"
+          sed -i -E "s|(image: ghcr\.io/coollision/aws-tunnel-runner:)v[0-9]+\.[0-9]+\.[0-9]+|\1${image_tag}|" "$values_file"
 
           echo "version=${next_version}" >> "$GITHUB_OUTPUT"
           echo "image_tag=${image_tag}" >> "$GITHUB_OUTPUT"
@@ -223,6 +224,40 @@ jobs:
         with:
           name: manager-linux-${{ matrix.arch }}
           path: aws-tunnels-operator/dist/manager-linux-${{ matrix.arch }}
+          if-no-files-found: error
+
+  build-tunnel-runner-binaries:
+    name: Build Tunnel Runner Binaries
+    runs-on: ubuntu-latest
+    needs: [test, versioning]
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    defaults:
+      run:
+        working-directory: aws-tunnels-operator
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: aws-tunnels-operator/go.mod
+          cache-dependency-path: aws-tunnels-operator/go.sum
+
+      - name: Build linux/${{ matrix.arch }} tunnel-runner binary
+        run: |
+          mkdir -p dist
+          CGO_ENABLED=0 GOOS=linux GOARCH=${{ matrix.arch }} go build -trimpath -ldflags="-s -w" -o dist/tunnel-runner-linux-${{ matrix.arch }} ./cmd/tunnel-runner/
+
+      - name: Upload tunnel-runner artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tunnel-runner-linux-${{ matrix.arch }}
+          path: aws-tunnels-operator/dist/tunnel-runner-linux-${{ matrix.arch }}
           if-no-files-found: error
 
   build:
@@ -286,10 +321,71 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  build-tunnel-runner:
+    name: Build & Push Tunnel Runner
+    runs-on: ubuntu-latest
+    needs: [test, versioning, build-tunnel-runner-binaries]
+    env:
+      TUNNEL_RUNNER_IMAGE: ghcr.io/coollision/aws-tunnel-runner
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Download amd64 tunnel-runner binary
+        uses: actions/download-artifact@v4
+        with:
+          name: tunnel-runner-linux-amd64
+          path: aws-tunnels-operator/dist
+
+      - name: Download arm64 tunnel-runner binary
+        uses: actions/download-artifact@v4
+        with:
+          name: tunnel-runner-linux-arm64
+          path: aws-tunnels-operator/dist
+
+      - name: Ensure binaries are executable
+        run: chmod +x aws-tunnels-operator/dist/tunnel-runner-linux-amd64 aws-tunnels-operator/dist/tunnel-runner-linux-arm64
+
+      - name: Resolve build revision
+        id: gitmeta
+        shell: bash
+        run: |
+          echo "sha_full=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "sha_short=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: aws-tunnels-operator
+          file: aws-tunnels-operator/Dockerfile.tunnel-runner
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.TUNNEL_RUNNER_IMAGE }}:${{ needs.versioning.outputs.image-tag }}
+            ${{ env.TUNNEL_RUNNER_IMAGE }}:sha-${{ steps.gitmeta.outputs.sha_short }}
+          labels: |
+            org.opencontainers.image.version=${{ needs.versioning.outputs.version }}
+            org.opencontainers.image.revision=${{ steps.gitmeta.outputs.sha_full }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   publish-chart:
     name: Publish Helm Chart (OCI)
     runs-on: ubuntu-latest
-    needs: [versioning, build]
+    needs: [versioning, build, build-tunnel-runner]
 
     steps:
       - uses: actions/checkout@v4
@@ -313,7 +409,7 @@ jobs:
   tag-release:
     name: Create Release Tag
     runs-on: ubuntu-latest
-    needs: [versioning, build, publish-chart]
+    needs: [versioning, build, build-tunnel-runner, publish-chart]
     if: github.ref_type == 'branch'
     steps:
       - uses: actions/checkout@v4

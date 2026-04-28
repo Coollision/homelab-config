@@ -19,3 +19,5 @@ tmp/*
 .tmp
 .venv
 */.gotemp/*
+*.exe
+*.tmp

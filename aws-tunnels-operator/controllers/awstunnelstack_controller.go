@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"strings"
 	"time"
@@ -24,9 +25,11 @@ type SingleStackRunner struct {
 }
 
 const (
-	awsConfigVolumeName = "aws-config"
-	awsConfigMountPath  = "/aws-config"
-	awsConfigFilePath   = awsConfigMountPath + "/config"
+	awsConfigVolumeName  = "aws-config"
+	awsConfigMountPath   = "/aws-config"
+	awsConfigFilePath    = awsConfigMountPath + "/config"
+	tunnelStateVolumeName = "tunnel-state"
+	tunnelStateMountPath  = "/tmp/tunnel-state"
 )
 
 func ProfileKey(profile string) string {
@@ -89,7 +92,7 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 	}
 	stackName := cfg.Name
 	stack := cfg.Spec
-	awsConfigMapName, _, _, err := SyncAWSConfigMap(ctx, r.Client, cfg)
+	awsConfigMapName, awsConfigText, _, err := SyncAWSConfigMap(ctx, r.Client, cfg)
 	if err != nil {
 		return err
 	}
@@ -170,6 +173,10 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 			dep.Spec.Selector = &metav1.LabelSelector{MatchLabels: map[string]string{"app": tunnelName}}
 			dep.Spec.Replicas = desiredReplicas(validCreds)
 			dep.Spec.Template.ObjectMeta.Labels = map[string]string{"app": tunnelName, "proxies.homelab.io/stack": stackName}
+			if dep.Spec.Template.ObjectMeta.Annotations == nil {
+				dep.Spec.Template.ObjectMeta.Annotations = map[string]string{}
+			}
+			dep.Spec.Template.ObjectMeta.Annotations["proxies.homelab.io/awsConfigHash"] = fmt.Sprintf("%x", sha256.Sum256([]byte(awsConfigText)))[:12]
 
 			resources := tunnel.Resources
 			if resources.Requests == nil && resources.Limits == nil {
@@ -178,6 +185,19 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 			proxyResources := tunnel.ProxyResources
 			if proxyResources.Requests == nil && proxyResources.Limits == nil {
 				proxyResources = stack.TunnelDefaults.ProxyResources
+			}
+
+			livenessInitialDelay := stack.TunnelDefaults.LivenessProbe.InitialDelaySeconds
+			if livenessInitialDelay == 0 {
+				livenessInitialDelay = 30
+			}
+			livenessPeriod := stack.TunnelDefaults.LivenessProbe.PeriodSeconds
+			if livenessPeriod == 0 {
+				livenessPeriod = 30
+			}
+			livenessFailureThreshold := stack.TunnelDefaults.LivenessProbe.FailureThreshold
+			if livenessFailureThreshold == 0 {
+				livenessFailureThreshold = 3
 			}
 
 			if dep.Spec.Template.Spec.Containers == nil || len(dep.Spec.Template.Spec.Containers) < 2 {
@@ -198,13 +218,23 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 					{Name: "REMOTE_PORT", Value: tunnel.RemotePort},
 					{Name: "LOCAL_PORT", Value: fmt.Sprintf("%d", tunnel.LocalPort)},
 					{Name: "RDS_INSTANCE_PREFIX", Value: tunnel.RDS.InstancePrefix},
-					{Name: "RDS_CLUSTER_PREFIX", Value: tunnel.RDS.ClusterPrefix},
+					{Name: "RDS_CLUSTER_PREFIX", Value: tunnel.RDS.ClusterPrefix},				{Name: "TUNNEL_NAME", Value: tunnelName},
+				{Name: "HOME", Value: "/root"},				},
+				EnvFrom: []corev1.EnvFromSource{{SecretRef: &corev1.SecretEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: profileSecretName}}}},
+				VolumeMounts: []corev1.VolumeMount{
+					{Name: awsConfigVolumeName, MountPath: awsConfigMountPath, ReadOnly: true},
+					{Name: tunnelStateVolumeName, MountPath: tunnelStateMountPath},
 				},
-				EnvFrom:      []corev1.EnvFromSource{{SecretRef: &corev1.SecretEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: profileSecretName}}}},
-				VolumeMounts: []corev1.VolumeMount{{Name: awsConfigVolumeName, MountPath: awsConfigMountPath, ReadOnly: true}},
-				Command:      []string{"/bin/sh", "-ec"},
-				Args:         []string{`if [ -n "$RDS_CLUSTER_PREFIX" ]; then REMOTE_HOST=$(aws rds describe-db-clusters --region "$AWS_REGION" --query "DBClusters[?Status=='available'].[DBClusterIdentifier,Endpoint]" --output text | awk -v p="$RDS_CLUSTER_PREFIX" '$1 ~ "^"p {print $2}' | tail -n1); fi; if [ -z "$REMOTE_HOST" ] && [ -n "$RDS_INSTANCE_PREFIX" ]; then REMOTE_HOST=$(aws rds describe-db-instances --region "$AWS_REGION" --query "DBInstances[?DBInstanceStatus=='available'].[DBInstanceIdentifier,Endpoint.Address]" --output text | awk -v p="$RDS_INSTANCE_PREFIX" '$1 ~ "^"p {print $2}' | tail -n1); fi; INSTANCE_ID=$(aws ec2 describe-instances --region "$AWS_REGION" --filters "Name=tag:Name,Values=${BASTION_NAME}" "Name=instance-state-name,Values=running" --query "Reservations[0].Instances[0].InstanceId" --output text); if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ]; then echo "no running bastion"; exit 1; fi; if [ -z "${REMOTE_HOST}" ] || [ "$REMOTE_HOST" = "None" ]; then echo "REMOTE_HOST is required or resolvable via RDS prefix"; exit 1; fi; exec aws ssm start-session --region "$AWS_REGION" --target "$INSTANCE_ID" --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters "{\"host\":[\"${REMOTE_HOST}\"],\"portNumber\":[\"${REMOTE_PORT}\"],\"localPortNumber\":[\"${LOCAL_PORT}\"]}"`},
-				Resources:    resources,
+				Command:   []string{"/usr/local/bin/tunnel-runner"},
+				Resources: resources,
+				LivenessProbe: &corev1.Probe{
+					ProbeHandler: corev1.ProbeHandler{
+						Exec: &corev1.ExecAction{Command: []string{"sh", "-c", "[ -s /tmp/tunnel-state/state ]"}},
+					},
+					InitialDelaySeconds: livenessInitialDelay,
+					PeriodSeconds:       livenessPeriod,
+					FailureThreshold:    livenessFailureThreshold,
+				},
 			}
 
 			dep.Spec.Template.Spec.Containers[1] = corev1.Container{
@@ -215,6 +245,10 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 				Ports:           []corev1.ContainerPort{{Name: "tunnel", ContainerPort: svcPort, Protocol: corev1.ProtocolTCP}},
 				Resources:       proxyResources,
 			}
+			dep.Spec.Template.Spec.Volumes = upsertVolume(dep.Spec.Template.Spec.Volumes, corev1.Volume{
+				Name: tunnelStateVolumeName,
+				VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+			})
 			dep.Spec.Template.Spec.Volumes = upsertVolume(dep.Spec.Template.Spec.Volumes, corev1.Volume{
 				Name: awsConfigVolumeName,
 				VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
