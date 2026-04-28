@@ -129,6 +129,27 @@
       transition:transform .15s ease, filter .15s ease;
     }
     .btn:hover{transform:translateY(-1px);filter:brightness(1.1)}
+    .btn-direct{
+      border-color:rgba(87,213,161,.5);
+      background:linear-gradient(160deg, rgba(87,213,161,.28), rgba(87,213,161,.16));
+      color:var(--ok);
+    }
+    .btn-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
+    .code-row{display:flex;align-items:center;gap:12px;margin:14px 0 4px}
+    .copy-btn{
+      background:var(--toggle-bg);
+      border:1px solid var(--line);
+      border-radius:8px;
+      color:var(--muted);
+      padding:6px 10px;
+      font-size:.82rem;
+      font-weight:700;
+      cursor:pointer;
+      transition:color .15s, border-color .15s;
+      white-space:nowrap;
+    }
+    .copy-btn:hover{color:var(--accent);border-color:var(--accent)}
+    .copy-btn.copied{color:var(--ok);border-color:var(--ok)}
     .status{
       margin:18px 0 0;
       color:var(--muted);
@@ -178,8 +199,16 @@
           Open this URL in a browser to approve the login request:<br><br>
           <a href="{{.URL}}" target="_blank" rel="noopener">{{.URL}}</a>
         </div>
-        {{if .Code}}<div class="code">{{.Code}}</div>{{end}}
-        <a class="btn" href="{{.URL}}" target="_blank" rel="noopener">Open Login Page</a>
+        {{if .Code}}
+        <div class="code-row">
+          <span class="code" id="sso-code">{{.Code}}</span>
+          <button class="copy-btn" type="button" onclick="copyCode()">Copy</button>
+        </div>
+        {{end}}
+        <div class="btn-row">
+          <a class="btn" href="{{.URL}}" target="_blank" rel="noopener">Open Login Page</a>
+          {{if .Code}}<a class="btn btn-direct" href="{{.URL}}?user_code={{.Code}}" target="_blank" rel="noopener">Direct Login (code pre-filled)</a>{{end}}
+        </div>
       {{else}}
         <p class="sub" style="margin-top:16px">Waiting for AWS to generate the login URL&hellip;</p>
       {{end}}
@@ -215,13 +244,39 @@
       var sid = "{{.SessionID}}";
       var pollURL = "/login-poll.json?sid=" + encodeURIComponent(sid);
 
+      function copyCode() {
+        var el = document.getElementById("sso-code");
+        if (!el) return;
+        var text = el.textContent.trim();
+        navigator.clipboard.writeText(text).then(function() {
+          var btn = document.querySelector(".copy-btn");
+          if (btn) {
+            btn.textContent = "Copied!";
+            btn.classList.add("copied");
+            setTimeout(function() { btn.textContent = "Copy"; btn.classList.remove("copied"); }, 2000);
+          }
+        }).catch(function() {
+          var ta = document.createElement("textarea");
+          ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+          document.body.appendChild(ta); ta.select(); document.execCommand("copy");
+          document.body.removeChild(ta);
+        });
+      }
+
       function renderSSO(data) {
         if (!data.url) return;
         var section = document.getElementById("sso-section");
         var html = '<div class="url-box">Open this URL in a browser to approve the login request:<br><br>' +
                    '<a href="' + data.url + '" target="_blank" rel="noopener">' + data.url + '</a></div>';
-        if (data.code) html += '<div class="code">' + data.code + '</div>';
-        html += '<a class="btn" href="' + data.url + '" target="_blank" rel="noopener">Open Login Page</a>';
+        if (data.code) {
+          html += '<div class="code-row"><span class="code" id="sso-code">' + data.code + '</span>' +
+                  '<button class="copy-btn" type="button" onclick="copyCode()">Copy</button></div>';
+        }
+        html += '<div class="btn-row"><a class="btn" href="' + data.url + '" target="_blank" rel="noopener">Open Login Page</a>';
+        if (data.code) {
+          html += '<a class="btn btn-direct" href="' + data.url + '?user_code=' + encodeURIComponent(data.code) + '" target="_blank" rel="noopener">Direct Login (code pre-filled)</a>';
+        }
+        html += '</div>';
         section.innerHTML = html;
       }
 
