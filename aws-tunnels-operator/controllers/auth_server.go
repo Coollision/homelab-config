@@ -99,8 +99,18 @@ func (s *ssoSession) snapshot() (ssoURL, code string, isDone bool, loginErr erro
 	return
 }
 
+type tunnelStatus struct {
+	Name     string
+	Profile  string
+	Bastion  string
+	Ready    int32
+	Desired  int32
+	Restarts int32
+}
+
 type authRootPageData struct {
 	Targets []loginTarget
+	Tunnels []tunnelStatus
 	Msg     string
 	Err     string
 }
@@ -161,8 +171,14 @@ func (s *AuthServer) handleRoot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tunnels, tunnelErr := s.discoverTunnelStatuses(r.Context())
+	if tunnelErr != nil {
+		authLog.Error(tunnelErr, "failed to discover tunnel statuses")
+	}
+
 	data := authRootPageData{
 		Targets: targets,
+		Tunnels: tunnels,
 		Msg:     r.URL.Query().Get("msg"),
 		Err:     r.URL.Query().Get("err"),
 	}
@@ -623,6 +639,69 @@ func (s *AuthServer) redirectOrError(w http.ResponseWriter, r *http.Request, for
 		return
 	}
 	http.Error(w, msg, code)
+}
+
+func (s *AuthServer) discoverTunnelStatuses(ctx context.Context) ([]tunnelStatus, error) {
+	cfg, err := LoadStackConfig(ctx, s.Client, s.StackNamespace, s.StackConfigName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Single list call for all tunnel deployments in this stack.
+	depList := &appsv1.DeploymentList{}
+	if err := s.Client.List(ctx, depList,
+		client.InNamespace(cfg.Namespace),
+		client.MatchingLabels{"app.kubernetes.io/part-of": cfg.Name},
+	); err != nil {
+		return nil, fmt.Errorf("listing tunnel deployments: %w", err)
+	}
+	depMap := make(map[string]*appsv1.Deployment, len(depList.Items))
+	for i := range depList.Items {
+		depMap[depList.Items[i].Name] = &depList.Items[i]
+	}
+
+	// Single list call for pods to derive max restart counts per deployment.
+	podList := &corev1.PodList{}
+	if err := s.Client.List(ctx, podList,
+		client.InNamespace(cfg.Namespace),
+		client.MatchingLabels{"proxies.homelab.io/stack": cfg.Name},
+	); err != nil {
+		return nil, fmt.Errorf("listing tunnel pods: %w", err)
+	}
+	maxRestarts := make(map[string]int32)
+	for _, pod := range podList.Items {
+		app := pod.Labels["app"]
+		for _, cs := range pod.Status.ContainerStatuses {
+			if cs.RestartCount > maxRestarts[app] {
+				maxRestarts[app] = cs.RestartCount
+			}
+		}
+	}
+
+	statuses := make([]tunnelStatus, 0, len(cfg.Spec.Tunnels))
+	for _, t := range cfg.Spec.Tunnels {
+		depName := fmt.Sprintf("%s-%s", cfg.Name, t.Name)
+		profile := t.AWSProfile
+		if profile == "" {
+			profile = cfg.Spec.AWS.Profile
+		}
+		ts := tunnelStatus{
+			Name:     t.Name,
+			Profile:  profile,
+			Bastion:  t.BastionName,
+			Restarts: maxRestarts[depName],
+		}
+		if dep, ok := depMap[depName]; ok {
+			desired := int32(1)
+			if dep.Spec.Replicas != nil {
+				desired = *dep.Spec.Replicas
+			}
+			ts.Desired = desired
+			ts.Ready = dep.Status.ReadyReplicas
+		}
+		statuses = append(statuses, ts)
+	}
+	return statuses, nil
 }
 
 func (s *AuthServer) discoverTargets(ctx context.Context) ([]loginTarget, error) {
