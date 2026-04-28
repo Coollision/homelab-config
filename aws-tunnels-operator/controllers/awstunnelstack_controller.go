@@ -22,6 +22,7 @@ type SingleStackRunner struct {
 	Namespace     string
 	ConfigMapName string
 	Interval      time.Duration
+	ArgoAppName   string
 }
 
 const (
@@ -107,6 +108,9 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 			}
 			secret.Labels["app.kubernetes.io/managed-by"] = "aws-tunnels-operator"
 			secret.Labels["proxies.homelab.io/stack"] = stackName
+			if r.ArgoAppName != "" {
+				secret.Labels["app.kubernetes.io/instance"] = r.ArgoAppName
+			}
 			secret.Type = corev1.SecretTypeOpaque
 			if secret.Data == nil {
 				secret.Data = map[string][]byte{}
@@ -168,6 +172,9 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 				"app.kubernetes.io/name":    tunnelName,
 				"app.kubernetes.io/part-of": stackName,
 				"proxies.homelab.io/stack":  stackName,
+			}
+			if r.ArgoAppName != "" {
+				labels["app.kubernetes.io/instance"] = r.ArgoAppName
 			}
 			dep.Labels = labels
 			dep.Spec.Selector = &metav1.LabelSelector{MatchLabels: map[string]string{"app": tunnelName}}
@@ -269,6 +276,9 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 		svc := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: tunnelName, Namespace: cfg.Namespace}}
 		_, err = controllerutil.CreateOrUpdate(ctx, r.Client, svc, func() error {
 			svc.Labels = map[string]string{"proxies.homelab.io/stack": stackName}
+			if r.ArgoAppName != "" {
+				svc.Labels["app.kubernetes.io/instance"] = r.ArgoAppName
+			}
 			svc.Spec.Selector = map[string]string{"app": tunnelName}
 			svc.Spec.Ports = []corev1.ServicePort{{Name: "tunnel", Port: svcPort, TargetPort: intstr.FromInt32(svcPort)}}
 			return nil
@@ -288,6 +298,9 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 			ing.SetNamespace(cfg.Namespace)
 			ing.SetName(tunnelName)
 			_, _ = controllerutil.CreateOrUpdate(ctx, r.Client, ing, func() error {
+				if r.ArgoAppName != "" {
+					ing.SetLabels(map[string]string{"app.kubernetes.io/instance": r.ArgoAppName})
+				}
 				ing.Object["spec"] = map[string]any{
 					"entryPoints": []any{"websecure"},
 					"routes":      []any{map[string]any{"match": fmt.Sprintf("HostSNI(`%s`)", tunnel.Host), "services": []any{map[string]any{"name": tunnelName, "namespace": cfg.Namespace, "port": svcPort}}}},
@@ -302,6 +315,9 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 			ing.SetNamespace(cfg.Namespace)
 			ing.SetName(tunnelName)
 			_, _ = controllerutil.CreateOrUpdate(ctx, r.Client, ing, func() error {
+				if r.ArgoAppName != "" {
+					ing.SetLabels(map[string]string{"app.kubernetes.io/instance": r.ArgoAppName})
+				}
 				ing.Object["spec"] = map[string]any{
 					"entryPoints": []any{"websecure"},
 					"routes":      []any{map[string]any{"kind": "Rule", "match": fmt.Sprintf("Host(`%s`)", tunnel.Host), "services": []any{map[string]any{"kind": "Service", "name": tunnelName, "namespace": cfg.Namespace, "port": svcPort, "scheme": "http"}}}},

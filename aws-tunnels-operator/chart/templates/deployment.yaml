@@ -27,6 +27,8 @@ spec:
                   fieldPath: metadata.namespace
             - name: STACK_CONFIGMAP_NAME
               value: {{ .Values.stackConfig.name | quote }}
+            - name: ARGOCD_APP_NAME
+              value: {{ .Values.argoApp.name | quote }}
           args:
             - --metrics-bind-address={{ .Values.operatorArgs.metricsBindAddress }}
             - --health-probe-bind-address={{ .Values.operatorArgs.healthProbeBindAddress }}

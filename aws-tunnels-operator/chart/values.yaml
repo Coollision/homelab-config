@@ -58,6 +58,11 @@ affinity: {}
 tolerations: []
 nodeSelector: {}
 
+# Set to the ArgoCD Application name to have the operator label all managed
+# resources with app.kubernetes.io/instance so they appear in the ArgoCD UI.
+argoApp:
+  name: ""
+
 stackConfig:
   name: aws-tunnels-operator-stack
 
