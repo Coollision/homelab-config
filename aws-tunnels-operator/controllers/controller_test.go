@@ -40,3 +40,20 @@ func TestDesiredReplicas(t *testing.T) {
 		t.Fatalf("expected 0 replicas when creds are invalid, got %d", got)
 	}
 }
+
+func TestCredsSecretName(t *testing.T) {
+	cases := []struct {
+		stack, profile, want string
+	}{
+		{"my-stack", "dev", "my-stack-creds-dev"},
+		{"my-stack", "My Profile", "my-stack-creds-my_profile"},
+		{"my-stack", "AWS/SSO:prod@eu", "my-stack-creds-aws_sso_prod_eu"},
+		{"my-stack", "UPPER", "my-stack-creds-upper"},
+	}
+	for _, tc := range cases {
+		got := credsSecretName(tc.stack, tc.profile)
+		if got != tc.want {
+			t.Errorf("credsSecretName(%q, %q) = %q, want %q", tc.stack, tc.profile, got, tc.want)
+		}
+	}
+}
