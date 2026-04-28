@@ -253,6 +253,7 @@
             <th>Tunnel</th>
             <th>Profile</th>
             <th>Bastion</th>
+            <th>URL</th>
             <th>Ready</th>
             <th>Restarts</th>
           </tr>
@@ -263,6 +264,13 @@
             <td><code>{{.Name}}</code></td>
             <td>{{.Profile}}</td>
             <td>{{.Bastion}}</td>
+            <td>
+              {{if .Host}}
+                <a href="https://{{.Host}}" target="_blank" style="color:var(--accent-2);text-decoration:none;font-size:.88rem" title="{{.Host}}">{{.Host}}</a>
+              {{else}}
+                <span style="color:#4a6070">—</span>
+              {{end}}
+            </td>
             <td>
               {{if eq .Desired 0}}
                 <span style="display:inline-flex;align-items:center;gap:7px"><span class="dot dot-grey"></span> pending</span>
