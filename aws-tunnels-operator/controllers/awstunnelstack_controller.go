@@ -33,6 +33,15 @@ const (
 	tunnelStateMountPath  = "/tmp/tunnel-state"
 )
 
+// argoTrackingID builds the argocd.argoproj.io/tracking-id annotation value used
+// by ArgoCD's default annotation tracking mode. Format: <app>:<group>/<kind>:<ns>/<name>.
+func argoTrackingID(appName, group, kind, namespace, name string) string {
+	if group == "" {
+		return fmt.Sprintf("%s:/%s:%s/%s", appName, kind, namespace, name)
+	}
+	return fmt.Sprintf("%s:%s/%s:%s/%s", appName, group, kind, namespace, name)
+}
+
 func ProfileKey(profile string) string {
 	replacer := strings.NewReplacer("/", "_", ":", "_", " ", "_", "@", "_", "\\", "_")
 	return replacer.Replace(profile)
@@ -110,6 +119,10 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 			secret.Labels["proxies.homelab.io/stack"] = stackName
 			if r.ArgoAppName != "" {
 				secret.Labels["app.kubernetes.io/instance"] = r.ArgoAppName
+				if secret.Annotations == nil {
+					secret.Annotations = map[string]string{}
+				}
+				secret.Annotations["argocd.argoproj.io/tracking-id"] = argoTrackingID(r.ArgoAppName, "", "Secret", cfg.Namespace, secret.Name)
 			}
 			secret.Type = corev1.SecretTypeOpaque
 			if secret.Data == nil {
@@ -177,6 +190,12 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 				labels["app.kubernetes.io/instance"] = r.ArgoAppName
 			}
 			dep.Labels = labels
+			if r.ArgoAppName != "" {
+				if dep.Annotations == nil {
+					dep.Annotations = map[string]string{}
+				}
+				dep.Annotations["argocd.argoproj.io/tracking-id"] = argoTrackingID(r.ArgoAppName, "apps", "Deployment", cfg.Namespace, tunnelName)
+			}
 			dep.Spec.Selector = &metav1.LabelSelector{MatchLabels: map[string]string{"app": tunnelName}}
 			dep.Spec.Replicas = desiredReplicas(validCreds)
 			dep.Spec.Template.ObjectMeta.Labels = map[string]string{"app": tunnelName, "proxies.homelab.io/stack": stackName}
@@ -278,6 +297,10 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 			svc.Labels = map[string]string{"proxies.homelab.io/stack": stackName}
 			if r.ArgoAppName != "" {
 				svc.Labels["app.kubernetes.io/instance"] = r.ArgoAppName
+				if svc.Annotations == nil {
+					svc.Annotations = map[string]string{}
+				}
+				svc.Annotations["argocd.argoproj.io/tracking-id"] = argoTrackingID(r.ArgoAppName, "", "Service", cfg.Namespace, tunnelName)
 			}
 			svc.Spec.Selector = map[string]string{"app": tunnelName}
 			svc.Spec.Ports = []corev1.ServicePort{{Name: "tunnel", Port: svcPort, TargetPort: intstr.FromInt32(svcPort)}}
@@ -300,6 +323,7 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 			_, _ = controllerutil.CreateOrUpdate(ctx, r.Client, ing, func() error {
 				if r.ArgoAppName != "" {
 					ing.SetLabels(map[string]string{"app.kubernetes.io/instance": r.ArgoAppName})
+					ing.SetAnnotations(map[string]string{"argocd.argoproj.io/tracking-id": argoTrackingID(r.ArgoAppName, "traefik.io", "IngressRouteTCP", cfg.Namespace, tunnelName)})
 				}
 				ing.Object["spec"] = map[string]any{
 					"entryPoints": []any{"websecure"},
@@ -317,6 +341,7 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 			_, _ = controllerutil.CreateOrUpdate(ctx, r.Client, ing, func() error {
 				if r.ArgoAppName != "" {
 					ing.SetLabels(map[string]string{"app.kubernetes.io/instance": r.ArgoAppName})
+					ing.SetAnnotations(map[string]string{"argocd.argoproj.io/tracking-id": argoTrackingID(r.ArgoAppName, "traefik.io", "IngressRoute", cfg.Namespace, tunnelName)})
 				}
 				ing.Object["spec"] = map[string]any{
 					"entryPoints": []any{"websecure"},

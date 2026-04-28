@@ -58,8 +58,11 @@ affinity: {}
 tolerations: []
 nodeSelector: {}
 
-# Set to the ArgoCD Application name to have the operator label all managed
-# resources with app.kubernetes.io/instance so they appear in the ArgoCD UI.
+# ArgoCD resource tracking. The operator labels and annotates all managed resources
+# (Deployments, Services, Secrets, IngressRoutes) with app.kubernetes.io/instance
+# and argocd.argoproj.io/tracking-id so they appear in the ArgoCD app UI.
+# Defaults to the Helm release name (which equals the ArgoCD app name in most setups).
+# Set explicitly to override, or to "" to disable.
 argoApp:
   name: ""
 

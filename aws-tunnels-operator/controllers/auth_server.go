@@ -103,6 +103,7 @@ type tunnelStatus struct {
 	Name     string
 	Profile  string
 	Bastion  string
+	Host     string
 	Ready    int32
 	Desired  int32
 	Restarts int32
@@ -689,6 +690,7 @@ func (s *AuthServer) discoverTunnelStatuses(ctx context.Context) ([]tunnelStatus
 			Name:     t.Name,
 			Profile:  profile,
 			Bastion:  t.BastionName,
+			Host:     t.Host,
 			Restarts: maxRestarts[depName],
 		}
 		if dep, ok := depMap[depName]; ok {
