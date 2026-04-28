@@ -1,0 +1,18 @@
+[profile {{ .Values.aws.profile }}]
+sso_start_url  = {{ .Values.aws.ssoStartUrl }}
+sso_region     = {{ .Values.aws.region }}
+sso_account_id = {{ .Values.aws.accountId }}
+sso_role_name  = {{ .Values.aws.roleName }}
+region         = {{ .Values.aws.region }}
+output         = json
+
+{{- range .Values.aws.extraProfiles }}
+
+[profile {{ .name }}]
+sso_start_url  = {{ .ssoStartUrl }}
+sso_region     = {{ .region }}
+sso_account_id = {{ .accountId }}
+sso_role_name  = {{ .roleName }}
+region         = {{ .region }}
+output         = json
+{{- end }}

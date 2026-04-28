@@ -1,0 +1,138 @@
+namespace: proxies
+
+aws:
+  profile: awsprofile001
+  region: eu-central-1
+  ssoStartUrl: <secret:kv/data/proxies/aws-tunnel~sso-start-url>
+  accountId: <secret:kv/data/proxies/aws-tunnel~account-id>
+  roleName: <secret:kv/data/proxies/aws-tunnel~sso-role-name>
+  extraProfiles:
+    # Optional extra profile for prod (separate account/role). Add tunnel.awsProfile: awsprofile001-prod on that tunnel.
+    - name: awsprofile001-prod
+      region: eu-central-1
+      ssoStartUrl: <secret:kv/data/proxies/aws-tunnel~prod-sso-start-url>
+      accountId: <secret:kv/data/proxies/aws-tunnel~prod-account-id>
+      roleName: <secret:kv/data/proxies/aws-tunnel~prod-sso-role-name>
+
+nodeAffinity:
+  excludedType: rpi
+
+pvc:
+  name: aws-tunnel-credentials
+  namespace: proxies
+  storageNamespace: storage
+  size: 64Mi
+  storageClassName: longhorn-shared
+  longhornVolume:
+    enabled: true
+    name: aws-tunnel-credentials
+    sizeBytes: "67108864"
+    accessMode: rwx
+    numberOfReplicas: 1
+    dataEngine: v1
+    dataLocality: best-effort
+    frontend: blockdev
+    replicaAutoBalance: ignored
+    revisionCounterDisabled: true
+    snapshotDataIntegrity: ignored
+    standby: false
+    migratable: false
+    labels:
+      protect: "false"
+      smb-access: shared
+      smb-share-name: aws-tunnel-credentials
+
+auth:
+  enabled: true
+  name: aws-tunnel-auth
+  host: aws-auth.<secret:kv/data/domains~domain>
+  image: python:3.12-slim
+  port: 8090
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  initResources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+shared:
+  awsConfigMapName: aws-tunnel-config
+  scriptConfigMapName: aws-tunnel-script
+  authServerConfigMapName: aws-tunnel-auth-server
+
+tunnelDefaults:
+  image: amazon/aws-cli:latest
+  proxyImage: alpine/socat:1.8.0.3
+  servicePort: 8080
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  proxyResources:
+    requests:
+      cpu: 10m
+      memory: 16Mi
+    limits:
+      cpu: 50m
+      memory: 32Mi
+  livenessProbe:
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    failureThreshold: 3
+
+tunnels:
+  - name: gitlab-dev
+    bastionName: bastion-dev
+    remoteHost: <secret:kv/data/proxies/aws-tunnel~gitlab-dev-host>
+    remotePort: 81
+    localPort: 18080
+    host: gitlab-work.<secret:kv/data/domains~domain>
+
+  - name: dev-db
+    bastionName: bastion-dev
+    remoteHost: ""
+    remotePort: <secret:kv/data/proxies/aws-tunnel~dev-db-port>
+    localPort: 15432
+    host: dev-db-work.<secret:kv/data/domains~domain>
+    ingressMode: tcp
+    tls:
+      passthrough: true
+    rds:
+      clusterPrefix: <secret:kv/data/proxies/aws-tunnel~dev-db-cluster-prefix>
+
+  - name: preprod-db
+    bastionName: bastion-preprod
+    remoteHost: ""
+    remotePort: <secret:kv/data/proxies/aws-tunnel~preprod-db-port>
+    localPort: 25432
+    host: preprod-db-work.<secret:kv/data/domains~domain>
+    ingressMode: tcp
+    tls:
+      passthrough: true
+    rds:
+      clusterPrefix: <secret:kv/data/proxies/aws-tunnel~preprod-db-cluster-prefix>
+
+  - name: prod-db
+    bastionName: bastion-prod
+    awsProfile: awsprofile001-prod
+    awsRegion: eu-central-1
+    remoteHost: ""
+    remotePort: <secret:kv/data/proxies/aws-tunnel~prod-db-port>
+    localPort: 35432
+    host: prod-db-work.<secret:kv/data/domains~domain>
+    ingressMode: tcp
+    tls:
+      passthrough: true
+    rds:
+      clusterPrefix: <secret:kv/data/proxies/aws-tunnel~prod-db-cluster-prefix>
