@@ -21,10 +21,9 @@ service:
   authPort: 8090
 
 ingress:
-  enabled: true
+  enabled: false
   entryPoints:
     - websecure
-  host: aws-auth.<secret:kv/data/domains~domain>
   tls: true
 
 operatorArgs:
@@ -74,7 +73,7 @@ stack:
     extraProfiles: []
   auth:
     enabled: true
-    host: aws-auth.<secret:kv/data/domains~domain>
+    host: ""
     port: 8090
   nodeAffinity:
     excludedType: ""

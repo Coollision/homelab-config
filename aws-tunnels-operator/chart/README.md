@@ -2,6 +2,8 @@
 
 This chart deploys the operator and writes one stack config ConfigMap consumed by the operator runtime.
 
+`stack.auth.host` is the single source of truth for auth hostname. If `ingress.enabled=true`, the IngressRoute uses `stack.auth.host`.
+
 ## Install
 
 ```bash

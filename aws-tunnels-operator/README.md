@@ -82,3 +82,9 @@ docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/coollision/aws
   - `sha-<commit>`
 - `latest` is intentionally not published.
 - CI automatically creates and pushes release tags as `aws-tunnels-operator/vX.Y.Z`.
+
+## Renovate Automation
+
+- Dependency updates are configured in `.github/renovate.json` with `baseBranches` set to `orphan/aws-tunnels-operator-standalone`.
+- For fully automatic scheduled runs, the Renovate workflow file must exist on the repository default branch (for example `master`) because GitHub Actions schedules only run from the default branch.
+- Keep/copy `.github/workflows/renovate.yaml` on the default branch, while leaving `baseBranches` targeting this orphan branch.
