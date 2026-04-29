@@ -12,8 +12,6 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
-	proxyv1alpha1 "homelab/aws-tunnels-operator/api/v1alpha1"
 )
 
 // newFakeClient builds an in-memory controller-runtime client with all standard
@@ -28,7 +26,7 @@ func newFakeClient(t *testing.T, objs ...client.Object) client.Client {
 }
 
 // specConfigMap builds a ConfigMap containing a serialised AWSTunnelStackSpec.
-func specConfigMap(t *testing.T, ns, name, stackName string, spec proxyv1alpha1.AWSTunnelStackSpec) *corev1.ConfigMap {
+func specConfigMap(t *testing.T, ns, name, stackName string, spec AWSTunnelStackSpec) *corev1.ConfigMap {
 	t.Helper()
 	raw, err := json.Marshal(spec)
 	if err != nil {
@@ -44,16 +42,16 @@ func specConfigMap(t *testing.T, ns, name, stackName string, spec proxyv1alpha1.
 }
 
 // minimalSpec returns an AWSTunnelStackSpec that satisfies all validation checks.
-func minimalSpec() proxyv1alpha1.AWSTunnelStackSpec {
-	return proxyv1alpha1.AWSTunnelStackSpec{
-		AWS: proxyv1alpha1.AWSSpec{
+func minimalSpec() AWSTunnelStackSpec {
+	return AWSTunnelStackSpec{
+		AWS: AWSSpec{
 			Profile:     "dev",
 			Region:      "eu-west-1",
 			SSOStartURL: "https://sso.example.com",
 			AccountID:   "123456789012",
 			RoleName:    "DevRole",
 		},
-		Tunnels: []proxyv1alpha1.TunnelSpec{
+		Tunnels: []TunnelSpec{
 			{Name: "db", RemotePort: "5432"},
 		},
 	}
@@ -106,8 +104,8 @@ func TestLoadStackConfig_NoTunnels(t *testing.T) {
 func TestAWSConfigMapName_Custom(t *testing.T) {
 	cfg := StackConfig{
 		Name: "my-stack",
-		Spec: proxyv1alpha1.AWSTunnelStackSpec{
-			Shared: proxyv1alpha1.SharedNamesSpec{AWSConfigMapName: "custom-aws-config"},
+		Spec: AWSTunnelStackSpec{
+			Shared: SharedNamesSpec{AWSConfigMapName: "custom-aws-config"},
 		},
 	}
 	if got := cfg.AWSConfigMapName(); got != "custom-aws-config" {
@@ -123,10 +121,10 @@ func TestAWSConfigMapName_Default(t *testing.T) {
 }
 
 func TestDefinedAWSProfiles(t *testing.T) {
-	cfg := StackConfig{Spec: proxyv1alpha1.AWSTunnelStackSpec{
-		AWS: proxyv1alpha1.AWSSpec{
+	cfg := StackConfig{Spec: AWSTunnelStackSpec{
+		AWS: AWSSpec{
 			Profile: "main",
-			ExtraProfile: []proxyv1alpha1.AWSProfileSpec{
+			ExtraProfile: []AWSProfileSpec{
 				{Name: "staging"},
 			},
 		},
@@ -138,9 +136,9 @@ func TestDefinedAWSProfiles(t *testing.T) {
 }
 
 func TestReferencedAWSProfiles_IncludesTunnelOverride(t *testing.T) {
-	cfg := StackConfig{Spec: proxyv1alpha1.AWSTunnelStackSpec{
-		AWS:     proxyv1alpha1.AWSSpec{Profile: "main"},
-		Tunnels: []proxyv1alpha1.TunnelSpec{{Name: "db", AWSProfile: "svc-account"}},
+	cfg := StackConfig{Spec: AWSTunnelStackSpec{
+		AWS:     AWSSpec{Profile: "main"},
+		Tunnels: []TunnelSpec{{Name: "db", AWSProfile: "svc-account"}},
 	}}
 	refs := cfg.ReferencedAWSProfiles()
 	found := false
@@ -155,8 +153,8 @@ func TestReferencedAWSProfiles_IncludesTunnelOverride(t *testing.T) {
 }
 
 func TestRenderAWSConfig_Success(t *testing.T) {
-	cfg := StackConfig{Spec: proxyv1alpha1.AWSTunnelStackSpec{
-		AWS: proxyv1alpha1.AWSSpec{
+	cfg := StackConfig{Spec: AWSTunnelStackSpec{
+		AWS: AWSSpec{
 			Profile:     "dev",
 			Region:      "eu-west-1",
 			SSOStartURL: "https://sso.example.com",
@@ -177,8 +175,8 @@ func TestRenderAWSConfig_Success(t *testing.T) {
 }
 
 func TestRenderAWSConfig_DefaultRegion(t *testing.T) {
-	cfg := StackConfig{Spec: proxyv1alpha1.AWSTunnelStackSpec{
-		AWS: proxyv1alpha1.AWSSpec{
+	cfg := StackConfig{Spec: AWSTunnelStackSpec{
+		AWS: AWSSpec{
 			Profile:     "dev",
 			SSOStartURL: "https://sso.example.com",
 			AccountID:   "123456789012",
@@ -196,8 +194,8 @@ func TestRenderAWSConfig_DefaultRegion(t *testing.T) {
 }
 
 func TestRenderAWSConfig_MissingFields(t *testing.T) {
-	cfg := StackConfig{Spec: proxyv1alpha1.AWSTunnelStackSpec{
-		AWS: proxyv1alpha1.AWSSpec{Profile: "dev"},
+	cfg := StackConfig{Spec: AWSTunnelStackSpec{
+		AWS: AWSSpec{Profile: "dev"},
 	}}
 	_, _, err := cfg.RenderAWSConfig()
 	if err == nil {

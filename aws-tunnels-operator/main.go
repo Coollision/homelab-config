@@ -56,6 +56,8 @@ func main() {
 		Scheme:                 scheme,
 		Metrics:                server.Options{BindAddress: metricsAddr},
 		HealthProbeBindAddress: probeAddr,
+		LeaderElection:         true,
+		LeaderElectionID:       "aws-tunnels-operator-leader",
 	})
 	if err != nil {
 		os.Exit(1)

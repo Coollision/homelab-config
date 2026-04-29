@@ -1,9 +1,6 @@
-package v1alpha1
+package controllers
 
-import (
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-)
+import corev1 "k8s.io/api/core/v1"
 
 type AWSProfileSpec struct {
 	Name        string `json:"name"`
@@ -37,9 +34,9 @@ type NodeAffinitySpec struct {
 }
 
 type SharedNamesSpec struct {
-	AWSConfigMapName   string `json:"awsConfigMapName,omitempty"`
+	AWSConfigMapName    string `json:"awsConfigMapName,omitempty"`
 	ScriptConfigMapName string `json:"scriptConfigMapName,omitempty"`
-	AuthConfigMapName  string `json:"authServerConfigMapName,omitempty"`
+	AuthConfigMapName   string `json:"authServerConfigMapName,omitempty"`
 }
 
 type LivenessProbeSpec struct {
@@ -49,12 +46,12 @@ type LivenessProbeSpec struct {
 }
 
 type TunnelDefaultSpec struct {
-	Image         string                      `json:"image,omitempty"`
-	ProxyImage    string                      `json:"proxyImage,omitempty"`
-	ServicePort   int32                       `json:"servicePort,omitempty"`
-	Resources     corev1.ResourceRequirements `json:"resources,omitempty"`
+	Image          string                      `json:"image,omitempty"`
+	ProxyImage     string                      `json:"proxyImage,omitempty"`
+	ServicePort    int32                       `json:"servicePort,omitempty"`
+	Resources      corev1.ResourceRequirements `json:"resources,omitempty"`
 	ProxyResources corev1.ResourceRequirements `json:"proxyResources,omitempty"`
-	LivenessProbe LivenessProbeSpec           `json:"livenessProbe,omitempty"`
+	LivenessProbe  LivenessProbeSpec           `json:"livenessProbe,omitempty"`
 }
 
 type RDSSpec struct {
@@ -67,20 +64,20 @@ type TLSSpec struct {
 }
 
 type TunnelSpec struct {
-	Name       string `json:"name"`
-	Host       string `json:"host"`
-	BastionName string `json:"bastionName"`
-	RemoteHost string `json:"remoteHost,omitempty"`
-	RemotePort string `json:"remotePort"`
-	LocalPort  int32  `json:"localPort"`
-	AWSProfile string `json:"awsProfile,omitempty"`
-	AWSRegion  string `json:"awsRegion,omitempty"`
-	IngressMode string `json:"ingressMode,omitempty"`
-	Image      string `json:"image,omitempty"`
-	ProxyImage string `json:"proxyImage,omitempty"`
-	ServicePort int32 `json:"servicePort,omitempty"`
-	RDS        RDSSpec `json:"rds,omitempty"`
-	TLS        TLSSpec `json:"tls,omitempty"`
+	Name           string                      `json:"name"`
+	Host           string                      `json:"host"`
+	BastionName    string                      `json:"bastionName"`
+	RemoteHost     string                      `json:"remoteHost,omitempty"`
+	RemotePort     string                      `json:"remotePort"`
+	LocalPort      int32                       `json:"localPort"`
+	AWSProfile     string                      `json:"awsProfile,omitempty"`
+	AWSRegion      string                      `json:"awsRegion,omitempty"`
+	IngressMode    string                      `json:"ingressMode,omitempty"`
+	Image          string                      `json:"image,omitempty"`
+	ProxyImage     string                      `json:"proxyImage,omitempty"`
+	ServicePort    int32                       `json:"servicePort,omitempty"`
+	RDS            RDSSpec                     `json:"rds,omitempty"`
+	TLS            TLSSpec                     `json:"tls,omitempty"`
 	Resources      corev1.ResourceRequirements `json:"resources,omitempty"`
 	ProxyResources corev1.ResourceRequirements `json:"proxyResources,omitempty"`
 }
@@ -92,28 +89,4 @@ type AWSTunnelStackSpec struct {
 	Shared         SharedNamesSpec   `json:"shared,omitempty"`
 	TunnelDefaults TunnelDefaultSpec `json:"tunnelDefaults,omitempty"`
 	Tunnels        []TunnelSpec      `json:"tunnels"`
-}
-
-type AWSTunnelStackStatus struct {
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-	ManagedTunnels     int32 `json:"managedTunnels,omitempty"`
-}
-
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-
-type AWSTunnelStack struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	Spec   AWSTunnelStackSpec   `json:"spec,omitempty"`
-	Status AWSTunnelStackStatus `json:"status,omitempty"`
-}
-
-// +kubebuilder:object:root=true
-
-type AWSTunnelStackList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []AWSTunnelStack `json:"items"`
 }

@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
@@ -26,11 +27,16 @@ type SingleStackRunner struct {
 }
 
 const (
-	awsConfigVolumeName  = "aws-config"
-	awsConfigMountPath   = "/aws-config"
-	awsConfigFilePath    = awsConfigMountPath + "/config"
+	awsConfigVolumeName   = "aws-config"
+	awsConfigMountPath    = "/aws-config"
+	awsConfigFilePath     = awsConfigMountPath + "/config"
 	tunnelStateVolumeName = "tunnel-state"
 	tunnelStateMountPath  = "/tmp/tunnel-state"
+
+	labelStack    = "proxies.homelab.io/stack"
+	labelInstance = "app.kubernetes.io/instance"
+	annotTracking = "argocd.argoproj.io/tracking-id"
+	traefikAPI    = "traefik.io/v1alpha1"
 )
 
 // argoTrackingID builds a NON-SELF-REFERENCING argocd.argoproj.io/tracking-id annotation.
@@ -83,7 +89,10 @@ func (r *SingleStackRunner) Start(ctx context.Context) error {
 		interval = 30 * time.Second
 	}
 
-	_ = r.reconcileOnce(ctx)
+	log := ctrl.LoggerFrom(ctx)
+	if err := r.reconcileOnce(ctx); err != nil {
+		log.Error(err, "reconcile failed")
+	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -92,7 +101,9 @@ func (r *SingleStackRunner) Start(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			_ = r.reconcileOnce(ctx)
+			if err := r.reconcileOnce(ctx); err != nil {
+				log.Error(err, "reconcile failed")
+			}
 		}
 	}
 }
@@ -118,13 +129,13 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 				secret.Labels = map[string]string{}
 			}
 			secret.Labels["app.kubernetes.io/managed-by"] = "aws-tunnels-operator"
-			secret.Labels["proxies.homelab.io/stack"] = stackName
+			secret.Labels[labelStack] = stackName
 			if r.ArgoAppName != "" {
-				secret.Labels["app.kubernetes.io/instance"] = r.ArgoAppName
+				secret.Labels[labelInstance] = r.ArgoAppName
 				if secret.Annotations == nil {
 					secret.Annotations = map[string]string{}
 				}
-				secret.Annotations["argocd.argoproj.io/tracking-id"] = argoTrackingID(r.ArgoAppName, "", "ConfigMap", r.Namespace, r.ConfigMapName)
+				secret.Annotations[annotTracking] = argoTrackingID(r.ArgoAppName, "", "ConfigMap", r.Namespace, r.ConfigMapName)
 			}
 			secret.Type = corev1.SecretTypeOpaque
 			if secret.Data == nil {
@@ -186,21 +197,23 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 			labels := map[string]string{
 				"app.kubernetes.io/name":    tunnelName,
 				"app.kubernetes.io/part-of": stackName,
-				"proxies.homelab.io/stack":  stackName,
+				labelStack:  stackName,
 			}
 			if r.ArgoAppName != "" {
-				labels["app.kubernetes.io/instance"] = r.ArgoAppName
+				labels[labelInstance] = r.ArgoAppName
 			}
 			dep.Labels = labels
 			if r.ArgoAppName != "" {
 				if dep.Annotations == nil {
 					dep.Annotations = map[string]string{}
 				}
-				dep.Annotations["argocd.argoproj.io/tracking-id"] = argoTrackingID(r.ArgoAppName, "", "ConfigMap", r.Namespace, r.ConfigMapName)
+				dep.Annotations[annotTracking] = argoTrackingID(r.ArgoAppName, "", "ConfigMap", r.Namespace, r.ConfigMapName)
 			}
 			dep.Spec.Selector = &metav1.LabelSelector{MatchLabels: map[string]string{"app": tunnelName}}
 			dep.Spec.Replicas = desiredReplicas(validCreds)
-			dep.Spec.Template.ObjectMeta.Labels = map[string]string{"app": tunnelName, "proxies.homelab.io/stack": stackName}
+			zero := int32(0)
+			dep.Spec.RevisionHistoryLimit = &zero
+			dep.Spec.Template.ObjectMeta.Labels = map[string]string{"app": tunnelName, labelStack: stackName}
 			if dep.Spec.Template.ObjectMeta.Annotations == nil {
 				dep.Spec.Template.ObjectMeta.Annotations = map[string]string{}
 			}
@@ -228,7 +241,7 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 				livenessFailureThreshold = 3
 			}
 
-			if dep.Spec.Template.Spec.Containers == nil || len(dep.Spec.Template.Spec.Containers) < 2 {
+			if len(dep.Spec.Template.Spec.Containers) < 2 {
 				dep.Spec.Template.Spec.Containers = []corev1.Container{{}, {}}
 			}
 
@@ -246,8 +259,10 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 					{Name: "REMOTE_PORT", Value: tunnel.RemotePort},
 					{Name: "LOCAL_PORT", Value: fmt.Sprintf("%d", tunnel.LocalPort)},
 					{Name: "RDS_INSTANCE_PREFIX", Value: tunnel.RDS.InstancePrefix},
-					{Name: "RDS_CLUSTER_PREFIX", Value: tunnel.RDS.ClusterPrefix},				{Name: "TUNNEL_NAME", Value: tunnelName},
-				{Name: "HOME", Value: "/root"},				},
+					{Name: "RDS_CLUSTER_PREFIX", Value: tunnel.RDS.ClusterPrefix},
+					{Name: "TUNNEL_NAME", Value: tunnelName},
+					{Name: "HOME", Value: "/root"},
+				},
 				EnvFrom: []corev1.EnvFromSource{{SecretRef: &corev1.SecretEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: profileSecretName}}}},
 				VolumeMounts: []corev1.VolumeMount{
 					{Name: awsConfigVolumeName, MountPath: awsConfigMountPath, ReadOnly: true},
@@ -296,13 +311,13 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 
 		svc := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: tunnelName, Namespace: cfg.Namespace}}
 		_, err = controllerutil.CreateOrUpdate(ctx, r.Client, svc, func() error {
-			svc.Labels = map[string]string{"proxies.homelab.io/stack": stackName}
+			svc.Labels = map[string]string{labelStack: stackName}
 			if r.ArgoAppName != "" {
-				svc.Labels["app.kubernetes.io/instance"] = r.ArgoAppName
+				svc.Labels[labelInstance] = r.ArgoAppName
 				if svc.Annotations == nil {
 					svc.Annotations = map[string]string{}
 				}
-				svc.Annotations["argocd.argoproj.io/tracking-id"] = argoTrackingID(r.ArgoAppName, "", "ConfigMap", r.Namespace, r.ConfigMapName)
+				svc.Annotations[annotTracking] = argoTrackingID(r.ArgoAppName, "", "ConfigMap", r.Namespace, r.ConfigMapName)
 			}
 			svc.Spec.Selector = map[string]string{"app": tunnelName}
 			svc.Spec.Ports = []corev1.ServicePort{{Name: "tunnel", Port: svcPort, TargetPort: intstr.FromInt32(svcPort)}}
@@ -318,15 +333,17 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 		}
 		if ingressMode == "tcp" {
 			ing := &unstructured.Unstructured{}
-			ing.SetAPIVersion("traefik.io/v1alpha1")
+			ing.SetAPIVersion(traefikAPI)
 			ing.SetKind("IngressRouteTCP")
 			ing.SetNamespace(cfg.Namespace)
 			ing.SetName(tunnelName)
 			_, _ = controllerutil.CreateOrUpdate(ctx, r.Client, ing, func() error {
+				ingLabels := map[string]string{labelStack: stackName}
 				if r.ArgoAppName != "" {
-					ing.SetLabels(map[string]string{"app.kubernetes.io/instance": r.ArgoAppName})
-					ing.SetAnnotations(map[string]string{"argocd.argoproj.io/tracking-id": argoTrackingID(r.ArgoAppName, "", "ConfigMap", r.Namespace, r.ConfigMapName)})
+					ingLabels[labelInstance] = r.ArgoAppName
+					ing.SetAnnotations(map[string]string{annotTracking: argoTrackingID(r.ArgoAppName, "", "ConfigMap", r.Namespace, r.ConfigMapName)})
 				}
+				ing.SetLabels(ingLabels)
 				ing.Object["spec"] = map[string]any{
 					"entryPoints": []any{"websecure"},
 					"routes":      []any{map[string]any{"match": fmt.Sprintf("HostSNI(`%s`)", tunnel.Host), "services": []any{map[string]any{"name": tunnelName, "namespace": cfg.Namespace, "port": svcPort}}}},
@@ -334,17 +351,25 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 				}
 				return nil
 			})
+			stale := &unstructured.Unstructured{}
+			stale.SetAPIVersion(traefikAPI)
+			stale.SetKind("IngressRoute")
+			stale.SetNamespace(cfg.Namespace)
+			stale.SetName(tunnelName)
+			_ = client.IgnoreNotFound(r.Client.Delete(ctx, stale))
 		} else {
 			ing := &unstructured.Unstructured{}
-			ing.SetAPIVersion("traefik.io/v1alpha1")
+			ing.SetAPIVersion(traefikAPI)
 			ing.SetKind("IngressRoute")
 			ing.SetNamespace(cfg.Namespace)
 			ing.SetName(tunnelName)
 			_, _ = controllerutil.CreateOrUpdate(ctx, r.Client, ing, func() error {
+				ingLabels := map[string]string{labelStack: stackName}
 				if r.ArgoAppName != "" {
-					ing.SetLabels(map[string]string{"app.kubernetes.io/instance": r.ArgoAppName})
-					ing.SetAnnotations(map[string]string{"argocd.argoproj.io/tracking-id": argoTrackingID(r.ArgoAppName, "", "ConfigMap", r.Namespace, r.ConfigMapName)})
+					ingLabels[labelInstance] = r.ArgoAppName
+					ing.SetAnnotations(map[string]string{annotTracking: argoTrackingID(r.ArgoAppName, "", "ConfigMap", r.Namespace, r.ConfigMapName)})
 				}
+				ing.SetLabels(ingLabels)
 				ing.Object["spec"] = map[string]any{
 					"entryPoints": []any{"websecure"},
 					"routes":      []any{map[string]any{"kind": "Rule", "match": fmt.Sprintf("Host(`%s`)", tunnel.Host), "services": []any{map[string]any{"kind": "Service", "name": tunnelName, "namespace": cfg.Namespace, "port": svcPort, "scheme": "http"}}}},
@@ -352,6 +377,82 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 				}
 				return nil
 			})
+			stale := &unstructured.Unstructured{}
+			stale.SetAPIVersion(traefikAPI)
+			stale.SetKind("IngressRouteTCP")
+			stale.SetNamespace(cfg.Namespace)
+			stale.SetName(tunnelName)
+			_ = client.IgnoreNotFound(r.Client.Delete(ctx, stale))
+		}
+	}
+
+	return r.pruneStaleResources(ctx, cfg)
+}
+
+func (r *SingleStackRunner) pruneStaleResources(ctx context.Context, cfg StackConfig) error {
+	stackName := cfg.Name
+	stackLabel := client.MatchingLabels{labelStack: stackName}
+	ns := client.InNamespace(cfg.Namespace)
+
+	desiredTunnels := make(map[string]struct{}, len(cfg.Spec.Tunnels))
+	for _, t := range cfg.Spec.Tunnels {
+		desiredTunnels[fmt.Sprintf("%s-%s", stackName, t.Name)] = struct{}{}
+	}
+
+	desiredSecrets := make(map[string]struct{})
+	for _, p := range cfg.DefinedAWSProfiles() {
+		desiredSecrets[credsSecretName(stackName, p)] = struct{}{}
+	}
+
+	depList := &appsv1.DeploymentList{}
+	if err := r.Client.List(ctx, depList, ns, stackLabel); err != nil {
+		return fmt.Errorf("list deployments for pruning: %w", err)
+	}
+	for i := range depList.Items {
+		if _, ok := desiredTunnels[depList.Items[i].Name]; !ok {
+			if err := client.IgnoreNotFound(r.Client.Delete(ctx, &depList.Items[i])); err != nil {
+				return fmt.Errorf("delete stale deployment %s: %w", depList.Items[i].Name, err)
+			}
+		}
+	}
+
+	svcList := &corev1.ServiceList{}
+	if err := r.Client.List(ctx, svcList, ns, stackLabel); err != nil {
+		return fmt.Errorf("list services for pruning: %w", err)
+	}
+	for i := range svcList.Items {
+		if _, ok := desiredTunnels[svcList.Items[i].Name]; !ok {
+			if err := client.IgnoreNotFound(r.Client.Delete(ctx, &svcList.Items[i])); err != nil {
+				return fmt.Errorf("delete stale service %s: %w", svcList.Items[i].Name, err)
+			}
+		}
+	}
+
+	secretList := &corev1.SecretList{}
+	if err := r.Client.List(ctx, secretList, ns, stackLabel); err != nil {
+		return fmt.Errorf("list secrets for pruning: %w", err)
+	}
+	for i := range secretList.Items {
+		if _, ok := desiredSecrets[secretList.Items[i].Name]; !ok {
+			if err := client.IgnoreNotFound(r.Client.Delete(ctx, &secretList.Items[i])); err != nil {
+				return fmt.Errorf("delete stale secret %s: %w", secretList.Items[i].Name, err)
+			}
+		}
+	}
+
+	for _, kind := range []string{"IngressRoute", "IngressRouteTCP"} {
+		ingList := &unstructured.UnstructuredList{}
+		ingList.SetAPIVersion(traefikAPI)
+		ingList.SetKind(kind + "List")
+		if err := r.Client.List(ctx, ingList, ns, stackLabel); err != nil {
+			continue // CRD may not be installed; skip gracefully
+		}
+		for i := range ingList.Items {
+			if _, ok := desiredTunnels[ingList.Items[i].GetName()]; !ok {
+				if err := client.IgnoreNotFound(r.Client.Delete(ctx, &ingList.Items[i])); err != nil {
+					return fmt.Errorf("delete stale %s %s: %w", kind, ingList.Items[i].GetName(), err)
+				}
+			}
 		}
 	}
 
