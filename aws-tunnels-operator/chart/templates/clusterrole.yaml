@@ -18,4 +18,7 @@ rules:
   - apiGroups: ["traefik.io"]
     resources: ["ingressroutes", "ingressroutetcps"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
 {{- end }}
