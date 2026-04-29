@@ -148,7 +148,7 @@ alloy:
 
           rule {
             action = "labeldrop"
-            regex  = "pod_template_hash|controller_revision_hash|pod_template_generation|apps_kubernetes_io_pod_index|statefulset_kubernetes_io_pod_name|helm_sh_chart|chart|heritage|jobLabel"
+            regex  = "pod_template_hash|controller_revision_hash|pod_template_generation|apps_kubernetes_io_pod_index|statefulset_kubernetes_io_pod_name|helm_sh_chart|chart|heritage|jobLabel|app_kubernetes_io_.+"
           }
         }
 
