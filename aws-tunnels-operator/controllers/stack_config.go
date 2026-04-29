@@ -8,12 +8,10 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	proxyv1alpha1 "homelab/aws-tunnels-operator/api/v1alpha1"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 const (
@@ -26,7 +24,7 @@ const (
 type StackConfig struct {
 	Namespace string
 	Name      string
-	Spec      proxyv1alpha1.AWSTunnelStackSpec
+	Spec      AWSTunnelStackSpec
 }
 
 func LoadStackConfig(ctx context.Context, c client.Client, namespace, configMapName string) (StackConfig, error) {
@@ -52,7 +50,7 @@ func LoadStackConfig(ctx context.Context, c client.Client, namespace, configMapN
 		return StackConfig{}, fmt.Errorf("configmap %s/%s missing %q", namespace, configMapName, stackSpecJSONKey)
 	}
 
-	var spec proxyv1alpha1.AWSTunnelStackSpec
+	var spec AWSTunnelStackSpec
 	if err := json.Unmarshal([]byte(raw), &spec); err != nil {
 		return StackConfig{}, fmt.Errorf("parse %q in %s/%s: %w", stackSpecJSONKey, namespace, configMapName, err)
 	}
@@ -185,35 +183,21 @@ func SyncAWSConfigMap(ctx context.Context, c client.Client, cfg StackConfig) (st
 		return "", "", nil, err
 	}
 
-	nn := types.NamespacedName{Namespace: cfg.Namespace, Name: configMapName}
-	cm := &corev1.ConfigMap{}
-	if err := c.Get(ctx, nn, cm); err != nil {
-		if !apierrors.IsNotFound(err) {
-			return "", "", nil, fmt.Errorf("get aws config configmap %s/%s: %w", cfg.Namespace, configMapName, err)
+	cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: configMapName, Namespace: cfg.Namespace}}
+	_, err = controllerutil.CreateOrUpdate(ctx, c, cm, func() error {
+		if cm.Labels == nil {
+			cm.Labels = map[string]string{}
 		}
-		cm = &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: configMapName, Namespace: cfg.Namespace}}
-		cm.Labels = map[string]string{
-			"app.kubernetes.io/managed-by": "aws-tunnels-operator",
-			"proxies.homelab.io/stack":     cfg.Name,
+		cm.Labels["app.kubernetes.io/managed-by"] = "aws-tunnels-operator"
+		cm.Labels["proxies.homelab.io/stack"] = cfg.Name
+		if cm.Data == nil {
+			cm.Data = map[string]string{}
 		}
-		cm.Data = map[string]string{awsConfigDataKey: configText}
-		if err := c.Create(ctx, cm); err != nil {
-			return "", "", nil, fmt.Errorf("create aws config configmap %s/%s: %w", cfg.Namespace, configMapName, err)
-		}
-		return configMapName, configText, profiles, nil
-	}
-
-	if cm.Labels == nil {
-		cm.Labels = map[string]string{}
-	}
-	cm.Labels["app.kubernetes.io/managed-by"] = "aws-tunnels-operator"
-	cm.Labels["proxies.homelab.io/stack"] = cfg.Name
-	if cm.Data == nil {
-		cm.Data = map[string]string{}
-	}
-	cm.Data[awsConfigDataKey] = configText
-	if err := c.Update(ctx, cm); err != nil {
-		return "", "", nil, fmt.Errorf("update aws config configmap %s/%s: %w", cfg.Namespace, configMapName, err)
+		cm.Data[awsConfigDataKey] = configText
+		return nil
+	})
+	if err != nil {
+		return "", "", nil, fmt.Errorf("sync aws config configmap %s/%s: %w", cfg.Namespace, configMapName, err)
 	}
 
 	return configMapName, configText, profiles, nil

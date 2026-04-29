@@ -21,3 +21,12 @@ tmp/*
 */.gotemp/*
 *.exe
 *.tmp
+ansible/inventory/group_vars/
+
+ansible/.vscode/settings.json
+
+ansible/inventory/host_vars/
+
+ansible/inventory/hosts
+
+.claude/settings.local.json

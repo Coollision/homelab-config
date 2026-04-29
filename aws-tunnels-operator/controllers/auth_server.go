@@ -23,6 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -74,6 +75,7 @@ type ssoSession struct {
 	loginErr   error
 	restarted  int
 	expiration string
+	startedAt  time.Time
 }
 
 func (s *ssoSession) setURLCode(u, c string) {
@@ -151,6 +153,22 @@ func (s *AuthServer) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/login-wait", s.handleLoginWait)
 	mux.HandleFunc("/login-poll.json", s.handleLoginPoll)
 	mux.HandleFunc("/restart", s.handleRestart)
+
+	go s.cleanupSSOSessions()
+}
+
+func (s *AuthServer) cleanupSSOSessions() {
+	const sessionTTL = 15 * time.Minute
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		s.ssoSessions.Range(func(key, val any) bool {
+			if time.Since(val.(*ssoSession).startedAt) > sessionTTL {
+				s.ssoSessions.Delete(key)
+			}
+			return true
+		})
+	}
 }
 
 func (s *AuthServer) handleRoot(w http.ResponseWriter, r *http.Request) {
@@ -245,7 +263,7 @@ func (s *AuthServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	if formMode {
 		sid := fmt.Sprintf("%d", time.Now().UTC().UnixNano())
-		sess := &ssoSession{Profile: req.Profile, Namespace: req.Namespace, Stack: req.Stack, done: make(chan struct{})}
+		sess := &ssoSession{Profile: req.Profile, Namespace: req.Namespace, Stack: req.Stack, done: make(chan struct{}), startedAt: time.Now()}
 		s.ssoSessions.Store(sid, sess)
 		authLog.Info("started async sso session", "sid", sid, "profile", req.Profile)
 		go s.runSSOLogin(req, sess, awsConfigText, awsProfiles)
@@ -535,23 +553,19 @@ func (s *AuthServer) exportCredentials(profile string, awsEnv []string) (exportC
 
 func (s *AuthServer) storeCredentials(ctx context.Context, req loginRequest, creds exportCredentials) error {
 	secretName := credsSecretName(req.Stack, req.Profile)
-	secret := &corev1.Secret{}
-	err := s.Client.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: secretName}, secret)
-	if err != nil {
-		secret = &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: req.Namespace}}
-	}
-	secret.Type = corev1.SecretTypeOpaque
-	if secret.Data == nil {
-		secret.Data = map[string][]byte{}
-	}
-	secret.Data["AWS_ACCESS_KEY_ID"] = []byte(creds.AccessKeyID)
-	secret.Data["AWS_SECRET_ACCESS_KEY"] = []byte(creds.SecretAccessKey)
-	secret.Data["AWS_SESSION_TOKEN"] = []byte(creds.SessionToken)
-	secret.Data["expiration"] = []byte(creds.Expiration)
-	if secret.UID == "" {
-		return s.Client.Create(ctx, secret)
-	}
-	return s.Client.Update(ctx, secret)
+	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: req.Namespace}}
+	_, err := controllerutil.CreateOrUpdate(ctx, s.Client, secret, func() error {
+		secret.Type = corev1.SecretTypeOpaque
+		if secret.Data == nil {
+			secret.Data = map[string][]byte{}
+		}
+		secret.Data["AWS_ACCESS_KEY_ID"] = []byte(creds.AccessKeyID)
+		secret.Data["AWS_SECRET_ACCESS_KEY"] = []byte(creds.SecretAccessKey)
+		secret.Data["AWS_SESSION_TOKEN"] = []byte(creds.SessionToken)
+		secret.Data["expiration"] = []byte(creds.Expiration)
+		return nil
+	})
+	return err
 }
 
 func (s *AuthServer) handleRestart(w http.ResponseWriter, r *http.Request) {
