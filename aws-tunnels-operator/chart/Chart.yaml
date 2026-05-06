@@ -1,6 +1,6 @@
 apiVersion: v2
 name: aws-tunnels-operator
 description: Standalone Helm chart for the AWS Tunnels Operator
-version: 0.7.9
-appVersion: 0.7.9
+version: 0.7.10
+appVersion: 0.7.10
 type: application
