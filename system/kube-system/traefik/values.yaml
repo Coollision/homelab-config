@@ -17,8 +17,7 @@ traefik:
   service:
     spec:
       externalTrafficPolicy: Local
-      loadBalancerIPs:
-        - <secret:kv/data/kube-system/traefik~ip>
+      loadBalancerIP: <secret:kv/data/kube-system/traefik~ip>
   providers:
     kubernetesCRD:
       enabled: true
