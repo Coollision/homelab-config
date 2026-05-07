@@ -14,6 +14,8 @@ config:
   # Matter uses this primary interface for mDNS multicast so IoT devices are
   # discovered directly on their VLAN without any proxy or forwarder.
   PRIMARY_INTERFACE: net1
+  # Enable debug logging for commissioning troubleshooting
+  LOG_LEVEL: debug
 
 podSecurityContext:
   fsGroup: 1000
@@ -22,10 +24,27 @@ securityContext:
   runAsUser: 1000
   runAsGroup: 1000
 
-# Multus attaches a dedicated MACVLAN interface for the IoT VLAN.
-#   net1 = VLAN 40 (IoT / Matter device discovery)
-# Home Assistant still reaches the server over the normal cluster interface
-# (`eth0`) via the Kubernetes service.
+initContainers:
+  - name: setup-thread-route
+    image: busybox:1.35
+    command:
+      - sh
+      - -c
+      - |
+        sleep 2
+        ip -6 route add fd77:3621:418:1::/64 via fe80::40:67ff:fe9d:6464 dev net1 || true
+    securityContext:
+      runAsUser: 0
+      runAsGroup: 0
+      capabilities:
+        add:
+          - NET_ADMIN
+
+# Multus attaches dedicated MACVLAN interfaces:
+#   net1 = VLAN 40 (IoT / Thread network) - for Thread device communication
+#   net2 = VLAN 5 (LAN) - for mDNS discovery during commissioning
+# The pod listens on both interfaces so devices can discover it on VLAN 5,
+# then join Thread network via VLAN 40. Kubernetes service on eth0 for HomeAssistant.
 multusNetworks:
   - name: matter-server-vlan40
     interface: net1
@@ -33,6 +52,18 @@ multusNetworks:
     dhcpHostname: _stub_matter-server-iot
     parentInterface: vlan40
     nodeLabelKey: vlan40-trunk
+    type: macvlan
+    mode: bridge
+    chainedPlugins:
+      - type: sbr
+    ipam:
+      type: dhcp
+  - name: matter-server-vlan5
+    interface: net2
+    mac: 02:40:67:9d:64:64
+    dhcpHostname: _stub_matter-server-lan
+    parentInterface: vlan5
+    nodeLabelKey: vlan5-trunk
     type: macvlan
     mode: bridge
     chainedPlugins:

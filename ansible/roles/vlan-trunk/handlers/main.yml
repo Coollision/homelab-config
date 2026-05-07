@@ -4,3 +4,9 @@
   ansible.builtin.systemd:
     name: systemd-networkd
     state: restarted
+
+- name: Apply sysctl settings
+  become: true
+  ansible.builtin.command: sysctl -p /etc/sysctl.d/99-vlan-thread-ipv6.conf
+  changed_when: false
+
