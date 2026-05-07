@@ -28,9 +28,14 @@ spec:
         - name: install-multus-shim
           image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
           command:
-            - cp
-            - /usr/src/multus-cni/bin/multus-shim
-            - /host{{ .Values.cni.shimBinDir }}/multus-shim
+            - sh
+            - -ec
+            - |
+              dest="/host{{ .Values.cni.shimBinDir }}/multus-shim"
+              if [ -e "$dest" ]; then
+                exit 0
+              fi
+              cp /usr/src/multus-cni/bin/multus-shim "$dest"
           volumeMounts:
             - name: shim-bin
               mountPath: /host{{ .Values.cni.shimBinDir }}
@@ -107,6 +112,7 @@ spec:
             - -ec
             - |
               mkdir -p /hostroot/run/cni
+              rm -f /hostroot/run/cni/dhcp.sock
               exec /host{{ .Values.cni.delegateBinDir }}/dhcp daemon -hostprefix /hostroot
           resources:
             requests:

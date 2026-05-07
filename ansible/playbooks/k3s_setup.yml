@@ -18,18 +18,32 @@
         dns_set_record: "{{ k3s_master_domain_name }}"
         dns_set_record_value: "{{ hostvars[k3s_primary_master].host_ip_address }}"
       run_once: true
+    - role: dns
+      vars:
+        dns_set_record: "{{ k3s_master_domain_name }}"
+        dns_set_record_value: "{{ hostvars[k3s_primary_master].host_ipv6_address }}"
+        dns_record_type: "AAAA"
+      when: (hostvars[k3s_primary_master].host_ipv6_address | default('') | length) > 0
+      run_once: true
     - k3s_master
     - role: dns
       vars:
         dns_set_record: "{{ k3s_master_domain_name }}"
         dns_set_record_value: "{% set hostIps = []%}{% for host in ansible_play_hosts %}{{ hostIps.append(hostvars[host].host_ip_address) }}{% endfor %}{{hostIps}}"
       run_once: true
+    - role: dns
+      vars:
+        dns_set_record: "{{ k3s_master_domain_name }}"
+        dns_set_record_value: "{% set hostIps = []%}{% for host in ansible_play_hosts %}{% if (hostvars[host].host_ipv6_address | default('') | length) > 0 %}{{ hostIps.append(hostvars[host].host_ipv6_address) }}{% endif %}{% endfor %}{{hostIps}}"
+        dns_record_type: "AAAA"
+      when: (hostvars[k3s_primary_master].host_ipv6_address | default('') | length) > 0
+      run_once: true
 
     - role: dns
       vars:
         dns_set_record: "ingress"
         dns_set_record_value: "{{ k3s_master_ingress_ip }}"
-        set_record_type: "A"
+        dns_record_type: "A"
       run_once: true
 
     - role: dns

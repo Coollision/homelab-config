@@ -6,6 +6,12 @@
       vars:
         dns_set_record: "{{ inventory_hostname }}"
         dns_set_record_value: "{{ host_ip_address }}"
+    - role: "dns"
+      vars:
+        dns_set_record: "{{ inventory_hostname }}"
+        dns_set_record_value: "{{ host_ipv6_address }}"
+        dns_record_type: "AAAA"
+      when: (host_ipv6_address | default('') | length) > 0
 
 # - name: Configure node basic things serially
 #   hosts: nodes

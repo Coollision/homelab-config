@@ -16,9 +16,14 @@
 - name: Update /etc/hosts
   ansible.builtin.include_tasks: ./ensureInHostsFile.yml
   vars:
-    set_addresses:
-      - 127.0.0.1: localhost
-      - 127.0.0.1: "{{ inventory_hostname }}"
-      - "{{ {host_ip_address: ansible_host} }}"
-      - 127.0.1.1: raspberrypi
+    set_addresses: >-
+      {{
+        [
+          {'127.0.0.1': 'localhost'},
+          {'127.0.0.1': inventory_hostname},
+          {host_ip_address: ansible_host},
+          {'127.0.1.1': 'raspberrypi'}
+        ]
+        + ([{host_ipv6_address: ansible_host}] if (host_ipv6_address is defined and (host_ipv6_address | length) > 0) else [])
+      }}
     set_expected_state: present
