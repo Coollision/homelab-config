@@ -3,7 +3,7 @@ server: https://{{ k3s_master_domain_name }}:6443
 write-kubeconfig-mode: "0644"
 token: {{ k3s_token }}
 
-node-external-ip: {{ host_ip_address }}
+node-external-ip: {{ ([host_ip_address] + ([host_ipv6_address] if (host_ipv6_address is defined and (host_ipv6_address | length) > 0) else [])) | join(',') }}
 flannel-backend: "vxlan"
 flannel-iface: "{{ k3s_flannel_iface | default('eth0') }}"
 flannel-external-ip: true
