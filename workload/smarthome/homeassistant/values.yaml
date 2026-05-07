@@ -123,6 +123,9 @@ homeassistant:
         - type: sbr
       ipam:
         type: dhcp
+        routes:
+          - dst: "::/0"
+            gw: ""
     - name: homeassistant-vlan5
       interface: net2
       mac: 02:40:67:9d:64:65
@@ -135,6 +138,9 @@ homeassistant:
         - type: sbr
       ipam:
         type: dhcp
+        routes:
+          - dst: "::/0"
+            gw: ""
 
   hostNetwork: false
   dnsPolicy: ClusterFirst

@@ -17,8 +17,8 @@ cni:
   # K3s ships the delegate CNI plugins (flannel, portmap, bridge, etc.) here.
   delegateBinDir: /var/lib/rancher/k3s/data/current/bin
   extraDelegatePlugins:
-    - macvlan
-    - dhcp
+    - macvlan    # Supported: IPv4 + IPv6 on VLAN parent interfaces
+    - dhcp       # Supports both DHCP (IPv4) and DHCPv6 when configured with routes
     - ipvlan
-    - sbr
-    - tuning
+    - sbr        # Source-based routing for multi-NIC support
+    - tuning     # Capability tuning (MAC address, MTU, etc.)

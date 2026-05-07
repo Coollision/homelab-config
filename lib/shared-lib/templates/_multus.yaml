@@ -1,4 +1,26 @@
 {{- define "shared-lib.multusNetworkNamesCsv" -}}
+{{- /* Multus NetworkAttachmentDefinition Helper Functions
+
+This template set provides flexible Multus secondary network configuration with support for:
+- IPv4 DHCP (default)
+- IPv6 DHCP via routes configuration (see example below)
+- Chained CNI plugins (sbr for source-based routing, tuning for MAC/MTU)
+
+IPv6 DHCP Example - Add to multusNetworks in values.yaml:
+  multusNetworks:
+    - name: example-vlan-ipv6
+      interface: net1
+      parentInterface: vlan40
+      type: macvlan
+      mode: bridge
+      ipam:
+        type: dhcp
+        routes:
+          - dst: "::/0"          # Request IPv6 route to enable DHCPv6
+            gw: ""               # Gateway will be learned from DHCPv6
+      chainedPlugins:
+        - type: sbr              # Enable source-based routing for multiple NICs
+*/ -}}
 {{- $names := list -}}
 {{- range $network := .Values.multusNetworks -}}
 {{- if not $network.name -}}
