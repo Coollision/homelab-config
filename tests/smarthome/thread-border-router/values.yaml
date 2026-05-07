@@ -8,6 +8,12 @@ statefulset:
     web: 8080
     rest: 8081
 
+securityContext:
+  capabilities:
+    add:
+      - NET_ADMIN
+      - SYS_ADMIN
+
 config:
   TZ: Europe/Brussels
   # OT_RCP_DEVICE: serial URL to the ZBT-2 Thread radio (symlink set by udev ansible role)
