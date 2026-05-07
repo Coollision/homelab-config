@@ -7,7 +7,7 @@ toolchain go1.26.2
 require (
 	github.com/aws/aws-sdk-go-v2 v1.41.7
 	github.com/aws/aws-sdk-go-v2/config v1.32.17
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.299.1
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.300.0
 	github.com/aws/aws-sdk-go-v2/service/rds v1.118.2
 	github.com/aws/smithy-go v1.25.1
 	k8s.io/api v0.36.0
