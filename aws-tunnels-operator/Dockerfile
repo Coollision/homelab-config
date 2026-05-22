@@ -1,4 +1,4 @@
-FROM amazon/aws-cli:2.34.48
+FROM amazon/aws-cli:2.34.52
 WORKDIR /
 ARG TARGETARCH
 COPY dist/manager-linux-${TARGETARCH} /manager
