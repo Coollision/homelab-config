@@ -143,7 +143,11 @@ recurringJobs:
     task: system-backup
     retain: 7
     parameters:
-      volume-backup-policy: if-not-present
+      # Manifest-only: per-volume data is handled by backup-daily / backup-weekly,
+      # which tag backups with a recurring-job label and prune via `retain`.
+      # system-backup with if-not-present spawns per-volume Backup CRs that carry
+      # no recurring-job label and are never pruned — they orphan forever.
+      volume-backup-policy: disabled
 
   # Purge orphaned/system snapshots that were never cleaned up.
   # Without this, disk usage grows unbounded over time even with retain limits.
