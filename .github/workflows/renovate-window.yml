@@ -1,0 +1,69 @@
+name: Renovate automerge (window)
+
+on:
+  schedule:
+    - cron: '0 1 * * *'
+    - cron: '30 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+  checks: read
+
+concurrency:
+  group: renovate-automerge
+  cancel-in-progress: false
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge eligible Renovate branches
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          REQUIRED_CHECKS: "YAML Lint,Validate Charts,Detect Changed Charts"
+        run: |
+          set -euo pipefail
+
+          mapfile -t pr_refs < <(gh api --paginate "repos/$REPO/pulls?state=open&base=master&per_page=100" --jq '.[].head.ref')
+          mapfile -t branches < <(gh api --paginate "repos/$REPO/branches?per_page=100" --jq '.[].name' | grep '^renovate/master-' || true)
+
+          if [[ ${#branches[@]} -eq 0 ]]; then
+            echo "No renovate/master-* branches found."
+            exit 0
+          fi
+
+          IFS=',' read -ra required <<< "$REQUIRED_CHECKS"
+
+          for br in "${branches[@]}"; do
+            for pr_ref in "${pr_refs[@]:-}"; do
+              if [[ "$pr_ref" == "$br" ]]; then
+                echo "skip $br (open PR for manual review)"
+                continue 2
+              fi
+            done
+
+            sha=$(gh api "repos/$REPO/branches/$br" --jq '.commit.sha')
+            check_runs=$(gh api "repos/$REPO/commits/$sha/check-runs?per_page=100" --jq '[.check_runs[] | {name, status, conclusion}]')
+
+            ok=1
+            for req in "${required[@]}"; do
+              concl=$(echo "$check_runs" | jq -r --arg n "$req" '[.[] | select(.name == $n) | .conclusion] | .[0] // "missing"')
+              if [[ "$concl" != "success" ]]; then
+                echo "skip $br ($req=$concl)"
+                ok=0
+                break
+              fi
+            done
+            [[ $ok -eq 1 ]] || continue
+
+            echo "merging $br -> master ($sha)"
+            if gh api -X PATCH "repos/$REPO/git/refs/heads/master" -f sha="$sha" -F force=false >/dev/null; then
+              echo "  merged $br"
+              gh api -X DELETE "repos/$REPO/git/refs/heads/$br" >/dev/null 2>&1 || true
+            else
+              echo "  fast-forward failed for $br (likely behind master, Renovate will rebase)"
+            fi
+          done
