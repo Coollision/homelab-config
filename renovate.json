@@ -1,4 +1,4 @@
-{
+ {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended", ":timezone(Europe/Brussels)"],
   "schedule": ["after 7pm and before 10pm"],
@@ -16,7 +16,7 @@
       "automergeType": "branch",
       "ignoreTests": true,
       "matchUpdateTypes": ["patch", "minor"],
-      "automergeSchedule": ["after 1am and before 4am"]
+      "automergeSchedule": ["after 1am and before 5am"]
     },
     {
       "description": "Workload - automerge patch only",
@@ -26,7 +26,7 @@
       "automergeType": "branch",
       "ignoreTests": true,
       "matchUpdateTypes": ["patch"],
-      "automergeSchedule": ["after 1am and before 4am"]
+      "automergeSchedule": ["after 1am and before 5am"]
     },
     {
       "description": "Operator branch - weekly grouped minor and patch updates",
