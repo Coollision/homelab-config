@@ -4,7 +4,7 @@ homeassistantdb:
   statefulset:
     image:
       repository: mariadb
-      tag: 12.2.2
+      tag: 12.3.2
     ports:
       mysql: 3306
     args:
