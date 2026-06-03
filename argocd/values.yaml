@@ -209,8 +209,18 @@ argo-cd:
       server.disable.auth: false
       server.repo.server.timeout.seconds: "300"
       controller.repo.server.timeout.seconds: "300"
-      # Limit concurrent manifest generation to prevent OOM during cache invalidation (e.g. force push)
-      reposerver.parallelism.limit: "2"
+      # CONCURRENCY CONTROL FOR THE CMP SIDECAR.
+      # NOTE: reposerver.parallelism.limit / --parallelismlimit does NOT bound
+      # manifest generation done by sidecar Config Management Plugins (verified:
+      # set to 1, still 11 concurrent lovely renders -> OOM). It only limits native
+      # (non-plugin) generation. With a CMP, the ONLY effective concurrency cap is
+      # the application-controller's processors below: they gate how many apps
+      # reconcile/sync at once, which is what drives concurrent GenerateManifest
+      # calls into the sidecar. Keep these low so the lean repo-server can't be
+      # swamped by an all-apps burst (e.g. on a repo-server restart).
+      controller.status.processors: "2"
+      controller.operation.processors: "2"
+      reposerver.parallelism.limit: "1"
       reposerver.git.lsremote.parallelism.limit: "2"
       # Extend cache expiration for monorepo stability (default 3m)
       reposerver.revision.cache.expiration: "15m"
@@ -279,7 +289,11 @@ argo-cd:
     enabled: false
 
   repoServer:
-    replicas: 2
+    # Single replica is plenty for a homelab now that renders are light/fast
+    # (~150-420Mi, seconds each) and the Bitnami index hog is gone. Trade-off:
+    # a brief render gap during pod restarts and serial cold-sync of all apps
+    # (parallelism.limit=1). Bump back to 2 if HA/throughput is ever needed.
+    replicas: 1
     affinity:
       nodeAffinity:
         preferredDuringSchedulingIgnoredDuringExecution:
@@ -290,13 +304,15 @@ argo-cd:
               operator: NotIn
               values:
               - rpi
-    # resources:
-    #   requests:
-    #     memory: 512Mi
-    #     cpu: 250m
-    #   limits:
-    #     memory: 1536Mi
-    #     cpu: 1500m
+    resources:
+      requests:
+        memory: 128Mi
+        cpu: 100m
+      limits:
+        # The repo-server main container only orchestrates git + tars files to the
+        # CMP sidecar (steady-state ~90Mi); the heavy lifting is in the avp sidecar.
+        # No CPU limit so git/tar streaming isn't throttled.
+        memory: 512Mi
     serviceAccount:
       name: argocd-role
     env:
@@ -313,8 +329,13 @@ argo-cd:
           - secretRef:
               name: argocd-vault-replacer-credentials
         env:
+          # Bounds the lovely-plugin's own Go heap below the cgroup limit (512Mi).
+          # The real peak is the helm subprocess (separate process, not governed
+          # by this): now that the Bitnami classic-index dep moved to OCI, the
+          # worst dep-resolution is prometheus-community (~177Mi) + template.
+          # (Old 1100MiB was ABOVE the old 1Gi limit, so Go GC never engaged.)
           - name: GOMEMLIMIT
-            value: "1100MiB"
+            value: "512MiB"
           - name: GOGC
             value: "50"
           - name: ARGOCD_EXEC_TIMEOUT
@@ -325,13 +346,22 @@ argo-cd:
             value: "300"
           - name: VAULT_CLIENT_TIMEOUT
             value: "300s"
-        # resources:
-        #   requests:
-        #     memory: 512Mi
-        #     cpu: 200m
-        #   limits:
-        #     memory: 1Gi
-        #     cpu: 200m
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 250m
+          limits:
+            # Sized to controller.{status,operation}.processors=2 (the real CMP
+            # concurrency cap — parallelismlimit is ineffective for sidecar plugins).
+            # Measured: 2 concurrent renders peak ~509Mi (~80% of 640). Validated
+            # stable (46/46 synced, 0 restarts) through a full Argo restart / Redis
+            # flush burst. In-pod refs: Bitnami classic index = 541Mi, OCI pull =
+            # 61Mi, heaviest helm template (kube-prometheus-stack) = ~227Mi.
+            memory: 640Mi
+            # No CPU limit on purpose: a 200m cap throttled helm/kustomize so
+            # badly that renders hit the 300s deadline and piled up, each holding
+            # its memory the whole time -> the real cause of the OOMKills. Letting
+            # renders burst to finish in seconds frees memory far faster.
         securityContext:
           runAsNonRoot: true
           runAsUser: 999
