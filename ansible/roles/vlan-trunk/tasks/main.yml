@@ -222,3 +222,26 @@
   when:
     - _vlan_trunk_interfaces | length > 0
     - _vlan_trunk_active_network_manager == 'ifupdown'
+
+- name: Configure Thread IPv6 settings for Router Advertisement support
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/99-vlan-thread-ipv6.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Thread/Matter IPv6 configuration for Router Advertisement support
+      # Thread Border Routers send IPv6 RAs to advertise routes. These settings
+      # allow the host and pods to accept those RAs for proper Thread routing.
+      net.ipv6.conf.all.forwarding = 0
+      {% for iface in vlan_trunk_thread_interfaces -%}
+      net.ipv6.conf.{{ iface }}.accept_ra = 1
+      net.ipv6.conf.{{ iface }}.accept_ra_rt_info_max_plen = 64
+      {% endfor %}
+  notify: Apply sysctl settings
+  when:
+    - _vlan_trunk_interfaces | length > 0
+    - vlan_trunk_enable_thread_ipv6 | bool
+    - vlan_trunk_thread_interfaces | length > 0
+
