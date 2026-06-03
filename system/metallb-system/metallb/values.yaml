@@ -1,5 +1,7 @@
 metallb:
   fullnameOverride: metallb
+  frrk8s:
+    enabled: false
   frr-k8s:
     prometheus:
       serviceMonitor:
