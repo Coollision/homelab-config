@@ -209,8 +209,11 @@ argo-cd:
       server.disable.auth: false
       server.repo.server.timeout.seconds: "300"
       controller.repo.server.timeout.seconds: "300"
-      # Limit concurrent manifest generation to prevent OOM during cache invalidation (e.g. force push)
-      reposerver.parallelism.limit: "2"
+      # One manifest generation at a time per replica: a single render peaks ~150Mi,
+      # so the sidecar never stacks concurrent renders (the real OOM trigger). With 2
+      # replicas the cluster still renders 2 apps in parallel, and renders are fast
+      # now that the CMP sidecar isn't CPU-throttled, so cold sync stays quick.
+      reposerver.parallelism.limit: "1"
       reposerver.git.lsremote.parallelism.limit: "2"
       # Extend cache expiration for monorepo stability (default 3m)
       reposerver.revision.cache.expiration: "15m"
@@ -290,13 +293,15 @@ argo-cd:
               operator: NotIn
               values:
               - rpi
-    # resources:
-    #   requests:
-    #     memory: 512Mi
-    #     cpu: 250m
-    #   limits:
-    #     memory: 1536Mi
-    #     cpu: 1500m
+    resources:
+      requests:
+        memory: 128Mi
+        cpu: 100m
+      limits:
+        # The repo-server main container only orchestrates git + tars files to the
+        # CMP sidecar (steady-state ~90Mi); the heavy lifting is in the avp sidecar.
+        # No CPU limit so git/tar streaming isn't throttled.
+        memory: 512Mi
     serviceAccount:
       name: argocd-role
     env:
@@ -313,8 +318,13 @@ argo-cd:
           - secretRef:
               name: argocd-vault-replacer-credentials
         env:
+          # Bounds the lovely-plugin's own Go heap below the cgroup limit (512Mi).
+          # The real peak is the helm subprocess (separate process, not governed
+          # by this): now that the Bitnami classic-index dep moved to OCI, the
+          # worst dep-resolution is prometheus-community (~177Mi) + template.
+          # (Old 1100MiB was ABOVE the old 1Gi limit, so Go GC never engaged.)
           - name: GOMEMLIMIT
-            value: "1100MiB"
+            value: "400MiB"
           - name: GOGC
             value: "50"
           - name: ARGOCD_EXEC_TIMEOUT
@@ -325,13 +335,22 @@ argo-cd:
             value: "300"
           - name: VAULT_CLIENT_TIMEOUT
             value: "300s"
-        # resources:
-        #   requests:
-        #     memory: 512Mi
-        #     cpu: 200m
-        #   limits:
-        #     memory: 1Gi
-        #     cpu: 200m
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 250m
+          limits:
+            # 512Mi: with the Bitnami classic index gone (moved to OCI) the worst
+            # cold render is now ~177Mi dep-resolution (prometheus-community) +
+            # ~150Mi template + ~50Mi lovely/vault overhead ≈ 350Mi peak. 512Mi
+            # leaves headroom; parallelism=1 keeps it to one render per replica.
+            # Measured in-pod: Bitnami classic index refresh = 541Mi, OCI pull =
+            # 61Mi; pure `helm template` of the heaviest chart = ~150Mi.
+            memory: 512Mi
+            # No CPU limit on purpose: a 200m cap throttled helm/kustomize so
+            # badly that renders hit the 300s deadline and piled up, each holding
+            # its memory the whole time -> the real cause of the OOMKills. Letting
+            # renders burst to finish in seconds frees memory far faster.
         securityContext:
           runAsNonRoot: true
           runAsUser: 999
