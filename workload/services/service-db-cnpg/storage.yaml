@@ -1,0 +1,54 @@
+# Named, backup-labeled Longhorn volume for the CNPG cluster (matches the
+# shared-lib.longhorn static-provisioning convention: named Volume CR + static PV
+# + recurring backup/snapshot labels + protect). CNPG binds its PVC to this PV.
+apiVersion: longhorn.io/v1beta2
+kind: Volume
+metadata:
+  name: service-db-pg-data
+  namespace: storage
+  annotations:
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false
+  labels:
+    protect: "true"
+    backup-type: daily
+    recurring-job.longhorn.io/backup-daily: enabled
+    recurring-job.longhorn.io/snapshot-2h: enabled
+    recurring-job-group.longhorn.io/default: enabled
+spec:
+  accessMode: rwo
+  dataEngine: v1
+  dataLocality: best-effort
+  frontend: blockdev
+  numberOfReplicas: 3
+  size: "10737418240"
+  diskSelector: []
+  nodeSelector: []
+  replicaAutoBalance: ignored
+  revisionCounterDisabled: true
+  snapshotDataIntegrity: ignored
+  Standby: false
+  migratable: false
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: service-db-pg-data
+  annotations:
+    longhorn.io/volume-name: service-db-pg-data
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false
+spec:
+  capacity:
+    storage: 10Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: longhorn
+  csi:
+    driver: driver.longhorn.io
+    fsType: ext4
+    volumeHandle: service-db-pg-data
+  # Pre-bind to the PVC CNPG will create for instance 1, so binding is deterministic.
+  claimRef:
+    namespace: services
+    name: service-db-pg-1
