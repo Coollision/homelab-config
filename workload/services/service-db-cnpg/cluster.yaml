@@ -1,0 +1,75 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: service-db-pg
+  namespace: services
+spec:
+  instances: 1
+  # Operator default image (PG 18.x) — same major as the 18.4 source, so the
+  # logical monolith import (pg_dump/restore) is compatible.
+  storage:
+    size: 10Gi
+    storageClass: longhorn
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+  # One-time bootstrap: pull ALL databases + roles from the live Bitnami DB via
+  # pg_dump/restore. The old cluster is untouched (read-only dump) -> reversible.
+  bootstrap:
+    initdb:
+      import:
+        type: monolith
+        databases:
+          - "*"
+        roles:
+          - "*"
+        source:
+          externalCluster: bitnami-old
+
+  externalClusters:
+    - name: bitnami-old
+      connectionParameters:
+        host: service-db-postgresql-hl
+        user: postgres
+        dbname: postgres
+        port: "5432"
+        sslmode: prefer
+      password:
+        name: pg-bitnami-superuser
+        key: password
+
+  # Declarative user/password lifecycle (the goal). Passwords come from Vault-backed
+  # secrets = the same creds the *arr apps already use, so no app change needed.
+  # To deprovision a user later: set ensure: absent (its database/data is untouched).
+  managed:
+    roles:
+      - name: sonarr_user
+        ensure: present
+        login: true
+        passwordSecret:
+          name: pgrole-sonarr
+      - name: radarr_user
+        ensure: present
+        login: true
+        passwordSecret:
+          name: pgrole-radarr
+      - name: prowlarr_user
+        ensure: present
+        login: true
+        passwordSecret:
+          name: pgrole-prowlarr
+      - name: bazarr_user
+        ensure: present
+        login: true
+        passwordSecret:
+          name: pgrole-bazarr
+      - name: jellyseerr_user
+        ensure: present
+        login: true
+        passwordSecret:
+          name: pgrole-jellyseerr

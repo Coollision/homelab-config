@@ -1,0 +1,11 @@
+apiVersion: v2
+name: cloudnative-pg
+description: CloudNativePG operator (declarative Postgres clusters, databases and roles)
+type: application
+version: 0.1.0
+appVersion: "1.29.1"
+dependencies:
+  - name: cloudnative-pg
+    version: 0.28.2
+    # OCI registry (single chart, no huge classic index to parse)
+    repository: oci://ghcr.io/cloudnative-pg/charts

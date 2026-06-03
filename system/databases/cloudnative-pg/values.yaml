@@ -1,0 +1,19 @@
+cloudnative-pg:
+  # Operator manages its own CRDs (Cluster, Database, Publication, ...)
+  crds:
+    create: true
+
+  # Minimal install: just declarative cluster/database/role provisioning.
+  # No metrics/dashboards yet (can be enabled later without disruption).
+  monitoring:
+    podMonitorEnabled: false
+    grafanaDashboard:
+      create: false
+
+  # Lean footprint for a homelab single-cluster controller.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 100Mi
+    limits:
+      memory: 200Mi
