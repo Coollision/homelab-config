@@ -328,7 +328,7 @@ argo-cd:
           # worst dep-resolution is prometheus-community (~177Mi) + template.
           # (Old 1100MiB was ABOVE the old 1Gi limit, so Go GC never engaged.)
           - name: GOMEMLIMIT
-            value: "400MiB"
+            value: "512MiB"
           - name: GOGC
             value: "50"
           - name: ARGOCD_EXEC_TIMEOUT
@@ -344,13 +344,13 @@ argo-cd:
             memory: 128Mi
             cpu: 250m
           limits:
-            # 512Mi: with the Bitnami classic index gone (moved to OCI) the worst
-            # cold render is now ~177Mi dep-resolution (prometheus-community) +
-            # ~150Mi template + ~50Mi lovely/vault overhead ≈ 350Mi peak. 512Mi
-            # leaves headroom; parallelism=1 keeps it to one render per replica.
-            # Measured in-pod: Bitnami classic index refresh = 541Mi, OCI pull =
-            # 61Mi; pure `helm template` of the heaviest chart = ~150Mi.
-            memory: 512Mi
+            # 640Mi: with the Bitnami classic index gone (moved to OCI) the worst
+            # cold render is ~177Mi dep-resolution (prometheus-community) + ~150Mi
+            # template + overhead. As the SINGLE replica, all renders funnel here
+            # back-to-back on cold sync; measured peak under that load was ~509Mi
+            # (512Mi OOM'd), so 640Mi gives real headroom. Measured in-pod:
+            # Bitnami classic index = 541Mi, OCI pull = 61Mi, helm template = ~150Mi.
+            memory: 640Mi
             # No CPU limit on purpose: a 200m cap throttled helm/kustomize so
             # badly that renders hit the 300s deadline and piled up, each holding
             # its memory the whole time -> the real cause of the OOMKills. Letting
