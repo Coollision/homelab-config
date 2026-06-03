@@ -1,0 +1,100 @@
+fullnameOverride: matter-server
+
+statefulset:
+  image:
+    repository: ghcr.io/matter-js/matterjs-server
+    tag: 0.7.1
+  ports:
+    ws: 5580
+
+config:
+  TZ: Europe/Brussels
+  STORAGE_PATH: /data
+  PRIMARY_INTERFACE: net1
+  LOG_LEVEL: debug
+
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+
+initContainers:
+  - name: setup-thread-route
+    image: busybox:1.35
+    command:
+      - sh
+      - -c
+      - |
+        sleep 5
+        ip -6 route replace fd77:3621:418:1::/64 via fe80::40:67ff:fe9d:6464 dev net1 || true
+    securityContext:
+      runAsUser: 0
+      runAsGroup: 0
+      capabilities:
+        add:
+          - NET_ADMIN
+
+multusNetworks:
+  - name: matter-server-vlan40
+    interface: net1
+    mac: 02:40:67:9d:64:63
+    dhcpHostname: _stub_matter-server-iot
+    parentInterface: vlan40
+    nodeLabelKey: vlan40-trunk
+    type: macvlan
+    mode: bridge
+    chainedPlugins:
+      - type: sbr
+    ipam:
+      type: dhcp
+  - name: matter-server-vlan5
+    interface: net2
+    mac: 02:40:67:9d:64:64
+    dhcpHostname: _stub_matter-server-lan
+    parentInterface: vlan5
+    nodeLabelKey: vlan5-trunk
+    type: macvlan
+    mode: bridge
+    chainedPlugins:
+      - type: sbr
+    ipam:
+      type: dhcp
+
+storage:
+  - mountPath: /data
+    type: longhorn
+    size: 1Gi
+    volumeName: matter-server
+    nameSuffix: data
+    protect: true
+
+probes:
+  liveness:
+    httpGet:
+      path: /health
+      port: ws
+    initialDelaySeconds: 30
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 5
+  readiness:
+    httpGet:
+      path: /health
+      port: ws
+    initialDelaySeconds: 15
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+labels:
+  app.kubernetes.io/component: matter-server
