@@ -282,7 +282,11 @@ argo-cd:
     enabled: false
 
   repoServer:
-    replicas: 2
+    # Single replica is plenty for a homelab now that renders are light/fast
+    # (~150-420Mi, seconds each) and the Bitnami index hog is gone. Trade-off:
+    # a brief render gap during pod restarts and serial cold-sync of all apps
+    # (parallelism.limit=1). Bump back to 2 if HA/throughput is ever needed.
+    replicas: 1
     affinity:
       nodeAffinity:
         preferredDuringSchedulingIgnoredDuringExecution:
