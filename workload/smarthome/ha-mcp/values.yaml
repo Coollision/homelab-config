@@ -1,0 +1,76 @@
+fullnameOverride: ha-mcp
+deployment:
+  image:
+    repository: ghcr.io/homeassistant-ai/ha-mcp
+    tag: 7.6.0
+  # Run the OAuth 2.1 transport instead of the default stdio transport.
+  # Each client logs in via a browser consent flow (Dynamic Client Registration)
+  # and gets its own revocable token. Passed as args (= docker CMD) so the image's
+  # own entrypoint is preserved, matching `docker run <image> ha-mcp-oauth`.
+  args:
+    - ha-mcp-oauth
+  ports:
+    web: 8086
+
+config:
+  TZ: Europe/Brussels
+
+  # ha-mcp -> Home Assistant. Stays inside the cluster network; never crosses the LAN.
+  # In OAuth mode the HA token is NOT configured here: each client supplies its own
+  # long-lived access token through the browser consent form at first login.
+  HOMEASSISTANT_URL: http://homeassistant-service:8123
+
+  # Public-facing base URL the clients connect to, and where the OAuth /authorize,
+  # /token and /register endpoints live. MUST exactly match the ingress host below
+  # (scheme + host), or the OAuth redirects break.
+  MCP_BASE_URL: https://ha-mcp.<secret:kv/data/domains~domain>
+
+  # Persists the key that signs/encrypts issued OAuth tokens across pod restarts,
+  # so clients don't have to re-login every time the pod is rescheduled.
+  # Vault value = output of `openssl rand -base64 32`.
+  OAUTH_ENCRYPTION_KEY: <secret:kv/data/smarthome/ha-mcp~oauth-encryption-key>
+
+  # HTTP listener binding (must match deployment.ports.web).
+  MCP_PORT: "8086"
+
+# Hardened container context. ha-mcp is a stateless Python service and needs no extra caps.
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+# LAN access for multiple PCs over TLS, internal only (websecure entrypoint, no external ingress).
+# Reuses the wildcard cert for the internal domain that homeassistant already uses.
+ingress_internal_secure:
+  host: ha-mcp.<secret:kv/data/domains~domain>
+  port: web
+
+# The MCP endpoint rejects bare requests (anything without the secret path), so HTTP GET
+# probes would fail health checks. A TCP check on the listening port is the correct signal.
+probes:
+  liveness:
+    tcpSocket:
+      port: web
+    initialDelaySeconds: 20
+    periodSeconds: 20
+    timeoutSeconds: 5
+    failureThreshold: 4
+  readiness:
+    tcpSocket:
+      port: web
+    initialDelaySeconds: 10
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 4
+
+resources:
+  requests:
+    memory: "96Mi"
+    cpu: "50m"
+  limits:
+    memory: "384Mi"
+    cpu: "500m"
+
+labels:
+  app.kubernetes.io/component: ha-mcp
