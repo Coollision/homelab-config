@@ -72,7 +72,7 @@ Run this from the repository root to reboot every node in the `k3scluster` inven
 cd ansible && ansible k3scluster -b -m ansible.builtin.reboot
 ```
 
-### Restart all pods with restart count higher than 2
+### Restart all pods with restart count higher than 1
 
 This only deletes pods that look safe to recreate automatically:
 

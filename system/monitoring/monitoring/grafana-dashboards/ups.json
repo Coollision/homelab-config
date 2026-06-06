@@ -1,566 +1,2591 @@
 {
-  "annotations": {
-    "list": [
-      {
-        "builtIn": 1,
-        "datasource": {
-          "type": "grafana",
-          "uid": "-- Grafana --"
-        },
+  "annotations": [
+    {
+      "kind": "AnnotationQuery",
+      "spec": {
+        "builtIn": true,
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
         "name": "Annotations & Alerts",
-        "type": "dashboard"
+        "query": {
+          "datasource": {
+            "name": "-- Grafana --"
+          },
+          "group": "grafana",
+          "kind": "DataQuery",
+          "spec": {},
+          "version": "v0"
+        }
       }
-    ]
-  },
-  "editable": true,
-  "fiscalYearStartMonth": 0,
-  "graphTooltip": 0,
-  "links": [],
-  "panels": [
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 9,
-        "x": 0,
-        "y": 0
-      },
-      "id": 1,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "horizontal",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "/.*/",
-          "values": false
-        },
-        "showPercentChange": false,
-        "text": {
-          "titleSize": 14,
-          "valueSize": 14
-        },
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "pluginVersion": "12.4.1",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "synology_upsDeviceManufacturer",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "__auto",
-          "range": false,
-          "refId": "E"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "builder",
-          "exemplar": false,
-          "expr": "synology_upsBatteryMfrDate",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "__auto",
-          "range": false,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "synology_upsInputTransferReason",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "__auto",
-          "range": false,
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "synology_upsDeviceModel",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "__auto",
-          "range": false,
-          "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "synology_upsBatteryType",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "__auto",
-          "range": false,
-          "refId": "D"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "synology_upsDeviceSerial",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "__auto",
-          "range": false,
-          "refId": "F"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "synology_upsDeviceType",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "__auto",
-          "range": false,
-          "refId": "G"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "synology_upsDriverVersion",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "__auto",
-          "range": false,
-          "refId": "H"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "synology_upsInfoBeeperStatus",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "__auto",
-          "range": false,
-          "refId": "I"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "synology_upsInfoStatus",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "__auto",
-          "range": false,
-          "refId": "J"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "synology_upsInfoTestResult",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "__auto",
-          "range": false,
-          "refId": "K"
-        }
-      ],
-      "title": "Panel Title",
-      "transformations": [
-        {
-          "id": "joinByField",
-          "options": {
-            "byField": "Time",
-            "mode": "outer"
-          }
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "Value #A": true,
-              "Value #B": true,
-              "Value #C": true,
-              "Value #D": true,
-              "Value #E": true,
-              "Value #F": true,
-              "Value #G": true,
-              "Value #H": true,
-              "Value #I": true,
-              "Value #J": true,
-              "Value #K": true,
-              "__name__": true,
-              "__name__ 1": true,
-              "__name__ 3": true,
-              "__name__ 6": true,
-              "__name__ 7": true,
-              "container": true,
-              "container 1": true,
-              "container 2": true,
-              "container 3": true,
-              "container 6": true,
-              "container 7": true,
-              "container 8": true,
-              "endpoint": true,
-              "endpoint 1": true,
-              "endpoint 2": true,
-              "endpoint 3": true,
-              "endpoint 6": true,
-              "endpoint 7": true,
-              "endpoint 8": true,
-              "instance": true,
-              "instance 1": true,
-              "instance 2": true,
-              "instance 3": true,
-              "instance 6": true,
-              "instance 7": true,
-              "job": true,
-              "job 1": true,
-              "job 2": true,
-              "job 3": true,
-              "job 6": true,
-              "job 7": true,
-              "namespace": true,
-              "namespace 1": true,
-              "namespace 2": true,
-              "namespace 3": true,
-              "namespace 5": true,
-              "namespace 6": true,
-              "namespace 7": true,
-              "pod": true,
-              "pod 1": true,
-              "pod 2": true,
-              "pod 3": true,
-              "pod 5": true,
-              "pod 6": true,
-              "pod 7": true,
-              "service": true,
-              "service 1": true,
-              "service 2": true,
-              "service 3": true,
-              "service 5": true,
-              "service 6": true,
-              "service 7": true,
-              "service 8": true,
-              "synology_upsBatteryMfrDate": true,
-              "synology_upsDeviceManufacturer": false,
-              "{__name__=\"synology_upsDriverName\", container=\"snmp-exporter\", endpoint=\"snmp-exporter-metrics\", instance=\"Gobelijn\", job=\"snmp-exporter\", namespace=\"monitoring\", pod=\"snmp-exporter-6bc5d9d79f-jksq7\", service=\"snmp-exporter\", synology_upsDriverName=\"usbhid-ups\"}": false,
-              "{__name__=\"synology_upsInfoBeeperStatus\", container=\"snmp-exporter\", endpoint=\"snmp-exporter-metrics\", instance=\"Gobelijn\", job=\"snmp-exporter\", namespace=\"monitoring\", pod=\"snmp-exporter-6bc5d9d79f-jksq7\", service=\"snmp-exporter\", synology_upsInfoBeeperStatus=\"disabled\"}": false
-            },
-            "indexByName": {
-              "Time": 11,
-              "Value #A": 29,
-              "Value #B": 38,
-              "Value #C": 47,
-              "Value #D": 56,
-              "Value #E": 20,
-              "Value #F": 65,
-              "Value #G": 74,
-              "Value #H": 83,
-              "Value #I": 92,
-              "Value #J": 101,
-              "Value #K": 110,
-              "__name__ 1": 12,
-              "__name__ 10": 93,
-              "__name__ 11": 102,
-              "__name__ 2": 21,
-              "__name__ 3": 30,
-              "__name__ 4": 39,
-              "__name__ 5": 48,
-              "__name__ 6": 57,
-              "__name__ 7": 66,
-              "__name__ 8": 75,
-              "__name__ 9": 84,
-              "container 1": 13,
-              "container 10": 94,
-              "container 11": 103,
-              "container 2": 22,
-              "container 3": 31,
-              "container 4": 40,
-              "container 5": 49,
-              "container 6": 58,
-              "container 7": 67,
-              "container 8": 76,
-              "container 9": 85,
-              "endpoint 1": 14,
-              "endpoint 10": 95,
-              "endpoint 11": 104,
-              "endpoint 2": 23,
-              "endpoint 3": 32,
-              "endpoint 4": 41,
-              "endpoint 5": 50,
-              "endpoint 6": 59,
-              "endpoint 7": 68,
-              "endpoint 8": 77,
-              "endpoint 9": 86,
-              "instance 1": 15,
-              "instance 10": 96,
-              "instance 11": 105,
-              "instance 2": 24,
-              "instance 3": 33,
-              "instance 4": 42,
-              "instance 5": 51,
-              "instance 6": 60,
-              "instance 7": 69,
-              "instance 8": 78,
-              "instance 9": 87,
-              "job 1": 16,
-              "job 10": 97,
-              "job 11": 106,
-              "job 2": 25,
-              "job 3": 34,
-              "job 4": 43,
-              "job 5": 52,
-              "job 6": 61,
-              "job 7": 70,
-              "job 8": 79,
-              "job 9": 88,
-              "namespace 1": 17,
-              "namespace 10": 98,
-              "namespace 11": 107,
-              "namespace 2": 26,
-              "namespace 3": 35,
-              "namespace 4": 44,
-              "namespace 5": 53,
-              "namespace 6": 62,
-              "namespace 7": 71,
-              "namespace 8": 80,
-              "namespace 9": 89,
-              "pod 1": 18,
-              "pod 10": 99,
-              "pod 11": 108,
-              "pod 2": 27,
-              "pod 3": 36,
-              "pod 4": 45,
-              "pod 5": 54,
-              "pod 6": 63,
-              "pod 7": 72,
-              "pod 8": 81,
-              "pod 9": 90,
-              "service 1": 19,
-              "service 10": 100,
-              "service 11": 109,
-              "service 2": 28,
-              "service 3": 37,
-              "service 4": 46,
-              "service 5": 55,
-              "service 6": 64,
-              "service 7": 73,
-              "service 8": 82,
-              "service 9": 91,
-              "synology_upsBatteryMfrDate": 10,
-              "synology_upsBatteryType": 4,
-              "synology_upsDeviceManufacturer": 1,
-              "synology_upsDeviceModel": 2,
-              "synology_upsDeviceSerial": 3,
-              "synology_upsDeviceType": 0,
-              "synology_upsDriverVersion": 5,
-              "synology_upsInfoBeeperStatus": 7,
-              "synology_upsInfoStatus": 6,
-              "synology_upsInfoTestResult": 8,
-              "synology_upsInputTransferReason": 9
-            },
-            "renameByName": {
-              "{__name__=\"synology_upsBatteryMfrDate\", container=\"snmp-exporter\", endpoint=\"snmp-exporter-metrics\", instance=\"Gobelijn\", job=\"snmp-exporter\", namespace=\"monitoring\", pod=\"snmp-exporter-6bc5d9d79f-jksq7\", service=\"snmp-exporter\", synology_upsBatteryMfrDate=\"2001/01/01\"}": "",
-              "{__name__=\"synology_upsInfoBeeperStatus\", container=\"snmp-exporter\", endpoint=\"snmp-exporter-metrics\", instance=\"Gobelijn\", job=\"snmp-exporter\", namespace=\"monitoring\", pod=\"snmp-exporter-6bc5d9d79f-jksq7\", service=\"snmp-exporter\", synology_upsInfoBeeperStatus=\"disabled\"}": ""
-            }
-          }
-        }
-      ],
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "showValues": false,
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "m"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 15,
-        "x": 9,
-        "y": 0
-      },
-      "id": 2,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.4.1",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "sum without(pod)(synology_upsBatteryRuntimeValue) / 60",
-          "legendFormat": "{{__name__}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Panel Title",
-      "type": "timeseries"
     }
   ],
-  "preload": false,
-  "refresh": "30s",
-  "schemaVersion": 42,
-  "tags": [],
-  "templating": {
-    "list": [
-      {
-        "baseFilters": [],
-        "datasource": {
-          "type": "prometheus",
-          "uid": "prometheus"
+  "cursorSync": "Off",
+  "editable": true,
+  "elements": {
+    "panel-1": {
+      "kind": "Panel",
+      "spec": {
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "exemplar": false,
+                      "expr": "synology_upsDeviceManufacturer",
+                      "format": "table",
+                      "instant": true,
+                      "legendFormat": "__auto",
+                      "range": false
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "E"
+                }
+              },
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "builder",
+                      "exemplar": false,
+                      "expr": "synology_upsBatteryMfrDate",
+                      "format": "table",
+                      "instant": true,
+                      "legendFormat": "__auto",
+                      "range": false
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "A"
+                }
+              },
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "exemplar": false,
+                      "expr": "synology_upsInputTransferReason",
+                      "format": "table",
+                      "instant": true,
+                      "legendFormat": "__auto",
+                      "range": false
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "B"
+                }
+              },
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "exemplar": false,
+                      "expr": "synology_upsDeviceModel",
+                      "format": "table",
+                      "instant": true,
+                      "legendFormat": "__auto",
+                      "range": false
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "C"
+                }
+              },
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "exemplar": false,
+                      "expr": "synology_upsBatteryType",
+                      "format": "table",
+                      "instant": true,
+                      "legendFormat": "__auto",
+                      "range": false
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "D"
+                }
+              },
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "exemplar": false,
+                      "expr": "synology_upsDeviceSerial",
+                      "format": "table",
+                      "instant": true,
+                      "legendFormat": "__auto",
+                      "range": false
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "F"
+                }
+              },
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "exemplar": false,
+                      "expr": "synology_upsDeviceType",
+                      "format": "table",
+                      "instant": true,
+                      "legendFormat": "__auto",
+                      "range": false
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "G"
+                }
+              },
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "exemplar": false,
+                      "expr": "synology_upsDriverVersion",
+                      "format": "table",
+                      "instant": true,
+                      "legendFormat": "__auto",
+                      "range": false
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "H"
+                }
+              },
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "exemplar": false,
+                      "expr": "synology_upsInfoBeeperStatus",
+                      "format": "table",
+                      "instant": true,
+                      "legendFormat": "__auto",
+                      "range": false
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "I"
+                }
+              },
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "exemplar": false,
+                      "expr": "synology_upsInfoStatus",
+                      "format": "table",
+                      "instant": true,
+                      "legendFormat": "__auto",
+                      "range": false
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "J"
+                }
+              },
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "exemplar": false,
+                      "expr": "synology_upsInfoTestResult",
+                      "format": "table",
+                      "instant": true,
+                      "legendFormat": "__auto",
+                      "range": false
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "K"
+                }
+              }
+            ],
+            "queryOptions": {},
+            "transformations": [
+              {
+                "group": "joinByField",
+                "kind": "Transformation",
+                "spec": {
+                  "options": {
+                    "byField": "Time",
+                    "mode": "outer"
+                  }
+                }
+              },
+              {
+                "group": "organize",
+                "kind": "Transformation",
+                "spec": {
+                  "options": {
+                    "excludeByName": {
+                      "Time": true,
+                      "Value #A": true,
+                      "Value #B": true,
+                      "Value #C": true,
+                      "Value #D": true,
+                      "Value #E": true,
+                      "Value #F": true,
+                      "Value #G": true,
+                      "Value #H": true,
+                      "Value #I": true,
+                      "Value #J": true,
+                      "Value #K": true,
+                      "__name__": true,
+                      "__name__ 1": true,
+                      "__name__ 3": true,
+                      "__name__ 6": true,
+                      "__name__ 7": true,
+                      "container": true,
+                      "container 1": true,
+                      "container 2": true,
+                      "container 3": true,
+                      "container 6": true,
+                      "container 7": true,
+                      "container 8": true,
+                      "endpoint": true,
+                      "endpoint 1": true,
+                      "endpoint 2": true,
+                      "endpoint 3": true,
+                      "endpoint 6": true,
+                      "endpoint 7": true,
+                      "endpoint 8": true,
+                      "instance": true,
+                      "instance 1": true,
+                      "instance 2": true,
+                      "instance 3": true,
+                      "instance 6": true,
+                      "instance 7": true,
+                      "job": true,
+                      "job 1": true,
+                      "job 2": true,
+                      "job 3": true,
+                      "job 6": true,
+                      "job 7": true,
+                      "namespace": true,
+                      "namespace 1": true,
+                      "namespace 2": true,
+                      "namespace 3": true,
+                      "namespace 5": true,
+                      "namespace 6": true,
+                      "namespace 7": true,
+                      "pod": true,
+                      "pod 1": true,
+                      "pod 2": true,
+                      "pod 3": true,
+                      "pod 5": true,
+                      "pod 6": true,
+                      "pod 7": true,
+                      "service": true,
+                      "service 1": true,
+                      "service 2": true,
+                      "service 3": true,
+                      "service 5": true,
+                      "service 6": true,
+                      "service 7": true,
+                      "service 8": true,
+                      "synology_upsBatteryMfrDate": true,
+                      "synology_upsDeviceManufacturer": false,
+                      "{__name__=\"synology_upsDriverName\", container=\"snmp-exporter\", endpoint=\"snmp-exporter-metrics\", instance=\"Gobelijn\", job=\"snmp-exporter\", namespace=\"monitoring\", pod=\"snmp-exporter-6bc5d9d79f-jksq7\", service=\"snmp-exporter\", synology_upsDriverName=\"usbhid-ups\"}": false,
+                      "{__name__=\"synology_upsInfoBeeperStatus\", container=\"snmp-exporter\", endpoint=\"snmp-exporter-metrics\", instance=\"Gobelijn\", job=\"snmp-exporter\", namespace=\"monitoring\", pod=\"snmp-exporter-6bc5d9d79f-jksq7\", service=\"snmp-exporter\", synology_upsInfoBeeperStatus=\"disabled\"}": false
+                    },
+                    "indexByName": {
+                      "Time": 11,
+                      "Value #A": 29,
+                      "Value #B": 38,
+                      "Value #C": 47,
+                      "Value #D": 56,
+                      "Value #E": 20,
+                      "Value #F": 65,
+                      "Value #G": 74,
+                      "Value #H": 83,
+                      "Value #I": 92,
+                      "Value #J": 101,
+                      "Value #K": 110,
+                      "__name__ 1": 12,
+                      "__name__ 10": 93,
+                      "__name__ 11": 102,
+                      "__name__ 2": 21,
+                      "__name__ 3": 30,
+                      "__name__ 4": 39,
+                      "__name__ 5": 48,
+                      "__name__ 6": 57,
+                      "__name__ 7": 66,
+                      "__name__ 8": 75,
+                      "__name__ 9": 84,
+                      "container 1": 13,
+                      "container 10": 94,
+                      "container 11": 103,
+                      "container 2": 22,
+                      "container 3": 31,
+                      "container 4": 40,
+                      "container 5": 49,
+                      "container 6": 58,
+                      "container 7": 67,
+                      "container 8": 76,
+                      "container 9": 85,
+                      "endpoint 1": 14,
+                      "endpoint 10": 95,
+                      "endpoint 11": 104,
+                      "endpoint 2": 23,
+                      "endpoint 3": 32,
+                      "endpoint 4": 41,
+                      "endpoint 5": 50,
+                      "endpoint 6": 59,
+                      "endpoint 7": 68,
+                      "endpoint 8": 77,
+                      "endpoint 9": 86,
+                      "instance 1": 15,
+                      "instance 10": 96,
+                      "instance 11": 105,
+                      "instance 2": 24,
+                      "instance 3": 33,
+                      "instance 4": 42,
+                      "instance 5": 51,
+                      "instance 6": 60,
+                      "instance 7": 69,
+                      "instance 8": 78,
+                      "instance 9": 87,
+                      "job 1": 16,
+                      "job 10": 97,
+                      "job 11": 106,
+                      "job 2": 25,
+                      "job 3": 34,
+                      "job 4": 43,
+                      "job 5": 52,
+                      "job 6": 61,
+                      "job 7": 70,
+                      "job 8": 79,
+                      "job 9": 88,
+                      "namespace 1": 17,
+                      "namespace 10": 98,
+                      "namespace 11": 107,
+                      "namespace 2": 26,
+                      "namespace 3": 35,
+                      "namespace 4": 44,
+                      "namespace 5": 53,
+                      "namespace 6": 62,
+                      "namespace 7": 71,
+                      "namespace 8": 80,
+                      "namespace 9": 89,
+                      "pod 1": 18,
+                      "pod 10": 99,
+                      "pod 11": 108,
+                      "pod 2": 27,
+                      "pod 3": 36,
+                      "pod 4": 45,
+                      "pod 5": 54,
+                      "pod 6": 63,
+                      "pod 7": 72,
+                      "pod 8": 81,
+                      "pod 9": 90,
+                      "service 1": 19,
+                      "service 10": 100,
+                      "service 11": 109,
+                      "service 2": 28,
+                      "service 3": 37,
+                      "service 4": 46,
+                      "service 5": 55,
+                      "service 6": 64,
+                      "service 7": 73,
+                      "service 8": 82,
+                      "service 9": 91,
+                      "synology_upsBatteryMfrDate": 10,
+                      "synology_upsBatteryType": 4,
+                      "synology_upsDeviceManufacturer": 1,
+                      "synology_upsDeviceModel": 2,
+                      "synology_upsDeviceSerial": 3,
+                      "synology_upsDeviceType": 0,
+                      "synology_upsDriverVersion": 5,
+                      "synology_upsInfoBeeperStatus": 7,
+                      "synology_upsInfoStatus": 6,
+                      "synology_upsInfoTestResult": 8,
+                      "synology_upsInputTransferReason": 9
+                    },
+                    "renameByName": {
+                      "{__name__=\"synology_upsBatteryMfrDate\", container=\"snmp-exporter\", endpoint=\"snmp-exporter-metrics\", instance=\"Gobelijn\", job=\"snmp-exporter\", namespace=\"monitoring\", pod=\"snmp-exporter-6bc5d9d79f-jksq7\", service=\"snmp-exporter\", synology_upsBatteryMfrDate=\"2001/01/01\"}": "",
+                      "{__name__=\"synology_upsInfoBeeperStatus\", container=\"snmp-exporter\", endpoint=\"snmp-exporter-metrics\", instance=\"Gobelijn\", job=\"snmp-exporter\", namespace=\"monitoring\", pod=\"snmp-exporter-6bc5d9d79f-jksq7\", service=\"snmp-exporter\", synology_upsInfoBeeperStatus=\"disabled\"}": ""
+                    }
+                  }
+                }
+              }
+            ]
+          }
         },
-        "filters": [],
-        "name": "Filters",
-        "type": "adhoc"
+        "description": "",
+        "id": 1,
+        "links": [],
+        "title": "UPS Info (Synology SNMP)",
+        "vizConfig": {
+          "group": "stat",
+          "kind": "VizConfig",
+          "spec": {
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": 0
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                }
+              },
+              "overrides": []
+            },
+            "options": {
+              "colorMode": "background",
+              "graphMode": "area",
+              "justifyMode": "auto",
+              "orientation": "horizontal",
+              "percentChangeColorMode": "standard",
+              "reduceOptions": {
+                "calcs": [
+                  "lastNotNull"
+                ],
+                "fields": "/.*/",
+                "values": false
+              },
+              "showPercentChange": false,
+              "text": {
+                "titleSize": 14,
+                "valueSize": 14
+              },
+              "textMode": "auto",
+              "wideLayout": true
+            }
+          },
+          "version": "13.0.1+security-01"
+        }
       }
-    ]
+    },
+    "panel-2": {
+      "kind": "Panel",
+      "spec": {
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "sum without(pod)(synology_upsBatteryRuntimeValue) / 60",
+                      "legendFormat": "{{__name__}}",
+                      "range": true
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "A"
+                }
+              }
+            ],
+            "queryOptions": {},
+            "transformations": []
+          }
+        },
+        "description": "",
+        "id": 2,
+        "links": [],
+        "title": "Battery Runtime (Synology SNMP)",
+        "vizConfig": {
+          "group": "timeseries",
+          "kind": "VizConfig",
+          "spec": {
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "barWidthFactor": 0.6,
+                  "drawStyle": "line",
+                  "fillOpacity": 0,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "auto",
+                  "showValues": false,
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": 0
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "m"
+              },
+              "overrides": []
+            },
+            "options": {
+              "annotations": {
+                "clustering": -1,
+                "multiLane": false
+              },
+              "legend": {
+                "calcs": [],
+                "displayMode": "list",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "hideZeros": false,
+                "mode": "single",
+                "sort": "none"
+              }
+            }
+          },
+          "version": "13.0.1+security-01"
+        }
+      }
+    },
+    "panel-21": {
+      "kind": "Panel",
+      "spec": {
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "network_ups_tools_battery_charge{instance=\"apc-bx1600mi\"}",
+                      "instant": true,
+                      "legendFormat": "Charge %",
+                      "range": false
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "A"
+                }
+              }
+            ],
+            "queryOptions": {},
+            "transformations": []
+          }
+        },
+        "description": "",
+        "id": 21,
+        "links": [],
+        "title": "Battery Charge",
+        "vizConfig": {
+          "group": "gauge",
+          "kind": "VizConfig",
+          "spec": {
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "max": 100,
+                "min": 0,
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": 0
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 50
+                    },
+                    {
+                      "color": "green",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "percent"
+              },
+              "overrides": []
+            },
+            "options": {
+              "barShape": "flat",
+              "barWidthFactor": 0.5,
+              "colorMode": "background",
+              "effects": {
+                "barGlow": false,
+                "centerGlow": false,
+                "gradient": false
+              },
+              "endpointMarker": "point",
+              "graphMode": "none",
+              "minVizHeight": 75,
+              "minVizWidth": 75,
+              "orientation": "auto",
+              "reduceOptions": {
+                "calcs": [
+                  "lastNotNull"
+                ],
+                "fields": "",
+                "values": false
+              },
+              "segmentCount": 1,
+              "segmentSpacing": 0.3,
+              "shape": "gauge",
+              "showThresholdLabels": false,
+              "showThresholdMarkers": true,
+              "sizing": "auto",
+              "sparkline": false,
+              "textMode": "auto"
+            }
+          },
+          "version": "13.0.1+security-01"
+        }
+      }
+    },
+    "panel-22": {
+      "kind": "Panel",
+      "spec": {
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "network_ups_tools_battery_runtime{instance=\"apc-bx1600mi\"}",
+                      "instant": true,
+                      "legendFormat": "Runtime",
+                      "range": false
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "A"
+                }
+              }
+            ],
+            "queryOptions": {},
+            "transformations": []
+          }
+        },
+        "description": "",
+        "id": 22,
+        "links": [],
+        "title": "Battery Runtime",
+        "vizConfig": {
+          "group": "gauge",
+          "kind": "VizConfig",
+          "spec": {
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "min": 0,
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": 0
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 300
+                    },
+                    {
+                      "color": "green",
+                      "value": 600
+                    }
+                  ]
+                },
+                "unit": "s"
+              },
+              "overrides": []
+            },
+            "options": {
+              "barShape": "flat",
+              "barWidthFactor": 0.5,
+              "colorMode": "background",
+              "effects": {
+                "barGlow": false,
+                "centerGlow": false,
+                "gradient": false
+              },
+              "endpointMarker": "point",
+              "graphMode": "none",
+              "minVizHeight": 75,
+              "minVizWidth": 75,
+              "orientation": "auto",
+              "reduceOptions": {
+                "calcs": [
+                  "lastNotNull"
+                ],
+                "fields": "",
+                "values": false
+              },
+              "segmentCount": 1,
+              "segmentSpacing": 0.3,
+              "shape": "gauge",
+              "showThresholdLabels": false,
+              "showThresholdMarkers": true,
+              "sizing": "auto",
+              "sparkline": false,
+              "textMode": "auto"
+            }
+          },
+          "version": "13.0.1+security-01"
+        }
+      }
+    },
+    "panel-23": {
+      "kind": "Panel",
+      "spec": {
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "network_ups_tools_ups_load{instance=\"apc-bx1600mi\"}",
+                      "instant": true,
+                      "legendFormat": "Load %",
+                      "range": false
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "A"
+                }
+              }
+            ],
+            "queryOptions": {},
+            "transformations": []
+          }
+        },
+        "description": "",
+        "id": 23,
+        "links": [],
+        "title": "UPS Load",
+        "vizConfig": {
+          "group": "gauge",
+          "kind": "VizConfig",
+          "spec": {
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "max": 100,
+                "min": 0,
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": 0
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 60
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "percent"
+              },
+              "overrides": []
+            },
+            "options": {
+              "barShape": "flat",
+              "barWidthFactor": 0.5,
+              "colorMode": "background",
+              "effects": {
+                "barGlow": false,
+                "centerGlow": false,
+                "gradient": false
+              },
+              "endpointMarker": "point",
+              "graphMode": "none",
+              "minVizHeight": 75,
+              "minVizWidth": 75,
+              "orientation": "auto",
+              "reduceOptions": {
+                "calcs": [
+                  "lastNotNull"
+                ],
+                "fields": "",
+                "values": false
+              },
+              "segmentCount": 1,
+              "segmentSpacing": 0.3,
+              "shape": "gauge",
+              "showThresholdLabels": false,
+              "showThresholdMarkers": true,
+              "sizing": "auto",
+              "sparkline": false,
+              "textMode": "auto"
+            }
+          },
+          "version": "13.0.1+security-01"
+        }
+      }
+    },
+    "panel-24": {
+      "kind": "Panel",
+      "spec": {
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "network_ups_tools_ups_status{instance=\"apc-bx1600mi\", flag=\"OL\"}",
+                      "instant": true,
+                      "legendFormat": "Online",
+                      "range": false
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "A"
+                }
+              },
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "network_ups_tools_ups_status{instance=\"apc-bx1600mi\", flag=\"OB\"}",
+                      "instant": true,
+                      "legendFormat": "On Battery",
+                      "range": false
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "B"
+                }
+              },
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "network_ups_tools_ups_status{instance=\"apc-bx1600mi\", flag=\"CHRG\"}",
+                      "instant": true,
+                      "legendFormat": "Charging",
+                      "range": false
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "C"
+                }
+              },
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "network_ups_tools_ups_status{instance=\"apc-bx1600mi\", flag=\"LB\"}",
+                      "instant": true,
+                      "legendFormat": "Low Battery",
+                      "range": false
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "D"
+                }
+              }
+            ],
+            "queryOptions": {},
+            "transformations": []
+          }
+        },
+        "description": "",
+        "id": 24,
+        "links": [],
+        "title": "UPS Status",
+        "vizConfig": {
+          "group": "stat",
+          "kind": "VizConfig",
+          "spec": {
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "mappings": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "text",
+                        "index": 0,
+                        "text": "\u2014"
+                      }
+                    },
+                    "type": "value"
+                  },
+                  {
+                    "options": {
+                      "1": {
+                        "color": "green",
+                        "index": 1,
+                        "text": "YES"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "text",
+                      "value": 0
+                    },
+                    {
+                      "color": "green",
+                      "value": 1
+                    }
+                  ]
+                }
+              },
+              "overrides": []
+            },
+            "options": {
+              "colorMode": "background",
+              "graphMode": "none",
+              "justifyMode": "auto",
+              "orientation": "horizontal",
+              "percentChangeColorMode": "standard",
+              "reduceOptions": {
+                "calcs": [
+                  "lastNotNull"
+                ],
+                "fields": "",
+                "values": false
+              },
+              "showPercentChange": false,
+              "textMode": "value_and_name",
+              "wideLayout": true
+            }
+          },
+          "version": "13.0.1+security-01"
+        }
+      }
+    },
+    "panel-25": {
+      "kind": "Panel",
+      "spec": {
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "network_ups_tools_battery_runtime{instance=\"apc-bx1600mi\"}",
+                      "legendFormat": "Battery Runtime (s)",
+                      "range": true
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "A"
+                }
+              }
+            ],
+            "queryOptions": {},
+            "transformations": []
+          }
+        },
+        "description": "",
+        "id": 25,
+        "links": [],
+        "title": "Battery Runtime Over Time",
+        "vizConfig": {
+          "group": "timeseries",
+          "kind": "VizConfig",
+          "spec": {
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "barWidthFactor": 0.6,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "auto",
+                  "showValues": false,
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": 0
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "s"
+              },
+              "overrides": []
+            },
+            "options": {
+              "annotations": {
+                "clustering": -1,
+                "multiLane": false
+              },
+              "legend": {
+                "calcs": [],
+                "displayMode": "list",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "hideZeros": false,
+                "mode": "single",
+                "sort": "none"
+              }
+            }
+          },
+          "version": "13.0.1+security-01"
+        }
+      }
+    },
+    "panel-26": {
+      "kind": "Panel",
+      "spec": {
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "network_ups_tools_input_voltage{instance=\"apc-bx1600mi\"}",
+                      "legendFormat": "Input Voltage",
+                      "range": true
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "A"
+                }
+              },
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "network_ups_tools_output_voltage{instance=\"apc-bx1600mi\"}",
+                      "legendFormat": "Output Voltage",
+                      "range": true
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "B"
+                }
+              }
+            ],
+            "queryOptions": {},
+            "transformations": []
+          }
+        },
+        "description": "",
+        "id": 26,
+        "links": [],
+        "title": "Input / Output Voltage",
+        "vizConfig": {
+          "group": "timeseries",
+          "kind": "VizConfig",
+          "spec": {
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "barWidthFactor": 0.6,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "auto",
+                  "showValues": false,
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": 0
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "volt"
+              },
+              "overrides": []
+            },
+            "options": {
+              "annotations": {
+                "clustering": -1,
+                "multiLane": false
+              },
+              "legend": {
+                "calcs": [],
+                "displayMode": "list",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "hideZeros": false,
+                "mode": "single",
+                "sort": "none"
+              }
+            }
+          },
+          "version": "13.0.1+security-01"
+        }
+      }
+    },
+    "panel-27": {
+      "kind": "Panel",
+      "spec": {
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "network_ups_tools_battery_charge{instance=\"apc-bx1600mi\"}",
+                      "legendFormat": "Battery Charge %",
+                      "range": true
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "A"
+                }
+              },
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "network_ups_tools_ups_load{instance=\"apc-bx1600mi\"}",
+                      "legendFormat": "UPS Load %",
+                      "range": true
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "B"
+                }
+              }
+            ],
+            "queryOptions": {},
+            "transformations": []
+          }
+        },
+        "description": "",
+        "id": 27,
+        "links": [],
+        "title": "Battery Charge & Load Over Time",
+        "vizConfig": {
+          "group": "timeseries",
+          "kind": "VizConfig",
+          "spec": {
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "barWidthFactor": 0.6,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "auto",
+                  "showValues": false,
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": 0
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "percent"
+              },
+              "overrides": []
+            },
+            "options": {
+              "annotations": {
+                "clustering": -1,
+                "multiLane": false
+              },
+              "legend": {
+                "calcs": [],
+                "displayMode": "list",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "hideZeros": false,
+                "mode": "single",
+                "sort": "none"
+              }
+            }
+          },
+          "version": "13.0.1+security-01"
+        }
+      }
+    },
+    "panel-28": {
+      "kind": "Panel",
+      "spec": {
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "network_ups_tools_device_info{instance=\"apc-bx1600mi\"}",
+                      "format": "table",
+                      "instant": true,
+                      "legendFormat": "__auto"
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "A"
+                }
+              }
+            ],
+            "queryOptions": {},
+            "transformations": [
+              {
+                "group": "joinByField",
+                "kind": "Transformation",
+                "spec": {
+                  "options": {
+                    "byField": "Time",
+                    "mode": "outer"
+                  }
+                }
+              },
+              {
+                "group": "organize",
+                "kind": "Transformation",
+                "spec": {
+                  "options": {
+                    "excludeByName": {
+                      "Time": true,
+                      "Value #A": true,
+                      "__name__": true,
+                      "container": true,
+                      "endpoint": true,
+                      "instance": true,
+                      "job": true,
+                      "namespace": true,
+                      "pod": true,
+                      "service": true,
+                      "Value": true
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "description": "",
+        "id": 28,
+        "links": [],
+        "title": "UPS Info (NUT)",
+        "vizConfig": {
+          "group": "stat",
+          "kind": "VizConfig",
+          "spec": {
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": 0
+                    }
+                  ]
+                }
+              },
+              "overrides": []
+            },
+            "options": {
+              "colorMode": "background",
+              "graphMode": "none",
+              "justifyMode": "auto",
+              "orientation": "horizontal",
+              "percentChangeColorMode": "standard",
+              "reduceOptions": {
+                "calcs": [
+                  "lastNotNull"
+                ],
+                "fields": "/^(?!Value).*/",
+                "values": false
+              },
+              "showPercentChange": false,
+              "textMode": "auto",
+              "wideLayout": true
+            }
+          },
+          "version": "13.0.1+security-01"
+        }
+      }
+    },
+    "panel-29": {
+      "kind": "Panel",
+      "spec": {
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "network_ups_tools_ups_load{instance=\"apc-bx1600mi\"} * 16",
+                      "instant": true,
+                      "legendFormat": "Load (W)",
+                      "range": false
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "A"
+                }
+              }
+            ],
+            "queryOptions": {},
+            "transformations": []
+          }
+        },
+        "description": "",
+        "id": 29,
+        "links": [],
+        "title": "Current Load (W)",
+        "vizConfig": {
+          "group": "gauge",
+          "kind": "VizConfig",
+          "spec": {
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "max": 1600,
+                "min": 0,
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": 0
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 800
+                    },
+                    {
+                      "color": "red",
+                      "value": 1400
+                    }
+                  ]
+                },
+                "unit": "watt"
+              },
+              "overrides": []
+            },
+            "options": {
+              "barShape": "flat",
+              "barWidthFactor": 0.5,
+              "colorMode": "background",
+              "effects": {
+                "barGlow": false,
+                "centerGlow": false,
+                "gradient": false
+              },
+              "endpointMarker": "point",
+              "graphMode": "none",
+              "minVizHeight": 75,
+              "minVizWidth": 75,
+              "orientation": "auto",
+              "reduceOptions": {
+                "calcs": [
+                  "lastNotNull"
+                ],
+                "fields": "",
+                "values": false
+              },
+              "segmentCount": 1,
+              "segmentSpacing": 0.3,
+              "shape": "gauge",
+              "showThresholdLabels": false,
+              "showThresholdMarkers": true,
+              "sizing": "auto",
+              "sparkline": false,
+              "textMode": "auto"
+            }
+          },
+          "version": "13.0.1+security-01"
+        }
+      }
+    },
+    "panel-30": {
+      "kind": "Panel",
+      "spec": {
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "network_ups_tools_ups_load{instance=\"apc-bx1600mi\"} * 16",
+                      "legendFormat": "Load (W)",
+                      "range": true
+                    },
+                    "version": "v0"
+                  },
+                  "refId": "A"
+                }
+              }
+            ],
+            "queryOptions": {},
+            "transformations": []
+          }
+        },
+        "description": "",
+        "id": 30,
+        "links": [],
+        "title": "Load Over Time (W)",
+        "vizConfig": {
+          "group": "timeseries",
+          "kind": "VizConfig",
+          "spec": {
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "barWidthFactor": 0.6,
+                  "drawStyle": "line",
+                  "fillOpacity": 10,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "auto",
+                  "showValues": false,
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": 0
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "watt"
+              },
+              "overrides": []
+            },
+            "options": {
+              "annotations": {
+                "clustering": -1,
+                "multiLane": false
+              },
+              "legend": {
+                "calcs": [],
+                "displayMode": "list",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "hideZeros": false,
+                "mode": "single",
+                "sort": "none"
+              }
+            }
+          },
+          "version": "13.0.1+security-01"
+        }
+      }
+    },
+    "panel-31": {
+      "kind": "Panel",
+      "spec": {
+        "id": 31,
+        "title": "Self-Test / Calibration",
+        "description": "",
+        "links": [],
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queryOptions": {},
+            "transformations": [],
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "refId": "A",
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "version": "v0",
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "network_ups_tools_ups_status{instance=\"apc-bx1600mi\", flag=\"CAL\"}",
+                      "legendFormat": "Self-test",
+                      "instant": true,
+                      "range": false
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "vizConfig": {
+          "group": "stat",
+          "kind": "VizConfig",
+          "version": "13.0.1+security-01",
+          "spec": {
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "mappings": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "Idle",
+                        "color": "text",
+                        "index": 0
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "1": {
+                        "text": "RUNNING",
+                        "color": "orange",
+                        "index": 1
+                      }
+                    }
+                  }
+                ],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "text",
+                      "value": 0
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    }
+                  ]
+                }
+              },
+              "overrides": []
+            },
+            "options": {
+              "colorMode": "background",
+              "graphMode": "none",
+              "justifyMode": "auto",
+              "orientation": "auto",
+              "reduceOptions": {
+                "calcs": [
+                  "lastNotNull"
+                ],
+                "fields": "",
+                "values": false
+              },
+              "textMode": "value",
+              "wideLayout": true,
+              "showPercentChange": false
+            }
+          }
+        }
+      }
+    },
+    "panel-32": {
+      "kind": "Panel",
+      "spec": {
+        "id": 32,
+        "title": "UPS State History",
+        "description": "When the UPS is online / on battery / running a self-test / charging",
+        "links": [],
+        "data": {
+          "kind": "QueryGroup",
+          "spec": {
+            "queryOptions": {},
+            "transformations": [],
+            "queries": [
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "refId": "A",
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "version": "v0",
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "network_ups_tools_ups_status{instance=\"apc-bx1600mi\", flag=\"OL\"}",
+                      "legendFormat": "Online",
+                      "instant": false,
+                      "range": true
+                    }
+                  }
+                }
+              },
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "refId": "B",
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "version": "v0",
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "network_ups_tools_ups_status{instance=\"apc-bx1600mi\", flag=\"OB\"}",
+                      "legendFormat": "On Battery",
+                      "instant": false,
+                      "range": true
+                    }
+                  }
+                }
+              },
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "refId": "C",
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "version": "v0",
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "network_ups_tools_ups_status{instance=\"apc-bx1600mi\", flag=\"CAL\"}",
+                      "legendFormat": "Calibration/Test",
+                      "instant": false,
+                      "range": true
+                    }
+                  }
+                }
+              },
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "refId": "D",
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "version": "v0",
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "network_ups_tools_ups_status{instance=\"apc-bx1600mi\", flag=\"DISCHRG\"}",
+                      "legendFormat": "Discharging",
+                      "instant": false,
+                      "range": true
+                    }
+                  }
+                }
+              },
+              {
+                "kind": "PanelQuery",
+                "spec": {
+                  "hidden": false,
+                  "refId": "E",
+                  "query": {
+                    "datasource": {
+                      "name": "prometheus"
+                    },
+                    "group": "prometheus",
+                    "kind": "DataQuery",
+                    "version": "v0",
+                    "spec": {
+                      "editorMode": "code",
+                      "expr": "network_ups_tools_ups_status{instance=\"apc-bx1600mi\", flag=\"CHRG\"}",
+                      "legendFormat": "Charging",
+                      "instant": false,
+                      "range": true
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "vizConfig": {
+          "group": "state-timeline",
+          "kind": "VizConfig",
+          "version": "13.0.1+security-01",
+          "spec": {
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "custom": {
+                  "fillOpacity": 85,
+                  "lineWidth": 0,
+                  "insertNulls": false,
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  }
+                },
+                "mappings": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": " ",
+                        "color": "dark-gray",
+                        "index": 0
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "1": {
+                        "text": "active",
+                        "color": "green",
+                        "index": 1
+                      }
+                    }
+                  }
+                ],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "dark-gray",
+                      "value": 0
+                    },
+                    {
+                      "color": "green",
+                      "value": 1
+                    }
+                  ]
+                }
+              },
+              "overrides": [
+                {
+                  "matcher": {
+                    "id": "byFrameRefID",
+                    "options": "B"
+                  },
+                  "properties": [
+                    {
+                      "id": "mappings",
+                      "value": [
+                        {
+                          "type": "value",
+                          "options": {
+                            "0": {
+                              "text": " ",
+                              "color": "dark-gray",
+                              "index": 0
+                            },
+                            "1": {
+                              "text": "ON BATTERY",
+                              "color": "red",
+                              "index": 1
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "matcher": {
+                    "id": "byFrameRefID",
+                    "options": "C"
+                  },
+                  "properties": [
+                    {
+                      "id": "mappings",
+                      "value": [
+                        {
+                          "type": "value",
+                          "options": {
+                            "0": {
+                              "text": " ",
+                              "color": "dark-gray",
+                              "index": 0
+                            },
+                            "1": {
+                              "text": "TEST",
+                              "color": "orange",
+                              "index": 1
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "matcher": {
+                    "id": "byFrameRefID",
+                    "options": "D"
+                  },
+                  "properties": [
+                    {
+                      "id": "mappings",
+                      "value": [
+                        {
+                          "type": "value",
+                          "options": {
+                            "0": {
+                              "text": " ",
+                              "color": "dark-gray",
+                              "index": 0
+                            },
+                            "1": {
+                              "text": "discharging",
+                              "color": "yellow",
+                              "index": 1
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "matcher": {
+                    "id": "byFrameRefID",
+                    "options": "E"
+                  },
+                  "properties": [
+                    {
+                      "id": "mappings",
+                      "value": [
+                        {
+                          "type": "value",
+                          "options": {
+                            "0": {
+                              "text": " ",
+                              "color": "dark-gray",
+                              "index": 0
+                            },
+                            "1": {
+                              "text": "charging",
+                              "color": "blue",
+                              "index": 1
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "options": {
+              "mergeValues": true,
+              "showValue": "never",
+              "alignValue": "left",
+              "rowHeight": 0.9,
+              "legend": {
+                "displayMode": "list",
+                "placement": "bottom",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "single",
+                "sort": "none"
+              }
+            }
+          }
+        }
+      }
+    }
   },
-  "time": {
-    "from": "now-1h",
+  "layout": {
+    "kind": "RowsLayout",
+    "spec": {
+      "rows": [
+        {
+          "kind": "RowsLayoutRow",
+          "spec": {
+            "collapse": true,
+            "hideHeader": false,
+            "layout": {
+              "kind": "GridLayout",
+              "spec": {
+                "items": [
+                  {
+                    "kind": "GridLayoutItem",
+                    "spec": {
+                      "element": {
+                        "kind": "ElementReference",
+                        "name": "panel-1"
+                      },
+                      "height": 10,
+                      "width": 9,
+                      "x": 0,
+                      "y": 0
+                    }
+                  },
+                  {
+                    "kind": "GridLayoutItem",
+                    "spec": {
+                      "element": {
+                        "kind": "ElementReference",
+                        "name": "panel-2"
+                      },
+                      "height": 10,
+                      "width": 15,
+                      "x": 9,
+                      "y": 0
+                    }
+                  }
+                ]
+              }
+            },
+            "title": "Syno (old)"
+          }
+        },
+        {
+          "kind": "RowsLayoutRow",
+          "spec": {
+            "collapse": false,
+            "layout": {
+              "kind": "GridLayout",
+              "spec": {
+                "items": [
+                  {
+                    "kind": "GridLayoutItem",
+                    "spec": {
+                      "element": {
+                        "kind": "ElementReference",
+                        "name": "panel-21"
+                      },
+                      "height": 5,
+                      "width": 4,
+                      "x": 0,
+                      "y": 0
+                    }
+                  },
+                  {
+                    "kind": "GridLayoutItem",
+                    "spec": {
+                      "element": {
+                        "kind": "ElementReference",
+                        "name": "panel-22"
+                      },
+                      "height": 5,
+                      "width": 4,
+                      "x": 4,
+                      "y": 0
+                    }
+                  },
+                  {
+                    "kind": "GridLayoutItem",
+                    "spec": {
+                      "element": {
+                        "kind": "ElementReference",
+                        "name": "panel-23"
+                      },
+                      "height": 5,
+                      "width": 4,
+                      "x": 8,
+                      "y": 0
+                    }
+                  },
+                  {
+                    "kind": "GridLayoutItem",
+                    "spec": {
+                      "element": {
+                        "kind": "ElementReference",
+                        "name": "panel-29"
+                      },
+                      "height": 5,
+                      "width": 4,
+                      "x": 12,
+                      "y": 0
+                    }
+                  },
+                  {
+                    "kind": "GridLayoutItem",
+                    "spec": {
+                      "element": {
+                        "kind": "ElementReference",
+                        "name": "panel-24"
+                      },
+                      "height": 5,
+                      "width": 4,
+                      "x": 16,
+                      "y": 0
+                    }
+                  },
+                  {
+                    "kind": "GridLayoutItem",
+                    "spec": {
+                      "element": {
+                        "kind": "ElementReference",
+                        "name": "panel-25"
+                      },
+                      "height": 8,
+                      "width": 12,
+                      "x": 0,
+                      "y": 5
+                    }
+                  },
+                  {
+                    "kind": "GridLayoutItem",
+                    "spec": {
+                      "element": {
+                        "kind": "ElementReference",
+                        "name": "panel-26"
+                      },
+                      "height": 8,
+                      "width": 12,
+                      "x": 12,
+                      "y": 5
+                    }
+                  },
+                  {
+                    "kind": "GridLayoutItem",
+                    "spec": {
+                      "element": {
+                        "kind": "ElementReference",
+                        "name": "panel-27"
+                      },
+                      "height": 8,
+                      "width": 12,
+                      "x": 0,
+                      "y": 13
+                    }
+                  },
+                  {
+                    "kind": "GridLayoutItem",
+                    "spec": {
+                      "element": {
+                        "kind": "ElementReference",
+                        "name": "panel-28"
+                      },
+                      "height": 8,
+                      "width": 12,
+                      "x": 12,
+                      "y": 13
+                    }
+                  },
+                  {
+                    "kind": "GridLayoutItem",
+                    "spec": {
+                      "element": {
+                        "kind": "ElementReference",
+                        "name": "panel-30"
+                      },
+                      "height": 8,
+                      "width": 12,
+                      "x": 0,
+                      "y": 21
+                    }
+                  },
+                  {
+                    "kind": "GridLayoutItem",
+                    "spec": {
+                      "element": {
+                        "kind": "ElementReference",
+                        "name": "panel-31"
+                      },
+                      "x": 20,
+                      "y": 0,
+                      "width": 4,
+                      "height": 5
+                    }
+                  },
+                  {
+                    "kind": "GridLayoutItem",
+                    "spec": {
+                      "element": {
+                        "kind": "ElementReference",
+                        "name": "panel-32"
+                      },
+                      "x": 12,
+                      "y": 21,
+                      "width": 12,
+                      "height": 8
+                    }
+                  }
+                ]
+              }
+            },
+            "title": "APC BX1600MI \u2014 NUT"
+          }
+        }
+      ]
+    }
+  },
+  "links": [],
+  "liveNow": false,
+  "preload": false,
+  "tags": [],
+  "timeSettings": {
+    "autoRefresh": "30s",
+    "autoRefreshIntervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m",
+      "15m",
+      "30m",
+      "1h",
+      "2h",
+      "1d"
+    ],
+    "fiscalYearStartMonth": 0,
+    "from": "now-3h",
+    "hideTimepicker": false,
+    "timezone": "browser",
     "to": "now"
   },
-  "timepicker": {},
-  "timezone": "browser",
   "title": "ups",
-  "uid": "e0029e2a-6284-43a4-8a6f-483208b16d47",
-  "version": 17,
-  "weekStart": ""
+  "variables": [
+    {
+      "datasource": {
+        "name": "prometheus"
+      },
+      "group": "prometheus",
+      "kind": "AdhocVariable",
+      "spec": {
+        "allowCustomValue": true,
+        "baseFilters": [],
+        "defaultKeys": [],
+        "enableGroupBy": false,
+        "filters": [],
+        "hide": "dontHide",
+        "name": "Filters",
+        "skipUrlSync": false
+      }
+    }
+  ]
 }

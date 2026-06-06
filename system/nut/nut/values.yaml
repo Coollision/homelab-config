@@ -1,0 +1,44 @@
+fullnameOverride: nut
+
+statefulset:
+  image:
+    repository: instantlinux/nut-upsd
+    tag: "2.8.3-r4"
+  ports:
+    nut: 3493
+
+# The instantlinux/nut-upsd entrypoint generates the NUT config files from these
+# env vars — BUT only a handful of ups.conf knobs are supported that way, and the
+# BX1600MI needs driver-tuning flags the entrypoint can't set. So instead we mount
+# a complete ups.conf AND upsd.users at /etc/nut/local/ (see kustomization), which
+# the entrypoint copies verbatim. Driver config therefore lives in `ups.conf`, not
+# here; these env vars only drive the files we DON'T provide (upsd.conf MAXAGE +
+# the generated upsmon.conf MONITOR line).
+config:
+  TZ: Europe/Brussels
+  NAME: ups
+  MAXAGE: "15"
+  SERVER: primary
+  # API_USER/PASSWORD are what the bundled upsmon -F (the container's main
+  # process) uses to monitor ups@localhost — must match the [admin] entry in
+  # upsd.users, which carries the `upsmon primary` role.
+  API_USER: admin
+  API_PASSWORD: <secret:kv/data/nut/nut~admin-pass>
+
+# LoadBalancer on .30/server range so NAS + other clients can reach upsd
+serviceIp: <secret:kv/data/nut/nut~lb-ip>
+
+# libusb requires privilege to open USB device nodes. The host's /dev/bus/usb
+# is mounted directly (see kustomization) so the usbhid-ups driver can re-open
+# the APC after it re-enumerates — a scoped/static node can't track that and
+# leaves the driver permanently "Data stale".
+securityContext:
+  privileged: true
+
+affinity:
+  node:
+    required:
+      - matchExpressions:
+          - key: feature.node.kubernetes.io/nut-ups-apc
+            operator: In
+            values: ["true"]

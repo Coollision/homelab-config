@@ -1,0 +1,83 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+patches:
+  - target:
+      group: apps
+      version: v1
+      kind: StatefulSet
+      name: nut
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts
+        value:
+          - name: usb-dev
+            mountPath: /dev/bus/usb
+          - name: nut-config
+            mountPath: /etc/nut/local/upsd.users
+            subPath: upsd.users
+            readOnly: true
+          - name: nut-config
+            mountPath: /etc/nut/local/ups.conf
+            subPath: ups.conf
+            readOnly: true
+      - op: add
+        path: /spec/template/spec/volumes
+        value:
+          - name: usb-dev
+            hostPath:
+              path: /dev/bus/usb
+              type: Directory
+          - name: nut-config
+            configMap:
+              name: nut-config
+      # Safety net: if the driver genuinely wedges (upsc can't read status),
+      # restart the container. Tuned to tolerate a full self-test / transient
+      # blip: 5 failures x 30s = 150s of *sustained* unresponsiveness before a
+      # restart. With the ups.conf driver flags fixing the root cause this should
+      # rarely fire; when it does, a clean restart always recovers the driver
+      # (proven) faster than the NAS escalates to shutdown.
+      - op: add
+        path: /spec/template/spec/containers/0/livenessProbe
+        value:
+          exec:
+            command:
+              - sh
+              - -c
+              - upsc ups ups.status >/dev/null 2>&1
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          failureThreshold: 5
+          timeoutSeconds: 10
+      - op: add
+        path: /spec/template/spec/containers/-
+        value:
+          name: nut-exporter
+          image: ghcr.io/druggeri/nut_exporter:3.3.0
+          args:
+            - --nut.server=127.0.0.1
+            - --nut.username=admin
+            - --nut.vars_enable=
+          env:
+            - name: NUT_EXPORTER_PASSWORD
+              value: <secret:kv/data/nut/nut~admin-pass>
+          ports:
+            - name: metrics
+              containerPort: 9199
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+configMapGenerator:
+  - name: nut-config
+    namespace: nut
+    files:
+      - upsd.users
+      - ups.conf
