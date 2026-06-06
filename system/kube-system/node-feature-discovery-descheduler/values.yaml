@@ -51,6 +51,15 @@ node-feature-discovery:
                   vendor: {op: In, value: ["303a"]}
                   device: {op: In, value: ["831a"]}
                   serial: {op: In, value: ["E072A1FA7C7C"]}
+          - name: "nut-ups-apc"
+            labels:
+              feature.node.kubernetes.io/nut-ups-apc: "true"
+            matchFeatures:
+              - feature: usb.device
+                matchExpressions:
+                  vendor: {op: In, value: ["051d"]}
+                  device: {op: In, value: ["0002"]}
+                  serial: {op: In, value: ["9B2328A03879"]}
 
 descheduler:
   fullnameOverride: descheduler

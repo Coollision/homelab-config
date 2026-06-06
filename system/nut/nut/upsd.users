@@ -1,0 +1,9 @@
+[admin]
+  password = <secret:kv/data/nut/nut~admin-pass>
+  upsmon primary
+  actions = SET
+  instcmds = ALL
+
+[monuser]
+  password = <secret:kv/data/nut/nut~monuser-pass>
+  upsmon secondary
