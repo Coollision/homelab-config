@@ -32,6 +32,13 @@ spec:
   # the restored dump; managed.roles keeps them reconciled going forward.
   managed:
     roles:
+      # Personal superuser for CloudBeaver (view/update/maintain every DB).
+      - name: dbadmin
+        ensure: present
+        login: true
+        superuser: true
+        passwordSecret:
+          name: pgrole-dbadmin
       - name: sonarr_user
         ensure: present
         login: true
