@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nut-exporter
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: nut-exporter
+spec:
+  selector:
+    {{- include "helm.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: metrics
+      port: 9199
+      targetPort: metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: nut-exporter
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: nut-exporter
+    monitoring: yess
+spec:
+  selector:
+    matchLabels:
+      app: nut-exporter
+  namespaceSelector:
+    matchNames:
+      - nut
+  endpoints:
+    - interval: 30s
+      port: metrics
+      path: "/ups_metrics"
+      params:
+        ups: [ups]
+      relabelings:
+        - action: replace
+          replacement: apc-bx1600mi
+          targetLabel: instance
+      metricRelabelings:
+        - sourceLabels: [__name__]
+          regex: "go_.*|process_.*|promhttp_.*"
+          action: drop

@@ -1,0 +1,72 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+patches:
+  - target:
+      group: apps
+      version: v1
+      kind: StatefulSet
+      name: nut
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts
+        value:
+          - name: usb-dev
+            mountPath: /dev/bus/usb
+          - name: nut-config
+            mountPath: /etc/nut/local/upsd.users
+            subPath: upsd.users
+            readOnly: true
+      - op: add
+        path: /spec/template/spec/containers/0/livenessProbe
+        value:
+          exec:
+            command:
+              - sh
+              - -c
+              - upsc ups ups.status >/dev/null 2>&1 || exit 1
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          failureThreshold: 3
+          timeoutSeconds: 5
+      - op: add
+        path: /spec/template/spec/volumes
+        value:
+          - name: usb-dev
+            hostPath:
+              path: /dev/bus/usb
+              type: Directory
+          - name: nut-config
+            configMap:
+              name: nut-config
+      - op: add
+        path: /spec/template/spec/containers/-
+        value:
+          name: nut-exporter
+          image: ghcr.io/druggeri/nut_exporter:3.3.0
+          args:
+            - --nut.server=127.0.0.1
+            - --nut.username=admin
+            - --nut.vars_enable=
+          env:
+            - name: NUT_EXPORTER_PASSWORD
+              value: <secret:kv/data/nut/nut~admin-pass>
+          ports:
+            - name: metrics
+              containerPort: 9199
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+configMapGenerator:
+  - name: nut-config
+    namespace: nut
+    files:
+      - upsd.users

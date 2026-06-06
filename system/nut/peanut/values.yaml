@@ -1,0 +1,31 @@
+fullnameOverride: peanut
+
+deployment:
+  image:
+    repository: brandawg93/peanut
+    tag: "6.0.0"
+  ports:
+    web: 8080
+
+config:
+  TZ: Europe/Brussels
+  # NUT server connection (backwards-compat env vars — PeaNUT settings.ts)
+  NUT_HOST: nut-service.nut.svc.cluster.local
+  NUT_PORT: "3493"
+  USERNAME: admin
+  PASSWORD: <secret:kv/data/nut/nut~admin-pass>
+  WEB_PORT: "8080"
+  # Disable PeaNUT web-UI login (internal dashboard, no external exposure)
+  AUTH_DISABLED: "true"
+
+ingress_internal_secure:
+  host: ups.<secret:kv/data/domains~domain>
+  port: web
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi

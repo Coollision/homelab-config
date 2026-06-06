@@ -1,0 +1,62 @@
+fullnameOverride: nut
+
+statefulset:
+  image:
+    repository: instantlinux/nut-upsd
+    tag: "2.8.3-r4"
+  ports:
+    nut: 3493
+
+# The instantlinux/nut-upsd entrypoint generates /etc/nut/{ups,upsd,upsmon}.conf
+# from these env vars. We override ONLY upsd.users (mounted at /etc/nut/local —
+# see kustomization) to add the second user (monuser) the Synology NAS needs.
+config:
+  TZ: Europe/Brussels
+  NAME: ups
+  DRIVER: usbhid-ups
+  PORT: auto
+  SERIAL: "9B2328A03879"
+  VENDORID: "051d"
+  DESCRIPTION: "APC Back-UPS BX1600MI"
+  MAXAGE: "15"
+  SERVER: primary
+  # BX1600MI + usbhid-ups is a documented flaky combo: the driver connects,
+  # reads once, then "Communications lost" -> permanent "Data stale" within
+  # minutes. The known fix is to poll instead of relying on the (buggy) USB
+  # interrupt endpoint. POLLONLY disables interrupt reads; POLLINTERVAL=10 is
+  # the community-established value. (NUT issues #2805/#2347, RPi/TrueNAS forums.)
+  POLLONLY: "1"
+  POLLINTERVAL: "10"
+  # APC Back-UPS auto-runs battery self-tests, which take the UPS offline for
+  # HID comms during the discharge. These flags tell usbhid-ups to gracefully
+  # handle the test phase instead of thrashing. (entrypoint writes to ups.conf)
+  ONLINEDISCHARGE_CALIBRATION: "1"
+  ONLINEDISCHARGE_LOG_THROTTLE: "60"
+  # API_USER/PASSWORD are what the bundled upsmon -F (the container's main
+  # process) uses to monitor ups@localhost — must match the [admin] entry in
+  # upsd.users, which carries the `upsmon primary` role.
+  API_USER: admin
+  API_PASSWORD: <secret:kv/data/nut/nut~admin-pass>
+  INSTCMDS: all
+  ACTIONS: set
+
+# LoadBalancer on .30/server range so NAS + other clients can reach upsd
+serviceIp: <secret:kv/data/nut/nut~lb-ip>
+
+# libusb requires privilege to open USB device nodes. The host's /dev/bus/usb
+# is mounted directly (see kustomization) so the usbhid-ups driver can re-open
+# the APC after it re-enumerates — a scoped/static node can't track that and
+# leaves the driver permanently "Data stale".
+securityContext:
+  privileged: true
+
+affinity:
+  node:
+    required:
+      - matchExpressions:
+          - key: feature.node.kubernetes.io/nut-ups-apc
+            operator: In
+            values: ["true"]
+          - key: kubernetes.io/hostname
+            operator: In
+            values: ["worker-blue"]
