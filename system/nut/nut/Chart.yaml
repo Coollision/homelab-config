@@ -1,0 +1,11 @@
+apiVersion: v2
+name: nut
+description: Network UPS Tools server for APC Back-UPS BX1600MI with PeaNUT web UI
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies:
+  - name: shared-lib
+    version: 0.1.0
+    repository: file://../../../lib/shared-lib

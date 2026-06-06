@@ -3,3 +3,6 @@ ACTION=="add", SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea6
 
 ACTION=="add", SUBSYSTEM=="usb", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="831a", ATTRS{serial}=="E072A1FA7C7C", RUN="/bin/rm -r /dev/thread-border-router"
 ACTION=="add", SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="831a", ATTRS{serial}=="E072A1FA7C7C", SYMLINK+="thread-border-router"
+
+# APC Back-UPS BX1600MI — NUT server (usbhid-ups/libusb; symlink cosmetic, perms + stable name only)
+ACTION=="add", SUBSYSTEM=="usb", ATTRS{idVendor}=="051d", ATTRS{idProduct}=="0002", ATTRS{serial}=="9B2328A03879", MODE="0660", GROUP="plugdev", SYMLINK+="ups"
