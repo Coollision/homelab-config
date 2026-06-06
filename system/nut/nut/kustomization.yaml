@@ -1,0 +1,126 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+patches:
+  - target:
+      group: apps
+      version: v1
+      kind: StatefulSet
+      name: nut
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts
+        value:
+          - name: usb-dev
+            mountPath: /dev/bus/usb
+          - name: nut-config
+            mountPath: /etc/nut/local/upsd.users
+            subPath: upsd.users
+            readOnly: true
+          - name: nut-config
+            mountPath: /etc/nut/local/ups.conf
+            subPath: ups.conf
+            readOnly: true
+      - op: add
+        path: /spec/template/spec/volumes
+        value:
+          - name: usb-dev
+            hostPath:
+              path: /dev/bus/usb
+              type: Directory
+          - name: nut-config
+            configMap:
+              name: nut-config
+      # Wrap the stock entrypoint with an in-container driver watchdog. The
+      # BX1600MI spontaneously drops USB comms ~every 2h and usbhid-ups never
+      # self-recovers. Recovery only needs a fresh driver *process* (new libusb
+      # init) -- NOT a pod restart. So we restart just usbhid-ups in-place:
+      # upsd + upsmon (and the NAS's TCP connection) stay up, and the pod restart
+      # count stops climbing. The pod only restarts if upsmon itself dies.
+      - op: add
+        path: /spec/template/spec/containers/0/command
+        value:
+          - sh
+          - -c
+          - |
+            # All watchdog events are tagged "NUT-WATCHDOG" with an event keyword
+            # (STARTED / WARN / RESTART / RECOVERED / FATAL) and an ISO-8601 UTC
+            # timestamp, so they are easy to query in Loki/Grafana and link to
+            # incidents, e.g.  {namespace="nut"} |= "NUT-WATCHDOG"  or  |= "RESTART".
+            log() { echo "NUT-WATCHDOG $(date -u +%Y-%m-%dT%H:%M:%SZ) $*"; }
+            /usr/local/bin/entrypoint.sh &
+            ENTRY=$!
+            log "STARTED in-place driver watchdog (60s startup grace)"
+            sleep 60
+            fails=0
+            down=0
+            while kill -0 "$ENTRY" 2>/dev/null; do
+              if upsc ups ups.status >/dev/null 2>&1; then
+                [ "$down" = 1 ] && log "RECOVERED driver responding again"
+                fails=0
+                down=0
+              else
+                fails=$((fails+1))
+                log "WARN driver unresponsive ($fails/2)"
+                if [ "$fails" -ge 2 ]; then
+                  down=1
+                  log "RESTART usbhid-ups wedged - restarting driver in-place (pod stays up)"
+                  upsdrvctl stop 2>/dev/null || true
+                  sleep 2
+                  upsdrvctl -u root start 2>/dev/null || true
+                  sleep 8
+                  fails=0
+                fi
+              fi
+              sleep 30
+            done
+            log "FATAL upsmon exited - exiting so Kubernetes recycles the pod"
+            exit 1
+      # Last-resort backstop: only fires if the in-container watchdog can't
+      # recover the driver for 150s straight (5 x 30s). With the watchdog acting
+      # at ~60s this should essentially never trip -- it's defense in depth so a
+      # totally hung pod still gets recycled rather than silently going stale.
+      - op: add
+        path: /spec/template/spec/containers/0/livenessProbe
+        value:
+          exec:
+            command:
+              - sh
+              - -c
+              - upsc ups ups.status >/dev/null 2>&1
+          initialDelaySeconds: 90
+          periodSeconds: 30
+          failureThreshold: 5
+          timeoutSeconds: 10
+      - op: add
+        path: /spec/template/spec/containers/-
+        value:
+          name: nut-exporter
+          image: ghcr.io/druggeri/nut_exporter:3.3.0
+          args:
+            - --nut.server=127.0.0.1
+            - --nut.username=admin
+            - --nut.vars_enable=
+          env:
+            - name: NUT_EXPORTER_PASSWORD
+              value: <secret:kv/data/nut/nut~admin-pass>
+          ports:
+            - name: metrics
+              containerPort: 9199
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+configMapGenerator:
+  - name: nut-config
+    namespace: nut
+    files:
+      - upsd.users
+      - ups.conf
