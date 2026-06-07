@@ -1,0 +1,13 @@
+{{- /* Merge shared defaults with each instance's specific overrides.
+       mergeOverwrite semantics: dict fields deep-merge (instance wins on conflict);
+       list fields (storage, multusNetworks) are replaced entirely by the instance block. */ -}}
+
+{{ $primary := deepCopy . }}
+{{ $_ := unset $primary ".Values" }}
+{{ $_ := set $primary "Values" (mergeOverwrite (deepCopy $.Values.defaults) $.Values.primary) }}
+{{ include "shared-lib.all" $primary }}
+---
+{{ $secondary := deepCopy . }}
+{{ $_ := unset $secondary ".Values" }}
+{{ $_ := set $secondary "Values" (mergeOverwrite (deepCopy $.Values.defaults) $.Values.secondary) }}
+{{ include "shared-lib.all" $secondary }}

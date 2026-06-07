@@ -1,0 +1,167 @@
+# Technitium DNS Server — two clustered instances (primary + secondary), each
+# rendered as an independent StatefulSet + LoadBalancer Service via templates/app.yaml.
+#
+# `defaults` is merged with each instance block via mergeOverwrite in the template:
+#   - dict fields (config, statefulset, resources, affinity…) are deep-merged;
+#     the instance block wins on any conflict.
+#   - list fields (storage, multusNetworks) in the instance block REPLACE the
+#     defaults list entirely (Helm mergeOverwrite semantics) — so those are kept
+#     per-instance where they actually differ.
+#
+# Clustering, TSIG keys, zones and ad-block lists are configured POST-DEPLOY via
+# the Technitium API as a manual operator step. See README.md and docs/dns-bootstrap.md.
+
+# ── SHARED DEFAULTS ──────────────────────────────────────────────────────────
+defaults:
+  statefulset:
+    image:
+      repository: technitium/dns-server
+      tag: "15.2.0"
+    ports:
+      cluster: 53443     # admin web console (HTTPS) + Technitium cluster sync
+      dns-tcp: 53
+      dns-udp:
+        port: 53
+        protocol: UDP
+  # First-boot seed only — Technitium ignores these once /etc/dns config exists.
+  config:
+    TZ: Europe/Brussels
+    DNS_SERVER_ADMIN_PASSWORD: <secret:kv/data/dns/technitium~admin-pass>
+    DNS_SERVER_ENABLE_BLOCKING: "true"
+    DNS_SERVER_FORWARDERS: "1.1.1.1, 9.9.9.9"
+  # hostAliases: both pods need to resolve each other's cluster hostnames.
+  # CoreDNS doesn't know the cluster zone, so we pin them via /etc/hosts.
+  # hostAliases use ClusterIPs so cluster sync (port 53443) and NOTIFY/AXFR
+  # stay on the flannel overlay — source IP is the pod IP, never the node IP.
+  # ClusterIPs are pinned in each instance's clusterIP field (survives rebuild).
+  hostAliases:
+    - ip: <secret:kv/data/dns/technitium~clusterip-primary>
+      hostnames:
+        - technitium-primary.mylocaldns
+    - ip: <secret:kv/data/dns/technitium~clusterip-secondary>
+      hostnames:
+        - technitium-secondary.mylocaldns
+  affinity:
+    podAnti:
+      required:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/instance: technitium
+          topologyKey: kubernetes.io/hostname
+  # Pin /32 routes to every cluster peer's VLAN 30 MACVLAN IP (.53 primary,
+  # .54 secondary, .220 NAS/tertiary) out of net1, so ALL pod-initiated cluster
+  # traffic (heartbeat/config-sync over 53443, NOTIFY + AXFR over 53) sources
+  # from the pod's own MACVLAN IP instead of the node IP.
+  #
+  # Why this is needed: the sbr chained plugin moves net1's subnet route into a
+  # separate table keyed by "from <net1-ip>", leaving the main table with only
+  # the overlay default. New pod-initiated connections to a VLAN 30 host (no
+  # source bound yet) therefore egress via the overlay → node → SNAT to the
+  # (ever-changing) node IP. The cluster nodes advertise their VLAN 30 IPs and
+  # the zone-transfer / NOTIFY ACLs allow only the specific MACVLAN IPs
+  # (.53/.54/.220) — never node IPs — so without these routes a pod's AXFR/NOTIFY
+  # is refused, the `mylocaldns` zone never transfers, and its DANE/TLSA records
+  # are missing → cluster TLS (DANE-validated self-signed certs) fails with
+  # UntrustedRoot and config-sync/heartbeat break. Re-adding host routes to the
+  # main table makes the traffic egress via net1 with the stable MACVLAN src.
+  # No explicit src needed — the kernel picks net1's address; routing to a pod's
+  # own MACVLAN IP is harmless (the local table wins), so this single block is
+  # correct for both instances.
+  initContainers:
+    - name: vlan30-cluster-routes
+      image: busybox:1.37.0
+      command:
+        - sh
+        - -c
+        - |
+          for i in $(seq 1 10); do
+            ip link show net1 >/dev/null 2>&1 && break
+            sleep 1
+          done
+          for peer in <secret:kv/data/dns/technitium~lb-ip-primary> <secret:kv/data/dns/technitium~lb-ip-secondary> <secret:kv/data/external-ips~gobelijn>; do
+            ip route replace "$peer/32" dev net1
+          done
+      securityContext:
+        capabilities:
+          add: ["NET_ADMIN"]
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# ── PRIMARY ──────────────────────────────────────────────────────────────────
+# Cluster primary: accepts config/zone changes; target of Ansible nsupdate.
+primary:
+  syncWave: 0
+  nameOverride: technitium-primary
+  fullnameOverride: technitium-primary
+  clusterIP: <secret:kv/data/dns/technitium~clusterip-primary>
+  config:
+    DNS_SERVER_DOMAIN: technitium-primary.mylocaldns
+  # storage is a list — replaces defaults entirely (volumeName is the only difference)
+  storage:
+    - mountPath: /etc/dns
+      size: 2Gi
+      type: longhorn
+      volumeName: technitium-primary-config
+      nameSuffix: config
+      protect: true
+  # VLAN 30 MACVLAN — SLAAC IPv6: 2a02:a03f:f412:d600:53:ff:fe00:1
+  # IPv4 via static DHCP lease in UniFi for MAC 02:53:00:00:00:01.
+  # parentInterface: enp1s0 = native (untagged) VLAN 30; no vlan30 sub-interface needed.
+  multusNetworks:
+    - name: technitium-primary-vlan30
+      interface: net1
+      mac: "02:53:00:00:00:01"
+      dhcpHostname: _stub_technitium-primary
+      parentInterface: enp1s0
+      nodeLabelKey: vlan30-trunk
+      type: macvlan
+      mode: bridge
+      chainedPlugins:
+        - type: sbr
+      ipam:
+        type: dhcp
+  ingress_internal_secure:
+    host: dns-a.<secret:kv/data/domains~domain>
+    port: cluster
+    serversTransport: technitium-primary-https
+
+# ── SECONDARY ────────────────────────────────────────────────────────────────
+# Cluster secondary: syncs from primary, answers queries independently.
+secondary:
+  syncWave: 1
+  nameOverride: technitium-secondary
+  fullnameOverride: technitium-secondary
+  clusterIP: <secret:kv/data/dns/technitium~clusterip-secondary>
+  config:
+    DNS_SERVER_DOMAIN: technitium-secondary.mylocaldns
+  storage:
+    - mountPath: /etc/dns
+      size: 2Gi
+      type: longhorn
+      volumeName: technitium-secondary-config
+      nameSuffix: config
+      protect: true
+  # VLAN 30 MACVLAN — SLAAC IPv6: 2a02:a03f:f412:d600:53:ff:fe00:2
+  # IPv4 via static DHCP lease in UniFi for MAC 02:53:00:00:00:02.
+  multusNetworks:
+    - name: technitium-secondary-vlan30
+      interface: net1
+      mac: "02:53:00:00:00:02"
+      dhcpHostname: _stub_technitium-secondary
+      parentInterface: enp1s0
+      nodeLabelKey: vlan30-trunk
+      type: macvlan
+      mode: bridge
+      chainedPlugins:
+        - type: sbr
+      ipam:
+        type: dhcp
+  ingress_internal_secure:
+    host: dns-b.<secret:kv/data/domains~domain>
+    port: cluster
+    serversTransport: technitium-secondary-https

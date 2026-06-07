@@ -1,0 +1,59 @@
+---
+# DNS record injection — runs AFTER the cluster (and Technitium) are up.
+#
+# Decoupled from node_setup.yml / k3s_setup.yml on purpose: provisioning must not
+# depend on a DNS server that may not exist yet (Technitium runs ON the cluster).
+# During bring-up the Synology slave keeps resolution alive; this playbook then
+# injects/refreshes the dynamic records via nsupdate (RFC 2136 + TSIG).
+#
+# Target server = `dns_server_ip` (group_vars). Pre-authority-flip that is still the
+# Synology master (.220); after the flip it becomes the Technitium PRIMARY VIP — only
+# the cluster primary accepts dynamic updates.
+#
+# Run:  ansible-playbook -i inventory playbooks/dns.yml
+
+- name: DNS records for cluster nodes
+  hosts: nodes
+  gather_facts: false
+  roles:
+    - role: dns
+      vars:
+        dns_set_record: "{{ inventory_hostname }}"
+        dns_set_record_value: "{{ host_ip_address }}"
+    - role: dns
+      vars:
+        dns_set_record: "{{ inventory_hostname }}"
+        dns_set_record_value: "{{ host_ipv6_address }}"
+        dns_record_type: "AAAA"
+      when: (host_ipv6_address | default('') | length) > 0
+
+- name: DNS records for k3s control-plane + ingress
+  hosts: k3smaster
+  gather_facts: false
+  roles:
+    # k3s.<zone> -> all control-plane node IPs (HA)
+    - role: dns
+      vars:
+        dns_set_record: "{{ k3s_master_domain_name }}"
+        dns_set_record_value: "{% set hostIps = []%}{% for host in ansible_play_hosts %}{{ hostIps.append(hostvars[host].host_ip_address) }}{% endfor %}{{hostIps}}"
+      run_once: true
+    - role: dns
+      vars:
+        dns_set_record: "{{ k3s_master_domain_name }}"
+        dns_set_record_value: "{% set hostIps = []%}{% for host in ansible_play_hosts %}{% if (hostvars[host].host_ipv6_address | default('') | length) > 0 %}{{ hostIps.append(hostvars[host].host_ipv6_address) }}{% endif %}{% endfor %}{{hostIps}}"
+        dns_record_type: "AAAA"
+      when: (hostvars[k3s_primary_master].host_ipv6_address | default('') | length) > 0
+      run_once: true
+    # ingress.<zone> -> Traefik LB IP, and wildcard CNAME *.<zone> -> ingress
+    - role: dns
+      vars:
+        dns_set_record: "ingress"
+        dns_set_record_value: "{{ k3s_master_ingress_ip }}"
+        dns_record_type: "A"
+      run_once: true
+    - role: dns
+      vars:
+        dns_set_record: "*"
+        dns_set_record_value: "ingress"
+        dns_record_type: "cname"
+      run_once: true

@@ -6,13 +6,13 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "helm.labels" . | nindent 4 }}
+  {{- if .Values.syncWave }}
   annotations:
-    kubernetes.io/ingress.class: traefik-external
-    {{ if .Values.syncWave }}
     argocd.argoproj.io/sync-wave: {{ .Values.syncWave | default 0 | quote }}
-    {{- end }}
+  {{- end }}
 spec:
-  entryPoints: 
+  ingressClassName: traefik-external
+  entryPoints:
     - websecure
   routes:
   - kind: Rule
@@ -24,6 +24,6 @@ spec:
     - kind: Service
       name: {{ include "helm.fullname" . }}-service
       namespace: {{ .Release.Namespace }}
-      port: {{ index (include "shared-lib.getPorts" . | fromYaml) .Values.ingress_external_secure.port }}
+      port: {{ include "shared-lib.portNumber" (index (include "shared-lib.getPorts" . | fromYaml) .Values.ingress_external_secure.port) }}
   tls: {}
 {{- end }}
