@@ -1,17 +1,4 @@
-- name: Configure dns
-  hosts: nodes
-  gather_facts: false
-  roles:
-    - role: "dns"
-      vars:
-        dns_set_record: "{{ inventory_hostname }}"
-        dns_set_record_value: "{{ host_ip_address }}"
-    - role: "dns"
-      vars:
-        dns_set_record: "{{ inventory_hostname }}"
-        dns_set_record_value: "{{ host_ipv6_address }}"
-        dns_record_type: "AAAA"
-      when: (host_ipv6_address | default('') | length) > 0
+# NOTE: DNS record injection moved to playbooks/dns.yml (runs after the cluster is up).
 
 # - name: Configure node basic things serially
 #   hosts: nodes

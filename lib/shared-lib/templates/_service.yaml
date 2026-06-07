@@ -14,14 +14,20 @@ spec:
   ports:
     {{- range $key, $value := (include "shared-lib.getPorts" . | fromYaml) }}
     - name: {{ $key }}
-      port: {{ $value }}
-      protocol: TCP
+      port: {{ include "shared-lib.portNumber" $value }}
+      protocol: {{ include "shared-lib.portProtocol" $value }}
       targetPort: {{ $key }}
     {{- end }}
   selector:
     {{- include "helm.selectorLabels" . | nindent 4 }}
+  {{- if .Values.clusterIP }}
+  clusterIP: {{ .Values.clusterIP }}
+  {{- end }}
   {{- if .Values.serviceIp }}
   type: LoadBalancer
   loadBalancerIP: {{ .Values.serviceIp }}
+  {{- if .Values.externalTrafficPolicy }}
+  externalTrafficPolicy: {{ .Values.externalTrafficPolicy }}
+  {{- end }}
   {{- end -}}
 {{- end }}

@@ -27,8 +27,8 @@ securityContext:
 ports:
   {{- range $key, $value := (include "shared-lib.getPorts" . | fromYaml) }}
   - name: {{ $key }}
-    containerPort: {{ $value }}
-    protocol: TCP
+    containerPort: {{ include "shared-lib.portNumber" $value }}
+    protocol: {{ include "shared-lib.portProtocol" $value }}
   {{- end }}
 {{- end }}
 {{- if .Values.storage }}
