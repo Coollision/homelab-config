@@ -13,6 +13,8 @@
 {{ include "shared-lib.longhorn" (dict "root" $root "storage" $storage) }}
     {{- else if eq $storage.type "existingClaim" }}
       {{/* No PVC creation needed for existing claims */}}
+    {{- else if eq $storage.type "secret" }}
+      {{/* No resource needed; secret is mounted via volumeMount in container */}}
     {{- else }}
       {{- fail (printf "Unsupported storage type '%s'" $storage.type) }}
     {{- end }}

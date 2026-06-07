@@ -49,6 +49,17 @@ env:
 {{- end -}}
 {{- end }}
 
+{{- /* A port value may be a scalar (the port number, protocol TCP) or a map
+       {port: <n>, protocol: <TCP|UDP|...>}. These helpers normalise either form.
+       Scalar input renders byte-identically to the previous hardcoded behaviour. */ -}}
+{{- define "shared-lib.portNumber" -}}
+{{- if kindIs "map" . }}{{ .port }}{{ else }}{{ . }}{{ end -}}
+{{- end -}}
+
+{{- define "shared-lib.portProtocol" -}}
+{{- if kindIs "map" . }}{{ .protocol | default "TCP" }}{{ else }}TCP{{ end -}}
+{{- end -}}
+
 
 {{- define "shared-lib.podSecurityContext" -}}
 {{- if .Values.podSecurityContext -}}
