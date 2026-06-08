@@ -7,6 +7,65 @@ statefulset:
   ports:
     http: 8000
 
+initContainers:
+  - name: nginx-gzip-patch
+    image: lscr.io/linuxserver/babybuddy:2.9.2
+    command:
+      - /bin/sh
+      - -c
+      - |
+        python3 << 'PYEOF'
+        NGINX_CONF = '/config/nginx/nginx.conf'
+        SITE_CONF = '/config/nginx/site-confs/default.conf'
+
+        try:
+            with open(NGINX_CONF) as f:
+                conf = f.read()
+            if 'gzip_static on;' not in conf:
+                conf = conf.replace(
+                    '    #gzip on;',
+                    '    gzip on;\n    gzip_static on;\n    gzip_types text/plain text/css application/javascript application/json image/svg+xml;\n    gzip_min_length 256;'
+                )
+                with open(NGINX_CONF, 'w') as f:
+                    f.write(conf)
+                print('nginx.conf: gzip enabled')
+            else:
+                print('nginx.conf: already patched')
+        except FileNotFoundError:
+            print('nginx.conf not found yet (first run) - will apply next restart')
+
+        try:
+            with open(SITE_CONF) as f:
+                conf = f.read()
+            if 'expires max;' not in conf:
+                conf = conf.replace(
+                    '    location ^~ /static/  {\n        root /app/www/public;\n    }',
+                    '    location ^~ /static/  {\n        root /app/www/public;\n        expires max;\n        add_header Cache-Control "public, immutable";\n    }'
+                )
+                with open(SITE_CONF, 'w') as f:
+                    f.write(conf)
+                print('site-confs: static caching added')
+            else:
+                print('site-confs: already patched')
+        except FileNotFoundError:
+            print('site-confs not found yet (first run) - will apply next restart')
+
+        import sqlite3
+        DB = '/config/data/db.sqlite3'
+        try:
+            db = sqlite3.connect(DB)
+            db.execute('PRAGMA synchronous=NORMAL')
+            db.execute('PRAGMA temp_store=MEMORY')
+            db.execute('PRAGMA mmap_size=30000000')
+            db.close()
+            print('sqlite: PRAGMAs applied')
+        except Exception as e:
+            print(f'sqlite: skipped ({e})')
+        PYEOF
+    volumeMounts:
+      - name: babybuddy
+        mountPath: /config
+
 config:
   PUID: "1000"
   PGID: "1000"
@@ -14,6 +73,7 @@ config:
   ALLOWED_HOSTS: babybuddy.<secret:kv/data/domains~domain>
   CSRF_TRUSTED_ORIGINS: https://babybuddy.<secret:kv/data/domains~domain>
   SECURE_PROXY_SSL_HEADER: "True"
+  GUNICORN_CMD_ARGS: "--preload"
 
 resources:
   requests:
