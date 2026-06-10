@@ -32,6 +32,10 @@ config:
   # handle the test phase instead of thrashing. (entrypoint writes to ups.conf)
   ONLINEDISCHARGE_CALIBRATION: "1"
   ONLINEDISCHARGE_LOG_THROTTLE: "60"
+  # APC self-tests take ~2-3 min offline for HID. Default maxretry=3 (30 s)
+  # exhausts before the test ends and the driver never recovers without a restart.
+  # 30 retries × 10 s POLLINTERVAL = 300 s covers the full self-test window.
+  MAXRETRY: "30"
   # API_USER/PASSWORD are what the bundled upsmon -F (the container's main
   # process) uses to monitor ups@localhost — must match the [admin] entry in
   # upsd.users, which carries the `upsmon primary` role.
