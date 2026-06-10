@@ -2,7 +2,7 @@ fullnameOverride: ha-mcp
 deployment:
   image:
     repository: ghcr.io/homeassistant-ai/ha-mcp
-    tag: 7.6.0
+    tag: 7.7.0
   # Run the OAuth 2.1 transport instead of the default stdio transport.
   # Each client logs in via a browser consent flow (Dynamic Client Registration)
   # and gets its own revocable token. Passed as args (= docker CMD) so the image's
@@ -16,8 +16,11 @@ config:
   TZ: Europe/Brussels
 
   # ha-mcp -> Home Assistant. Stays inside the cluster network; never crosses the LAN.
-  # In OAuth mode the HA token is NOT configured here: each client supplies its own
-  # long-lived access token through the browser consent form at first login.
+  # OAuth-only mode: each client supplies its own HA token via the browser consent flow.
+  # The sentinel "oauth-mode-token" tells ha-mcp to skip static token validation;
+  # it must be set explicitly because the image sets ENV HOMEASSISTANT_TOKEN="" which
+  # would otherwise fail pydantic validation before the Python default kicks in.
+  HOMEASSISTANT_TOKEN: oauth-mode-token
   HOMEASSISTANT_URL: http://homeassistant-service:8123
 
   # Public-facing base URL the clients connect to, and where the OAuth /authorize,
