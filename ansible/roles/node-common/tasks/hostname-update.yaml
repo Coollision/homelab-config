@@ -14,7 +14,10 @@
   register: hostname_file_change
 
 - name: Update /etc/hosts
-  ansible.builtin.include_tasks: ./ensureInHostsFile.yml
+  ansible.builtin.include_tasks:
+    file: ./ensureInHostsFile.yml
+    apply:
+      tags: [hostname, hosts]
   vars:
     set_addresses: >-
       {{
@@ -24,6 +27,7 @@
           {host_ip_address: ansible_host},
           {'127.0.1.1': 'raspberrypi'}
         ]
+        + ([{host_ip_address: k3s_node_name}] if (k3s_node_name is defined and (k3s_node_name | length) > 0) else [])
         + ([{host_ipv6_address: ansible_host}] if (host_ipv6_address is defined and (host_ipv6_address | length) > 0) else [])
       }}
     set_expected_state: present

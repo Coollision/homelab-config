@@ -1,7 +1,11 @@
 - name: Setup Hostname
-  ansible.builtin.include_tasks: hostname-update.yaml
+  ansible.builtin.include_tasks:
+    file: hostname-update.yaml
+    apply:
+      tags: [hostname, hosts]
   vars:
     hostname_name: "{{ inventory_hostname }}"
+  tags: [hostname, hosts]
 
 - name: Set locale en timezone
   ansible.builtin.include_tasks: set-timezone.yaml
