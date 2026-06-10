@@ -92,7 +92,7 @@ homeassistant:
 
   initContainers:
     - name: setup-thread-route
-      image: busybox:1.35
+      image: busybox:1.38
       command:
         - sh
         - -c
