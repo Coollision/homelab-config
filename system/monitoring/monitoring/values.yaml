@@ -452,6 +452,7 @@ storage:
     storagePath: alertmanager-alertmanager-monitoring-promstack-0
     volumeName: monitoring-alertmanager
     size: "2Gi"
+    replicas: 2  # ephemeral alert state — 2 replicas survive one node down
     type: longhorn
     accessMode: ReadWriteOnce
   - nameSuffix: prometheus
@@ -459,6 +460,7 @@ storage:
     storagePath: prometheus-prometheus-monitoring-promstack-0
     volumeName: monitoring-prometheus
     size: "20Gi"
+    replicas: 2  # scraped metrics, reproducible — 2 replicas survive one node down
     type: longhorn
     accessMode: ReadWriteOnce
   - nameSuffix: grafana
@@ -466,6 +468,7 @@ storage:
     storagePath: grafana
     volumeName: monitoring-grafana
     size: "2Gi"
+    replicas: 2  # dashboards are GitOps-provisioned — 2 replicas survive one node down
     type: longhorn
     accessMode: ReadWriteOnce
 

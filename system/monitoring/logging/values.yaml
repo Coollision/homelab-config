@@ -366,6 +366,7 @@ storage:
     storagePath: loki
     volumeName: monitoring-loki
     size: "10Gi"
+    replicas: 2  # logs, ephemeral — 2 replicas survive one node down
     type: longhorn
     accessMode: ReadWriteOnce
 

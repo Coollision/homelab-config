@@ -20,4 +20,5 @@ storage:
     size: 15Gi
     volumeName: esphome
     storageClass: longhorn-shared
+    replicas: 2  # firmware build cache, rebuildable — 2 replicas survive one node down
     protect: true

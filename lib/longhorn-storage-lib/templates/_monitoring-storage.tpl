@@ -15,6 +15,7 @@
 
     nameSuffix    string    (required) combined with prefix → "<prefix>-<nameSuffix>"
     size          string    (required) e.g. "10Gi"
+    replicas      int       default 3 — set 2 for reproducible/non-critical data
     accessMode    string    default "ReadWriteOnce"
     backupType    string    default "daily"
     protect       string    default "true"
@@ -69,7 +70,7 @@ spec:
   dataEngine: "v1"
   dataLocality: "best-effort"
   frontend: "blockdev"
-  numberOfReplicas: 3
+  numberOfReplicas: {{ .replicas | default 3 }}
   size: "{{ $sizeBytes }}"
   diskSelector: []
   nodeSelector: []
