@@ -1,0 +1,12 @@
+apiVersion: v2
+name: kubernetes-mcp-server
+description: Kubernetes MCP server (containers/kubernetes-mcp-server) exposed to Claude Code over HTTP, gated by a Traefik basicAuth token
+type: application
+version: 0.1.0
+appVersion: "0.0.62"
+
+dependencies:
+  - name: kubernetes-mcp-server
+    version: 0.1.0
+    # OCI registry (single chart, no huge classic index to parse)
+    repository: oci://ghcr.io/containers/charts
