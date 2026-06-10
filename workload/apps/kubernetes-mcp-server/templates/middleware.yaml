@@ -1,0 +1,16 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: mcp-basicauth
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: kubernetes-mcp-server
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  basicAuth:
+    # References the Secret's `users` key (htpasswd format).
+    secret: mcp-basicauth
+    # Strip the Authorization header after validation so it never reaches the
+    # MCP server (defense-in-depth alongside cluster_auth_mode=kubeconfig).
+    removeHeader: true

@@ -1,0 +1,55 @@
+# kubernetes-mcp-server — gives Claude Code cluster access over MCP (HTTP).
+#
+# Auth model (no SSO): the server runs with OAuth DISABLED, so it advertises no
+# /.well-known/oauth-* metadata and Claude Code simply sends a static
+# `Authorization: Basic <token>` header. Access is gated in front of the server by
+# the Traefik basicAuth middleware below, whose credential lives in Vault. The
+# server reaches the cluster with its OWN ServiceAccount (cluster_auth_mode=kubeconfig),
+# bound to cluster-admin.
+
+# --- our own resources (templates/) ---
+ingress_internal_secure:
+  host: k8s-mcp.<secret:kv/data/domains~domain>
+
+# --- upstream chart values (subchart, keyed by dependency name) ---
+kubernetes-mcp-server:
+  # Deterministic Service/resource names so our IngressRoute can target them.
+  fullnameOverride: kubernetes-mcp-server
+
+  image:
+    # Pin the image (chart default is :latest). Bump alongside the chart version.
+    version: "v0.0.62"
+
+  # Server settings → rendered into /etc/kubernetes-mcp-server/config.toml
+  config:
+    port: "8080"
+    # Always use the pod ServiceAccount for cluster access; never treat the
+    # incoming (basic-auth) Authorization header as a Kubernetes token.
+    cluster_auth_mode: kubeconfig
+    # No OAuth ⇒ no OAuth metadata advertised ⇒ Claude Code uses the static
+    # header instead of starting an OAuth flow (avoids client bug #59467).
+    require_oauth: false
+
+  service:
+    port: 8080
+
+  # Exposed via our own Traefik IngressRoute + basicAuth middleware instead.
+  ingress:
+    enabled: false
+
+  # Bind the server's ServiceAccount to the built-in cluster-admin ClusterRole.
+  rbac:
+    create: true
+    extraClusterRoleBindings:
+      - name: cluster-admin
+        roleRef:
+          name: cluster-admin
+          external: true
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
