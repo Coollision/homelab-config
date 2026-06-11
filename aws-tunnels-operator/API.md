@@ -63,6 +63,27 @@ Request body:
 }
 ```
 
+### `POST /tunnel-toggle`
+
+Manually stops or starts a single tunnel. A **stop** pins the tunnel at `replicas=0` (via the
+`proxies.homelab.io/manuallyStopped` annotation) and survives reconcile — even when credentials are
+valid — useful for keeping a sensitive tunnel (e.g. prod) closed until explicitly opened. A
+**start** clears the annotation and scales to 1 when creds are valid (otherwise the reconcile loop
+brings it up on the next refresh).
+
+Request body:
+
+```json
+{
+  "namespace": "proxies",
+  "stack": "aws-tunnels",
+  "tunnel": "db",
+  "action": "stop"
+}
+```
+
+`action` is `stop` or `start`. Also accepts a form POST from the status UI.
+
 ### `GET /login-wait`
 
 HTML wait page used by form login to display AWS SSO URL while login is in progress.

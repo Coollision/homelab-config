@@ -179,8 +179,83 @@ GitHub Actions scheduled workflows only run from the **default branch** of the r
 
 ---
 
+### `sso-session` config is required for refresh tokens (silent auto-refresh)
+
+The operator renders `~/.aws/config` in the **`sso-session`** format, not the legacy inline format:
+
+```ini
+[profile dev]
+sso_session = aws-tunnels
+sso_account_id = ...
+sso_role_name  = ...
+
+[sso-session aws-tunnels]
+sso_start_url = ...
+sso_region    = ...
+sso_registration_scopes = sso:account:access
+```
+
+**Why it matters:** only the `sso-session` format with `sso_registration_scopes =
+sso:account:access` causes the AWS CLI to request offline access and store a **refresh token** in
+the token cache. The legacy inline form (`sso_start_url` directly in `[profile]`) yields a
+short-lived access token with no refresh token — so `aws configure export-credentials` can't
+silently renew, and unattended refresh is impossible. This switch (in `RenderAWSConfig`) is the
+single change that the whole captured-token model depends on.
+
+The token cache file is named `sha1hex(<sso-session name>).json`. The operator names the session
+after the stack, and `hack/import-sso-token.sh` must use the same name — otherwise the operator
+won't find the imported token. Both the workstation `~/.aws/config` and the operator must agree on
+the session name (= stack name for the primary start URL). Note this coupling only bites the
+optional import path; the in-cluster login does its own `aws sso login` under the operator's own
+session name, so the cache key always matches there.
+
+**Gated behind `stack.aws.useRefresh` (default false).** When false, `RenderAWSConfig` emits the
+legacy inline format, the reconcile auto-refresh block is skipped, and the login path behaves as
+before — i.e. exactly the prior behavior. When true, it emits sso-session, enables the
+seed/refresh/persist loop, and the login adds `--use-device-code`.
+
+**`--use-device-code` is mandatory for the in-cluster login under sso-session.** With sso-session
+config, `aws sso login --no-browser` defaults to the **authorization-code + PKCE** flow, whose
+`redirect_uri` is `http://127.0.0.1:<port>/oauth/callback` — a listener on *the machine running the
+CLI*. That works on a laptop (browser + CLI co-located) but not in-cluster (the user's browser would
+redirect to its own localhost, not the operator pod). `--use-device-code` forces the RFC 8628
+device-authorization grant (verification URL + user code, approved on any device, operator polls for
+completion) — and it still yields a refresh token, because the offline scope lives in the client
+registration, independent of grant type. `ssoLoginArgs()` adds the flag only when UseRefresh is set.
+After a successful in-cluster login, the login handler calls `persistTokenCache` so the pod's fresh
+cache (with refresh token) survives restarts.
+
+### SSO token cache dir is `$HOME`-derived, not relocatable
+
+The AWS CLI keeps the SSO token cache at `~/.aws/sso/cache` and derives it from `$HOME` — there is
+no env var to relocate it (unlike `AWS_CONFIG_FILE`). So the operator pod sets `HOME=/operator-home`
+and mounts a writable `emptyDir` at `/operator-home/.aws/sso/cache`. The operator seeds that dir
+from the `<stack>-sso-token` Secret each reconcile and persists rotations back — durable state lives
+in the Secret, not a PVC (consistent with the "Secrets, not PVCs" decision above). The refresh
+token rotates on use, so `persistTokenCache` must write the rotated cache back or the long-lived
+session is lost on the next pod restart.
+
+### Tunnel roll on creds refresh — rolling, not hot-reload
+
+STS creds reach tunnel pods via `envFrom`, and Kubernetes does not hot-reload env vars, so a refresh
+that changes the creds rolls the affected profile's tunnel Deployments (stamping
+`proxies.homelab.io/restartedAt`). The Deployment pins `RollingUpdate` `maxSurge=1/maxUnavailable=0`
+and has a readiness probe gated on the SSM tunnel being up, so the replacement serves before the old
+pod is retired (gap-free for new connections). Existing TCP streams through the old pod still reset
+once at the swap — unavoidable with env-injected creds. The roll only fires when the access key id
+actually changed, to avoid a restart loop every reconcile tick.
+
+### Manual stop/start annotation
+
+`proxies.homelab.io/manuallyStopped: "true"` on a tunnel Deployment forces `replicas=0` even when
+creds are valid. The reconcile mutate reads it (it persists across reconciles because CreateOrUpdate
+fetches the existing object first) and the `/tunnel-toggle` endpoint sets/clears it. The
+`<stack>-sso-token` Secret and the manual-stop annotation are both deliberately kept out of the
+pruner's deletion path (the token Secret is added to `desiredSecrets`).
+
 ## Outstanding known issues / TODOs
 
-- `aws sso login` stdout parsing is tied to current CLI output format. Consider switching to the AWS SDK SSO device-auth flow directly to avoid the subprocess dependency.
+- `aws sso login` stdout parsing is tied to current CLI output format. Consider switching to the AWS SDK SSO device-auth flow directly to avoid the subprocess dependency. (Less pressing now that the captured-token + auto-refresh path means interactive login is rare — usually only on initial import and when the SSO session finally expires.)
+- Unattended lifetime is bounded by the AWS IAM Identity Center session duration (admin-set). There is no operator-side control over it; when the refresh token is rejected, tunnels scale to 0 and the UI flags a needed re-import.
 - The SSO wait page polls `/login-poll.json` every 3 seconds regardless of whether the user has already clicked the URL. No WebSocket/SSE is used; HTTP polling is intentional for simplicity.
 - Tunnel Deployment restarts after login are done by patching a pod template annotation (`proxies.homelab.io/restartedAt`). This triggers a rolling restart. If the Deployment is at `replicas=0` (creds were invalid at last reconcile), the annotation patch has no immediate effect; the next reconcile cycle will scale it back up.

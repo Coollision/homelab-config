@@ -144,6 +144,9 @@
     }
     .btn:hover{filter:brightness(1.12);transform:translateY(-1px)}
     .btn:active{transform:translateY(0)}
+    .btn-stop{border-color:rgba(255,111,145,.45);background:linear-gradient(160deg, rgba(255,111,145,.28), rgba(255,111,145,.16));color:#ffd2de}
+    .btn-start{border-color:rgba(87,213,161,.5);background:linear-gradient(160deg, rgba(87,213,161,.28), rgba(87,213,161,.16));color:#baf3db}
+    .token-line{margin-top:14px;display:flex;align-items:center;gap:8px;font-size:.9rem;color:var(--muted)}
     .footer{
       margin-top:18px;
       padding:16px;
@@ -186,6 +189,13 @@
       </div>
       {{if .Msg}}<div class="flash flash-ok">{{.Msg}}</div>{{end}}
       {{if .Err}}<div class="flash flash-err">{{.Err}}</div>{{end}}
+      <div class="token-line">
+        {{if .TokenImported}}
+          <span class="dot dot-ok"></span> SSO token imported — credentials refresh automatically until the session expires.
+        {{else}}
+          <span class="dot dot-warn"></span> No SSO token imported. Run <code>hack/import-sso-token.sh</code> after <code>aws sso login</code>, or use Start Login below.
+        {{end}}
+      </div>
     </section>
 
     <section class="card table-wrap">
@@ -256,6 +266,7 @@
             <th>URL</th>
             <th>Ready</th>
             <th>Restarts</th>
+            <th>Control</th>
           </tr>
         </thead>
         <tbody>
@@ -272,7 +283,9 @@
               {{end}}
             </td>
             <td>
-              {{if eq .Desired 0}}
+              {{if .Stopped}}
+                <span style="display:inline-flex;align-items:center;gap:7px"><span class="dot dot-bad"></span> stopped</span>
+              {{else if eq .Desired 0}}
                 <span style="display:inline-flex;align-items:center;gap:7px"><span class="dot dot-grey"></span> pending</span>
               {{else if eq .Ready .Desired}}
                 <span style="display:inline-flex;align-items:center;gap:7px"><span class="dot dot-ok"></span> {{.Ready}}/{{.Desired}}</span>
@@ -287,6 +300,21 @@
                 <span class="restarts">{{.Restarts}}</span>
               {{else}}
                 <span style="color:#4a6070">0</span>
+              {{end}}
+            </td>
+            <td>
+              {{if .Stopped}}
+                <form method="POST" action="/tunnel-toggle" style="margin:0;display:inline">
+                  <input type="hidden" name="tunnel" value="{{.Name}}">
+                  <input type="hidden" name="action" value="start">
+                  <button class="btn btn-start" type="submit">Start</button>
+                </form>
+              {{else}}
+                <form method="POST" action="/tunnel-toggle" style="margin:0;display:inline" onsubmit="return confirm('Stop tunnel {{.Name}}? Existing connections will drop.');">
+                  <input type="hidden" name="tunnel" value="{{.Name}}">
+                  <input type="hidden" name="action" value="stop">
+                  <button class="btn btn-stop" type="submit">Stop</button>
+                </form>
               {{end}}
             </td>
           </tr>
