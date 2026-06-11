@@ -181,7 +181,7 @@ func (c StackConfig) RenderAWSConfig() (string, []string, error) {
 	}
 
 	// Modern sso-session format (UseRefresh=true): group profiles by SSO start URL into named
-	// [sso-session] blocks with offline scope, so `aws sso login` stores a REFRESH TOKEN and the
+	// [sso-session] blocks with sso_registration_scopes, so `aws sso login` stores a REFRESH TOKEN and the
 	// operator can silently mint fresh STS creds without an interactive login. See DEV.md.
 	//
 	// Session naming: the primary start URL gets the stack name; any additional distinct start URL

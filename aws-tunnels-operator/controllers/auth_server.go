@@ -283,21 +283,29 @@ func (s *AuthServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	creds, err := s.loginAndExport(req.Profile, awsConfigText, awsProfiles, cfg.Spec.AWS.UseRefresh)
+	// Run login + export + persist under the cache lock (it writes/reads the on-disk token cache);
+	// release it before the tunnel restart, which touches only Kubernetes objects. See ssoCacheMu.
+	creds, status, err := func() (exportCredentials, int, error) {
+		ssoCacheMu.Lock()
+		defer ssoCacheMu.Unlock()
+		creds, err := s.loginAndExport(req.Profile, awsConfigText, awsProfiles, cfg.Spec.AWS.UseRefresh)
+		if err != nil {
+			return exportCredentials{}, http.StatusBadRequest, err
+		}
+		if err := s.storeCredentials(context.Background(), req, creds); err != nil {
+			return exportCredentials{}, http.StatusInternalServerError, err
+		}
+		if cfg.Spec.AWS.UseRefresh {
+			if perr := persistTokenCache(context.Background(), s.Client, req.Namespace, req.Stack); perr != nil {
+				authLog.Error(perr, "failed to persist sso token cache after login", "profile", req.Profile)
+			}
+		}
+		return creds, 0, nil
+	}()
 	if err != nil {
 		authLog.Error(err, "sync login failed", "profile", req.Profile)
-		s.redirectOrError(w, r, formMode, err.Error(), http.StatusBadRequest)
+		s.redirectOrError(w, r, formMode, err.Error(), status)
 		return
-	}
-	if err := s.storeCredentials(context.Background(), req, creds); err != nil {
-		authLog.Error(err, "failed storing credentials", "profile", req.Profile)
-		s.redirectOrError(w, r, formMode, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if cfg.Spec.AWS.UseRefresh {
-		if perr := persistTokenCache(context.Background(), s.Client, req.Namespace, req.Stack); perr != nil {
-			authLog.Error(perr, "failed to persist sso token cache after login", "profile", req.Profile)
-		}
 	}
 	restarted, err := s.restartStackTunnels(context.Background(), req.Namespace, req.Stack, req.Profile)
 	if err != nil {
@@ -401,6 +409,13 @@ func (s *AuthServer) runSSOLogin(req loginRequest, sess *ssoSession, awsConfigTe
 		return
 	}
 	defer cleanupAWSConfig()
+
+	// Hold the cache lock for the whole login: the `aws sso login` subprocess writes the on-disk
+	// token cache and persistTokenCache (below) copies it to the Secret. Holding it the entire time
+	// stops a concurrent reconcile from re-seeding the dir and dropping the freshly-minted refresh
+	// token. The reconcile loop TryLocks, so it just skips its refresh while this runs.
+	ssoCacheMu.Lock()
+	defer ssoCacheMu.Unlock()
 
 	cmd := exec.Command("aws", ssoLoginArgs(req.Profile, useRefresh)...)
 	cmd.Env = append(os.Environ(), awsEnv...)
@@ -572,18 +587,28 @@ func clipLogOutput(s string) string {
 }
 
 func (s *AuthServer) exportCredentials(profile string, awsEnv []string) (exportCredentials, error) {
-	return exportProcessCredentials(profile, awsEnv)
+	return exportProcessCredentials(context.Background(), profile, awsEnv)
 }
+
+// awsExportTimeout bounds `aws configure export-credentials`. It only makes a couple of SSO/STS
+// calls, so it should return in seconds; the timeout exists so a network hang can't block the
+// single-threaded reconcile loop (or an auth-server request) indefinitely.
+const awsExportTimeout = 30 * time.Second
 
 // exportProcessCredentials runs `aws configure export-credentials` for a profile and parses the
 // result. When a valid SSO token cache is present, the AWS CLI silently refreshes the access token
 // via the cached refresh token, so this works with NO interactive login. Shared by the auth-server
-// login flow and the reconcile-loop auto-refresh.
-func exportProcessCredentials(profile string, awsEnv []string) (exportCredentials, error) {
-	exportCmd := exec.Command("aws", "configure", "export-credentials", "--profile", profile, "--format", "process")
+// login flow and the reconcile-loop auto-refresh. The call is bounded by awsExportTimeout.
+func exportProcessCredentials(ctx context.Context, profile string, awsEnv []string) (exportCredentials, error) {
+	ctx, cancel := context.WithTimeout(ctx, awsExportTimeout)
+	defer cancel()
+	exportCmd := exec.CommandContext(ctx, "aws", "configure", "export-credentials", "--profile", profile, "--format", "process")
 	exportCmd.Env = append(os.Environ(), awsEnv...)
 	exportOut, err := exportCmd.CombinedOutput()
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return exportCredentials{}, fmt.Errorf("aws configure export-credentials timed out after %s", awsExportTimeout)
+		}
 		return exportCredentials{}, fmt.Errorf("aws configure export-credentials failed: %v\n%s", err, string(exportOut))
 	}
 	var creds exportCredentials

@@ -79,11 +79,13 @@ stack:
     accountId: ""
     roleName: ""
     extraProfiles: []
-    # useRefresh: render the modern sso-session config (offline scope) so `aws sso login` mints a
+    # useRefresh: render the modern sso-session config (sso_registration_scopes) so `aws sso login` mints a
     # REFRESH TOKEN and the operator silently auto-refreshes STS creds for the whole SSO session.
     # The in-cluster login also switches to the device-code flow (remote-clickable) and the token
-    # cache is persisted to the <stack>-sso-token Secret. When false (default), the legacy inline
-    # format is used and a manual login is needed whenever creds expire (prior behavior).
+    # cache is persisted to the <stack>-sso-token Secret. Tunnels mount the creds Secret and read
+    # rotated creds in place, so they are NOT rolled (no ~hourly connection drop) when creds refresh.
+    # When false (default), the legacy inline format is used, creds arrive as env vars, and a manual
+    # login + pod roll is needed whenever creds expire (prior behavior).
     useRefresh: false
   auth:
     enabled: true

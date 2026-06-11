@@ -192,8 +192,8 @@ func TestRenderAWSConfig_SSOSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// The sso-session format (with offline scope) is what makes the CLI store a refresh token,
-	// enabling the operator's silent auto-refresh.
+	// The sso-session format (with sso_registration_scopes) is what makes the CLI store a refresh
+	// token, enabling the operator's silent auto-refresh.
 	for _, want := range []string{
 		"sso_session = aws-tunnels",
 		"[sso-session aws-tunnels]",

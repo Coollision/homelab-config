@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"strings"
@@ -22,10 +23,18 @@ import (
 // a running tunnel can be rolled onto fresh creds before the old ones lapse.
 const credsRefreshAhead = 10 * time.Minute
 
+// ssoCacheMu serializes access to the on-disk SSO token cache between the interactive login flow
+// (which writes a freshly-minted cache, incl. a rotated refresh token) and the reconcile loop's
+// seed/refresh/persist. Without it, a reconcile could re-seed the dir from the (older) Secret in the
+// window after a login writes the new token but before it persists, silently dropping the rotation.
+// The login flow takes it for its whole duration; the reconcile loop TryLocks and skips the refresh
+// for that tick if a login holds it (it retries next tick).
+var ssoCacheMu sync.Mutex
+
 // tokenSecretName is the Secret holding the captured AWS SSO token cache (access token + refresh
-// token + OIDC client registration). One per stack; seeded by hack/import-sso-token.sh after an
-// `aws sso login` on a workstation, then kept rotated by the operator. This is an AWS-scoped,
-// revocable token — NOT the corporate password.
+// token + OIDC client registration). One per stack; captured by the in-cluster `aws sso login` (the
+// auth-server login flow) and then kept rotated by the operator. This is an AWS-scoped, revocable
+// token — NOT the corporate password.
 func tokenSecretName(stackName string) string {
 	return fmt.Sprintf("%s-sso-token", strings.ToLower(ProfileKey(stackName)))
 }
@@ -41,29 +50,30 @@ func ssoCacheDir() string {
 }
 
 // seedTokenCache writes the captured token cache from the <stack>-sso-token Secret onto disk so the
-// AWS CLI can read (and silently refresh) it. Returns false (no error) when the Secret is
-// absent/empty — meaning there is nothing to refresh from yet (run a login + import).
-func seedTokenCache(ctx context.Context, c client.Client, namespace, stackName string) (bool, error) {
+// AWS CLI can read (and silently refresh) it. Returns seeded=false (no error) when the Secret is
+// absent/empty — meaning there is nothing to refresh from yet (run a login). The returned version is
+// the Secret's ResourceVersion, which changes on a fresh login; callers use it to detect a re-login.
+func seedTokenCache(ctx context.Context, c client.Client, namespace, stackName string) (seeded bool, version string, err error) {
 	secret := &corev1.Secret{}
 	if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: tokenSecretName(stackName)}, secret); err != nil {
 		if apierrors.IsNotFound(err) {
-			return false, nil
+			return false, "", nil
 		}
-		return false, fmt.Errorf("get sso token secret: %w", err)
+		return false, "", fmt.Errorf("get sso token secret: %w", err)
 	}
 	if len(secret.Data) == 0 {
-		return false, nil
+		return false, "", nil
 	}
 	dir := ssoCacheDir()
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return false, fmt.Errorf("create sso cache dir: %w", err)
+		return false, "", fmt.Errorf("create sso cache dir: %w", err)
 	}
 	for name, content := range secret.Data {
 		if err := os.WriteFile(filepath.Join(dir, name), content, 0o600); err != nil {
-			return false, fmt.Errorf("write sso cache file %s: %w", name, err)
+			return false, "", fmt.Errorf("write sso cache file %s: %w", name, err)
 		}
 	}
-	return true, nil
+	return true, secret.ResourceVersion, nil
 }
 
 // persistTokenCache writes the on-disk token cache back into the <stack>-sso-token Secret, but only
@@ -148,7 +158,7 @@ func (r *SingleStackRunner) refreshProfileCredentials(ctx context.Context, cfg S
 	}
 	defer cleanup()
 
-	creds, err := exportProcessCredentials(profile, awsEnv)
+	creds, err := exportProcessCredentials(ctx, profile, awsEnv)
 	if err != nil {
 		return false, err
 	}
