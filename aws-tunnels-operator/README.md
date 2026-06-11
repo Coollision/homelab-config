@@ -72,6 +72,49 @@ The auth server handles AWS SSO login out-of-band:
 7. Tunnel Deployments for that profile are restarted by patching the pod template annotation.
 8. The wait page redirects to `/` on success.
 
+### Hands-off auto-refresh from a captured SSO token
+
+**Opt-in via `stack.aws.useRefresh: true`** (default `false` keeps the legacy, manual-login
+behavior). When enabled, the operator renders its AWS config in the modern **`sso-session`** format
+with `sso_registration_scopes = sso:account:access`, so the SSO login mints a **refresh token**.
+
+Primary flow — just click the login link, same as before:
+
+1. You click a profile's login in the UI. The operator runs `aws sso login --use-device-code`
+   (device URL + code, exactly the existing remote-clickable flow — `--use-device-code` is required
+   because the `sso-session` default uses a localhost redirect that can't complete in-cluster).
+2. You approve in your browser. The operator exports STS creds **and persists the resulting token
+   cache** (access token + refresh token) to a `<stack>-sso-token` Secret.
+3. From then on, every reconcile tick the operator seeds that cache, and for each profile whose STS
+   creds are expired or within ~10 min of expiry runs `aws configure export-credentials` — which
+   **silently refreshes** the access token from the refresh token, no interactive login — writes
+   fresh STS creds, persists any rotated refresh token back, and rolls the affected tunnels.
+
+So you log in **once per SSO session** instead of every time the ~hourly STS creds expire. It
+continues unattended until the AWS IAM Identity Center session duration (admin-set) is reached; then
+the tunnels scale to 0 and you click the login link once more. No corporate password is ever stored
+— only an AWS-scoped, revocable SSO token.
+
+> Optional: `hack/import-sso-token.sh` seeds the same `<stack>-sso-token` Secret from a workstation
+> `aws sso login` instead of the in-cluster click — handy for headless setups. Not required.
+
+#### Rolling tunnels onto refreshed creds
+
+STS creds are injected into tunnel pods via `envFrom`, and env vars do not hot-reload, so a refresh
+that changes the creds rolls the affected profile's tunnel Deployments (it stamps the
+`proxies.homelab.io/restartedAt` annotation). The Deployment uses `RollingUpdate` with
+`maxSurge=1, maxUnavailable=0` and a readiness probe gated on the SSM tunnel actually being up, so
+the replacement pod is serving before the old one is retired — **new connections see no gap**.
+Existing TCP connections through the old pod reset once at the swap (unavoidable with env-injected
+creds).
+
+### Manual stop/start per tunnel
+
+Each tunnel has a **Stop/Start** toggle in the status UI (and `POST /tunnel-toggle`). A stop pins
+the tunnel at `replicas=0` via the `proxies.homelab.io/manuallyStopped` annotation and survives the
+next reconcile even when creds are valid — handy for keeping a sensitive tunnel (e.g. prod) closed
+until you explicitly open it. Start clears the annotation and brings it back up.
+
 ### Credential storage
 
 Per-profile credentials are stored in Secrets named `<stack>-creds-<profile>`:
@@ -259,13 +302,38 @@ helm upgrade --install aws-tunnels ./chart -n proxies --create-namespace -f my-v
 
 `GET /` renders a dashboard with:
 
+- A token status line: whether an SSO token has been imported (auto-refresh active) or needs importing
 - Per-profile login buttons (shows credential expiry and validity)
-- Tunnel status table: name, profile, bastion, host URL (clickable), ready replicas, restart count
+- Tunnel status table: name, profile, bastion, host URL (clickable), ready replicas, restart count, and a per-tunnel **Stop/Start** toggle
 - Stack restart form
 
 The SSO wait page (`/login-wait`) shows the verification URL and user code with a one-click copy button and a direct login link (URL with `user_code` pre-filled).
 
 ---
+
+## Enabling auto-refresh
+
+1. Set `stack.aws.useRefresh: true` and deploy.
+2. Open the auth UI and click **Start Login** for the profile; approve the device code in your
+   browser (once). That's it — the operator persists the refresh-token-bearing cache and keeps STS
+   creds fresh until the SSO session expires, then you click the link again.
+
+### Optional: seed the token from a workstation instead
+
+For headless setups you can seed the `<stack>-sso-token` Secret directly. Your `~/.aws/config` must
+define an `sso-session` block whose **name matches the operator's** (the stack name — the cache is
+keyed by session name):
+
+```ini
+[sso-session aws-tunnels]
+sso_start_url = https://YOUR-SSO.awsapps.com/start
+sso_region    = eu-west-1
+sso_registration_scopes = sso:account:access   ; REQUIRED — mints the refresh token
+```
+
+```bash
+NAMESPACE=proxies STACK=aws-tunnels ./hack/import-sso-token.sh
+```
 
 ## API reference
 

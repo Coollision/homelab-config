@@ -174,6 +174,79 @@ func TestRenderAWSConfig_Success(t *testing.T) {
 	}
 }
 
+func TestRenderAWSConfig_SSOSession(t *testing.T) {
+	cfg := StackConfig{
+		Name: "aws-tunnels",
+		Spec: AWSTunnelStackSpec{
+			AWS: AWSSpec{
+				Profile:     "dev",
+				Region:      "eu-west-1",
+				SSOStartURL: "https://sso.example.com",
+				AccountID:   "123456789012",
+				RoleName:    "DevRole",
+				UseRefresh:  true,
+			},
+		},
+	}
+	text, _, err := cfg.RenderAWSConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// The sso-session format (with offline scope) is what makes the CLI store a refresh token,
+	// enabling the operator's silent auto-refresh.
+	for _, want := range []string{
+		"sso_session = aws-tunnels",
+		"[sso-session aws-tunnels]",
+		"sso_start_url = https://sso.example.com",
+		"sso_registration_scopes = sso:account:access",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("expected %q in rendered config:\n%s", want, text)
+		}
+	}
+	// sso_start_url must live in the session block, not inline in the profile block.
+	if strings.Contains(text, "[profile dev]\nsso_session = aws-tunnels\nsso_account_id") == false {
+		t.Errorf("profile block should reference the session, got:\n%s", text)
+	}
+}
+
+func TestRenderAWSConfig_LegacyByDefault(t *testing.T) {
+	// UseRefresh defaults to false -> legacy inline format (no sso-session, no refresh token).
+	cfg := StackConfig{
+		Name: "aws-tunnels",
+		Spec: AWSTunnelStackSpec{
+			AWS: AWSSpec{
+				Profile:     "dev",
+				Region:      "eu-west-1",
+				SSOStartURL: "https://sso.example.com",
+				AccountID:   "123456789012",
+				RoleName:    "DevRole",
+			},
+		},
+	}
+	text, _, err := cfg.RenderAWSConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(text, "[profile dev]\nregion = eu-west-1\nsso_start_url = https://sso.example.com") {
+		t.Errorf("expected legacy inline profile block, got:\n%s", text)
+	}
+	if strings.Contains(text, "sso_session =") || strings.Contains(text, "[sso-session") {
+		t.Errorf("legacy mode must not emit sso-session blocks, got:\n%s", text)
+	}
+}
+
+func TestSSOLoginArgs(t *testing.T) {
+	legacy := ssoLoginArgs("dev", false)
+	if strings.Contains(strings.Join(legacy, " "), "--use-device-code") {
+		t.Errorf("legacy login must not force device-code: %v", legacy)
+	}
+	refresh := ssoLoginArgs("dev", true)
+	if !strings.Contains(strings.Join(refresh, " "), "--use-device-code") {
+		t.Errorf("refresh login must force device-code: %v", refresh)
+	}
+}
+
 func TestRenderAWSConfig_DefaultRegion(t *testing.T) {
 	cfg := StackConfig{Spec: AWSTunnelStackSpec{
 		AWS: AWSSpec{

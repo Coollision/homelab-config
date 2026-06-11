@@ -109,13 +109,15 @@ type tunnelStatus struct {
 	Ready    int32
 	Desired  int32
 	Restarts int32
+	Stopped  bool
 }
 
 type authRootPageData struct {
-	Targets []loginTarget
-	Tunnels []tunnelStatus
-	Msg     string
-	Err     string
+	Targets       []loginTarget
+	Tunnels       []tunnelStatus
+	Msg           string
+	Err           string
+	TokenImported bool
 }
 
 type authSSOWaitPageData struct {
@@ -153,6 +155,7 @@ func (s *AuthServer) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/login-wait", s.handleLoginWait)
 	mux.HandleFunc("/login-poll.json", s.handleLoginPoll)
 	mux.HandleFunc("/restart", s.handleRestart)
+	mux.HandleFunc("/tunnel-toggle", s.handleTunnelToggle)
 
 	go s.cleanupSSOSessions()
 }
@@ -195,11 +198,20 @@ func (s *AuthServer) handleRoot(w http.ResponseWriter, r *http.Request) {
 		authLog.Error(tunnelErr, "failed to discover tunnel statuses")
 	}
 
+	tokenImported := false
+	if len(targets) > 0 {
+		secret := &corev1.Secret{}
+		if err := s.Client.Get(r.Context(), types.NamespacedName{Namespace: targets[0].Namespace, Name: tokenSecretName(targets[0].Stack)}, secret); err == nil && len(secret.Data) > 0 {
+			tokenImported = true
+		}
+	}
+
 	data := authRootPageData{
-		Targets: targets,
-		Tunnels: tunnels,
-		Msg:     r.URL.Query().Get("msg"),
-		Err:     r.URL.Query().Get("err"),
+		Targets:       targets,
+		Tunnels:       tunnels,
+		Msg:           r.URL.Query().Get("msg"),
+		Err:           r.URL.Query().Get("err"),
+		TokenImported: tokenImported,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -266,12 +278,12 @@ func (s *AuthServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 		sess := &ssoSession{Profile: req.Profile, Namespace: req.Namespace, Stack: req.Stack, done: make(chan struct{}), startedAt: time.Now()}
 		s.ssoSessions.Store(sid, sess)
 		authLog.Info("started async sso session", "sid", sid, "profile", req.Profile)
-		go s.runSSOLogin(req, sess, awsConfigText, awsProfiles)
+		go s.runSSOLogin(req, sess, awsConfigText, awsProfiles, cfg.Spec.AWS.UseRefresh)
 		http.Redirect(w, r, "/login-wait?sid="+url.QueryEscape(sid), http.StatusSeeOther)
 		return
 	}
 
-	creds, err := s.loginAndExport(req.Profile, awsConfigText, awsProfiles)
+	creds, err := s.loginAndExport(req.Profile, awsConfigText, awsProfiles, cfg.Spec.AWS.UseRefresh)
 	if err != nil {
 		authLog.Error(err, "sync login failed", "profile", req.Profile)
 		s.redirectOrError(w, r, formMode, err.Error(), http.StatusBadRequest)
@@ -281,6 +293,11 @@ func (s *AuthServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 		authLog.Error(err, "failed storing credentials", "profile", req.Profile)
 		s.redirectOrError(w, r, formMode, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	if cfg.Spec.AWS.UseRefresh {
+		if perr := persistTokenCache(context.Background(), s.Client, req.Namespace, req.Stack); perr != nil {
+			authLog.Error(perr, "failed to persist sso token cache after login", "profile", req.Profile)
+		}
 	}
 	restarted, err := s.restartStackTunnels(context.Background(), req.Namespace, req.Stack, req.Profile)
 	if err != nil {
@@ -371,7 +388,7 @@ func (s *AuthServer) handleLoginPoll(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"status": "waiting", "url": ssoURL, "code": code})
 }
 
-func (s *AuthServer) runSSOLogin(req loginRequest, sess *ssoSession, awsConfigText string, awsProfiles []string) {
+func (s *AuthServer) runSSOLogin(req loginRequest, sess *ssoSession, awsConfigText string, awsProfiles []string, useRefresh bool) {
 	defer close(sess.done)
 	authLog.Info("running async aws sso login", "profile", req.Profile, "stack", req.Stack)
 
@@ -385,7 +402,7 @@ func (s *AuthServer) runSSOLogin(req loginRequest, sess *ssoSession, awsConfigTe
 	}
 	defer cleanupAWSConfig()
 
-	cmd := exec.Command("aws", "sso", "login", "--profile", req.Profile, "--no-browser")
+	cmd := exec.Command("aws", ssoLoginArgs(req.Profile, useRefresh)...)
 	cmd.Env = append(os.Environ(), awsEnv...)
 	pr, pw := io.Pipe()
 	cmd.Stdout = pw
@@ -447,6 +464,14 @@ func (s *AuthServer) runSSOLogin(req loginRequest, sess *ssoSession, awsConfigTe
 		return
 	}
 
+	// With sso-session/refresh enabled, persist the freshly-written token cache (incl. refresh
+	// token) to the Secret so the reconcile loop can keep refreshing and it survives pod restarts.
+	if useRefresh {
+		if perr := persistTokenCache(context.Background(), s.Client, req.Namespace, req.Stack); perr != nil {
+			authLog.Error(perr, "failed to persist sso token cache after login", "profile", req.Profile)
+		}
+	}
+
 	restarted, err := s.restartStackTunnels(context.Background(), req.Namespace, req.Stack, req.Profile)
 	if err != nil {
 		sess.mu.Lock()
@@ -463,14 +488,26 @@ func (s *AuthServer) runSSOLogin(req loginRequest, sess *ssoSession, awsConfigTe
 	authLog.Info("async login flow completed", "profile", req.Profile, "stack", req.Stack, "restarted", restarted)
 }
 
-func (s *AuthServer) loginAndExport(profile string, awsConfigText string, awsProfiles []string) (exportCredentials, error) {
+// ssoLoginArgs builds the `aws sso login` argument list. When useRefresh is set (sso-session
+// config), it forces the device-code flow with --use-device-code so the remote-clickable URL+code
+// flow is used instead of the sso-session default localhost-redirect flow, which cannot complete
+// for a browser that isn't on the operator pod.
+func ssoLoginArgs(profile string, useRefresh bool) []string {
+	args := []string{"sso", "login", "--profile", profile, "--no-browser"}
+	if useRefresh {
+		args = append(args, "--use-device-code")
+	}
+	return args
+}
+
+func (s *AuthServer) loginAndExport(profile string, awsConfigText string, awsProfiles []string, useRefresh bool) (exportCredentials, error) {
 	awsEnv, cleanupAWSConfig, err := buildAWSCLIEnv(profile, awsConfigText, awsProfiles)
 	if err != nil {
 		return exportCredentials{}, err
 	}
 	defer cleanupAWSConfig()
 
-	loginCmd := exec.Command("aws", "sso", "login", "--profile", profile, "--no-browser")
+	loginCmd := exec.Command("aws", ssoLoginArgs(profile, useRefresh)...)
 	loginCmd.Env = append(os.Environ(), awsEnv...)
 	loginOut, err := loginCmd.CombinedOutput()
 	if err != nil {
@@ -535,6 +572,14 @@ func clipLogOutput(s string) string {
 }
 
 func (s *AuthServer) exportCredentials(profile string, awsEnv []string) (exportCredentials, error) {
+	return exportProcessCredentials(profile, awsEnv)
+}
+
+// exportProcessCredentials runs `aws configure export-credentials` for a profile and parses the
+// result. When a valid SSO token cache is present, the AWS CLI silently refreshes the access token
+// via the cached refresh token, so this works with NO interactive login. Shared by the auth-server
+// login flow and the reconcile-loop auto-refresh.
+func exportProcessCredentials(profile string, awsEnv []string) (exportCredentials, error) {
 	exportCmd := exec.Command("aws", "configure", "export-credentials", "--profile", profile, "--format", "process")
 	exportCmd.Env = append(os.Environ(), awsEnv...)
 	exportOut, err := exportCmd.CombinedOutput()
@@ -552,9 +597,15 @@ func (s *AuthServer) exportCredentials(profile string, awsEnv []string) (exportC
 }
 
 func (s *AuthServer) storeCredentials(ctx context.Context, req loginRequest, creds exportCredentials) error {
-	secretName := credsSecretName(req.Stack, req.Profile)
-	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: req.Namespace}}
-	_, err := controllerutil.CreateOrUpdate(ctx, s.Client, secret, func() error {
+	return writeCredsSecretData(ctx, s.Client, req.Namespace, credsSecretName(req.Stack, req.Profile), creds)
+}
+
+// writeCredsSecretData upserts the AWS STS credential keys (and expiration) into a creds Secret,
+// preserving any labels/annotations the reconcile loop set. Shared by the login flow and the
+// reconcile-loop auto-refresh.
+func writeCredsSecretData(ctx context.Context, c client.Client, namespace, secretName string, creds exportCredentials) error {
+	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: namespace}}
+	_, err := controllerutil.CreateOrUpdate(ctx, c, secret, func() error {
 		secret.Type = corev1.SecretTypeOpaque
 		if secret.Data == nil {
 			secret.Data = map[string][]byte{}
@@ -619,6 +670,125 @@ func (s *AuthServer) handleRestart(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "restarted": restarted, "message": message})
+}
+
+// handleTunnelToggle manually stops or starts a single tunnel. A stop pins the tunnel at
+// replicas=0 (via the manuallyStopped annotation) even when credentials are valid — useful to keep
+// a sensitive tunnel (e.g. prod) closed until explicitly opened. A start clears the annotation and,
+// when creds are valid, scales straight to 1; otherwise the reconcile loop brings it up on the next
+// refresh.
+func (s *AuthServer) handleTunnelToggle(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	formMode := isFormPost(r)
+	namespace := strings.TrimSpace(r.FormValue("namespace"))
+	stack := strings.TrimSpace(r.FormValue("stack"))
+	tunnel := strings.TrimSpace(r.FormValue("tunnel"))
+	action := strings.TrimSpace(r.FormValue("action"))
+	if !formMode {
+		var payload struct {
+			Namespace string `json:"namespace"`
+			Stack     string `json:"stack"`
+			Tunnel    string `json:"tunnel"`
+			Action    string `json:"action"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err == nil {
+			if namespace == "" {
+				namespace = strings.TrimSpace(payload.Namespace)
+			}
+			if stack == "" {
+				stack = strings.TrimSpace(payload.Stack)
+			}
+			if tunnel == "" {
+				tunnel = strings.TrimSpace(payload.Tunnel)
+			}
+			if action == "" {
+				action = strings.TrimSpace(payload.Action)
+			}
+		}
+	}
+
+	if namespace == "" {
+		namespace = s.StackNamespace
+	}
+	cfg, err := LoadStackConfig(r.Context(), s.Client, namespace, s.StackConfigName)
+	if err != nil {
+		s.redirectOrError(w, r, formMode, fmt.Sprintf("failed to load stack config: %v", err), http.StatusInternalServerError)
+		return
+	}
+	if stack == "" {
+		stack = cfg.Name
+	}
+	if tunnel == "" {
+		s.redirectOrError(w, r, formMode, "tunnel is required", http.StatusBadRequest)
+		return
+	}
+	if action != "stop" && action != "start" {
+		s.redirectOrError(w, r, formMode, "action must be 'stop' or 'start'", http.StatusBadRequest)
+		return
+	}
+
+	// Resolve the tunnel's profile so a start can scale straight to 1 when creds are valid.
+	profile := ""
+	found := false
+	for _, t := range cfg.Spec.Tunnels {
+		if t.Name == tunnel {
+			found = true
+			profile = t.AWSProfile
+			if profile == "" {
+				profile = cfg.Spec.AWS.Profile
+			}
+			break
+		}
+	}
+	if !found {
+		s.redirectOrError(w, r, formMode, fmt.Sprintf("tunnel %q not found in stack", tunnel), http.StatusBadRequest)
+		return
+	}
+
+	depName := fmt.Sprintf("%s-%s", stack, tunnel)
+	dep := &appsv1.Deployment{}
+	if err := s.Client.Get(r.Context(), types.NamespacedName{Namespace: namespace, Name: depName}, dep); err != nil {
+		s.redirectOrError(w, r, formMode, fmt.Sprintf("failed to get tunnel deployment: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	stop := action == "stop"
+	if dep.Annotations == nil {
+		dep.Annotations = map[string]string{}
+	}
+	var replicas int32
+	if stop {
+		dep.Annotations[annotManuallyStopped] = "true"
+		replicas = 0
+	} else {
+		delete(dep.Annotations, annotManuallyStopped)
+		credSecret := &corev1.Secret{}
+		if err := s.Client.Get(r.Context(), types.NamespacedName{Namespace: namespace, Name: credsSecretName(stack, profile)}, credSecret); err == nil && IsCredentialValid(credSecret) {
+			replicas = 1
+		}
+	}
+	dep.Spec.Replicas = &replicas
+	if err := s.Client.Update(r.Context(), dep); err != nil {
+		s.redirectOrError(w, r, formMode, fmt.Sprintf("failed to update tunnel deployment: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	verb := "started"
+	if stop {
+		verb = "stopped"
+	}
+	message := fmt.Sprintf("tunnel %q %s", tunnel, verb)
+	authLog.Info("tunnel toggle", "tunnel", tunnel, "stack", stack, "action", action)
+	if formMode {
+		http.Redirect(w, r, "/?msg="+url.QueryEscape(message), http.StatusSeeOther)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "tunnel": tunnel, "action": action, "message": message})
 }
 
 func decodeLoginRequest(r *http.Request) (loginRequest, bool, error) {
@@ -714,6 +884,7 @@ func (s *AuthServer) discoverTunnelStatuses(ctx context.Context) ([]tunnelStatus
 			}
 			ts.Desired = desired
 			ts.Ready = dep.Status.ReadyReplicas
+			ts.Stopped = dep.Annotations[annotManuallyStopped] == "true"
 		}
 		statuses = append(statuses, ts)
 	}

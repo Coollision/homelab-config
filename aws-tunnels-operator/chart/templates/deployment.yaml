@@ -29,6 +29,11 @@ spec:
               value: {{ .Values.stackConfig.name | quote }}
             - name: ARGOCD_APP_NAME
               value: {{ .Values.argoApp.name | default .Release.Name | quote }}
+            # The AWS CLI's SSO token cache lives at $HOME/.aws/sso/cache and is not relocatable by
+            # env, so point HOME at a writable in-pod dir the operator seeds from / persists to the
+            # captured-token Secret (see controllers/sso_token.go).
+            - name: HOME
+              value: /operator-home
           args:
             - --metrics-bind-address={{ .Values.operatorArgs.metricsBindAddress }}
             - --health-probe-bind-address={{ .Values.operatorArgs.healthProbeBindAddress }}
@@ -59,6 +64,15 @@ spec:
             successThreshold: {{ .Values.probes.liveness.successThreshold }}
           resources:
 {{ toYaml .Values.resources | indent 12 }}
+          volumeMounts:
+            # Writable SSO token cache. Ephemeral on purpose: the operator re-seeds it from the
+            # <stack>-sso-token Secret each reconcile and persists rotations back, so durable state
+            # lives in the Secret, not a PVC.
+            - name: sso-cache
+              mountPath: /operator-home/.aws/sso/cache
+      volumes:
+        - name: sso-cache
+          emptyDir: {}
 {{- with .Values.affinity }}
       affinity:
 {{ toYaml . | indent 8 }}

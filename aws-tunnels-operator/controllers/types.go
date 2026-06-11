@@ -17,6 +17,14 @@ type AWSSpec struct {
 	AccountID    string           `json:"accountId"`
 	RoleName     string           `json:"roleName"`
 	ExtraProfile []AWSProfileSpec `json:"extraProfiles,omitempty"`
+
+	// UseRefresh switches the rendered AWS config to the modern sso-session format with offline
+	// scope, so `aws sso login` mints a refresh token and the operator can silently auto-refresh
+	// STS creds for the whole SSO session. When false (default), the legacy inline format is used
+	// and there is no auto-refresh (a manual login is needed whenever creds expire). The login flow
+	// also adds --use-device-code when this is true, so the device-code (remote-clickable) flow is
+	// used instead of the sso-session default localhost-redirect flow, which can't work in-cluster.
+	UseRefresh bool `json:"useRefresh,omitempty"`
 }
 
 type AuthSpec struct {

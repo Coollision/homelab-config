@@ -37,6 +37,11 @@ const (
 	labelInstance = "app.kubernetes.io/instance"
 	annotTracking = "argocd.argoproj.io/tracking-id"
 	traefikAPI    = "traefik.io/v1alpha1"
+
+	// annotManuallyStopped, when "true" on a tunnel Deployment, forces it to replicas=0 even when
+	// credentials are valid. Set/cleared by the auth-server stop/start toggle and respected by the
+	// reconcile loop so a manual stop survives the next reconcile tick.
+	annotManuallyStopped = "proxies.homelab.io/manuallyStopped"
 )
 
 // argoTrackingID builds a NON-SELF-REFERENCING argocd.argoproj.io/tracking-id annotation.
@@ -109,13 +114,14 @@ func (r *SingleStackRunner) Start(ctx context.Context) error {
 }
 
 func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
+	log := ctrl.LoggerFrom(ctx)
 	cfg, err := LoadStackConfig(ctx, r.Client, r.Namespace, r.ConfigMapName)
 	if err != nil {
 		return err
 	}
 	stackName := cfg.Name
 	stack := cfg.Spec
-	awsConfigMapName, awsConfigText, _, err := SyncAWSConfigMap(ctx, r.Client, cfg)
+	awsConfigMapName, awsConfigText, awsProfiles, err := SyncAWSConfigMap(ctx, r.Client, cfg)
 	if err != nil {
 		return err
 	}
@@ -150,6 +156,39 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 			return err
 		}
 	}
+
+	// --- Silent auto-refresh: mint fresh STS creds from the captured SSO token, no login ---
+	// Seeds the cached token onto disk, refreshes each profile whose creds are expired or near
+	// expiry, then persists any rotated refresh token back to the Secret. Profiles whose creds
+	// actually changed are rolled below so running tunnels pick up the new creds.
+	profilesToRoll := map[string]bool{}
+	if stack.AWS.UseRefresh {
+		if seeded, serr := seedTokenCache(ctx, r.Client, cfg.Namespace, stackName); serr != nil {
+			log.Error(serr, "failed to seed sso token cache")
+		} else if seeded {
+			for _, profile := range profiles {
+				credSecret := &corev1.Secret{}
+				_ = r.Client.Get(ctx, types.NamespacedName{Namespace: cfg.Namespace, Name: credsSecretName(stackName, profile)}, credSecret)
+				if !credsNeedRefresh(credSecret, credsRefreshAhead) {
+					continue
+				}
+				changed, rerr := r.refreshProfileCredentials(ctx, cfg, profile, awsConfigText, awsProfiles)
+				if rerr != nil {
+					log.Error(rerr, "sso token refresh failed; a fresh login may be required", "profile", profile)
+					continue
+				}
+				if changed {
+					profilesToRoll[profile] = true
+					log.Info("refreshed STS creds from cached SSO token", "profile", profile)
+				}
+			}
+			if perr := persistTokenCache(ctx, r.Client, cfg.Namespace, stackName); perr != nil {
+				log.Error(perr, "failed to persist rotated sso token cache")
+			}
+		}
+	}
+
+	rollAt := time.Now().UTC().Format(time.RFC3339)
 
 	for _, tunnel := range stack.Tunnels {
 		profile := tunnel.AWSProfile
@@ -197,7 +236,7 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 			labels := map[string]string{
 				"app.kubernetes.io/name":    tunnelName,
 				"app.kubernetes.io/part-of": stackName,
-				labelStack:  stackName,
+				labelStack:                  stackName,
 			}
 			if r.ArgoAppName != "" {
 				labels[labelInstance] = r.ArgoAppName
@@ -210,7 +249,20 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 				dep.Annotations[annotTracking] = argoTrackingID(r.ArgoAppName, "", "ConfigMap", r.Namespace, r.ConfigMapName)
 			}
 			dep.Spec.Selector = &metav1.LabelSelector{MatchLabels: map[string]string{"app": tunnelName}}
-			dep.Spec.Replicas = desiredReplicas(validCreds)
+			// A manual stop (set via the auth-server toggle) pins the tunnel down even when
+			// creds are valid — e.g. keeping a prod tunnel closed until explicitly started.
+			manuallyStopped := dep.Annotations[annotManuallyStopped] == "true"
+			dep.Spec.Replicas = desiredReplicas(validCreds && !manuallyStopped)
+			// Surge the replacement pod up before retiring the old one so the Service never has
+			// zero endpoints across a creds-refresh roll. (Existing TCP streams through the old
+			// pod still reset once at the swap — unavoidable with env-injected creds.)
+			dep.Spec.Strategy = appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxUnavailable: &intstr.IntOrString{Type: intstr.Int, IntVal: 0},
+					MaxSurge:       &intstr.IntOrString{Type: intstr.Int, IntVal: 1},
+				},
+			}
 			zero := int32(0)
 			dep.Spec.RevisionHistoryLimit = &zero
 			dep.Spec.Template.ObjectMeta.Labels = map[string]string{"app": tunnelName, labelStack: stackName}
@@ -218,6 +270,12 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 				dep.Spec.Template.ObjectMeta.Annotations = map[string]string{}
 			}
 			dep.Spec.Template.ObjectMeta.Annotations["proxies.homelab.io/awsConfigHash"] = fmt.Sprintf("%x", sha256.Sum256([]byte(awsConfigText)))[:12]
+			// Roll this profile's tunnels onto creds the loop just refreshed (env vars don't
+			// hot-reload). Harmless when scaling 0->1 (a fresh pod gets the creds anyway);
+			// essential when a pod is already running on soon-to-expire creds.
+			if profilesToRoll[profile] {
+				dep.Spec.Template.ObjectMeta.Annotations["proxies.homelab.io/restartedAt"] = rollAt
+			}
 
 			resources := tunnel.Resources
 			if resources.Requests == nil && resources.Limits == nil {
@@ -270,6 +328,17 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 				},
 				Command:   []string{"/usr/local/bin/tunnel-runner"},
 				Resources: resources,
+				// Gate Service endpoint membership on the SSM tunnel actually being up (state file
+				// written), so a surged replacement pod only takes traffic once it serves and the
+				// old pod isn't retired until then — new connections stay gap-free across a roll.
+				ReadinessProbe: &corev1.Probe{
+					ProbeHandler: corev1.ProbeHandler{
+						Exec: &corev1.ExecAction{Command: []string{"sh", "-c", "[ -s /tmp/tunnel-state/state ]"}},
+					},
+					InitialDelaySeconds: 5,
+					PeriodSeconds:       10,
+					FailureThreshold:    3,
+				},
 				LivenessProbe: &corev1.Probe{
 					ProbeHandler: corev1.ProbeHandler{
 						Exec: &corev1.ExecAction{Command: []string{"sh", "-c", "[ -s /tmp/tunnel-state/state ]"}},
@@ -289,7 +358,7 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 				Resources:       proxyResources,
 			}
 			dep.Spec.Template.Spec.Volumes = upsertVolume(dep.Spec.Template.Spec.Volumes, corev1.Volume{
-				Name: tunnelStateVolumeName,
+				Name:         tunnelStateVolumeName,
 				VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 			})
 			dep.Spec.Template.Spec.Volumes = upsertVolume(dep.Spec.Template.Spec.Volumes, corev1.Volume{
@@ -403,6 +472,9 @@ func (r *SingleStackRunner) pruneStaleResources(ctx context.Context, cfg StackCo
 	for _, p := range cfg.DefinedAWSProfiles() {
 		desiredSecrets[credsSecretName(stackName, p)] = struct{}{}
 	}
+	// The captured SSO token Secret is operator-managed runtime state, not a creds Secret —
+	// keep it out of the pruner's sights even if it ever gets the stack label.
+	desiredSecrets[tokenSecretName(stackName)] = struct{}{}
 
 	depList := &appsv1.DeploymentList{}
 	if err := r.Client.List(ctx, depList, ns, stackLabel); err != nil {

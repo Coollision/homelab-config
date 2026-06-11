@@ -143,6 +143,70 @@ func (c StackConfig) RenderAWSConfig() (string, []string, error) {
 
 	var b strings.Builder
 	available := make([]string, 0, len(profiles))
+
+	if !c.Spec.AWS.UseRefresh {
+		// Legacy inline format: sso_* fields directly in the [profile] block. No refresh token is
+		// issued, so the operator cannot silently auto-refresh — a manual login is required whenever
+		// creds expire. This is the default (UseRefresh=false) and preserves prior behavior.
+		for _, p := range profiles {
+			if p.StartURL == "" || p.AccountID == "" || p.RoleName == "" {
+				return "", nil, fmt.Errorf("aws profile %q is missing required sso fields (ssoStartUrl, accountId, roleName)", p.Name)
+			}
+			region := p.Region
+			if region == "" {
+				region = "eu-west-1"
+			}
+			available = append(available, p.Name)
+			b.WriteString("[profile ")
+			b.WriteString(p.Name)
+			b.WriteString("]\n")
+			b.WriteString("region = ")
+			b.WriteString(region)
+			b.WriteString("\n")
+			b.WriteString("sso_start_url = ")
+			b.WriteString(p.StartURL)
+			b.WriteString("\n")
+			b.WriteString("sso_region = ")
+			b.WriteString(region)
+			b.WriteString("\n")
+			b.WriteString("sso_account_id = ")
+			b.WriteString(p.AccountID)
+			b.WriteString("\n")
+			b.WriteString("sso_role_name = ")
+			b.WriteString(p.RoleName)
+			b.WriteString("\n")
+			b.WriteString("output = json\n\n")
+		}
+		return b.String(), available, nil
+	}
+
+	// Modern sso-session format (UseRefresh=true): group profiles by SSO start URL into named
+	// [sso-session] blocks with offline scope, so `aws sso login` stores a REFRESH TOKEN and the
+	// operator can silently mint fresh STS creds without an interactive login. See DEV.md.
+	//
+	// Session naming: the primary start URL gets the stack name; any additional distinct start URL
+	// gets "<stack>-<n>". The operator runs its own in-cluster login under this same name, so the
+	// token cache (keyed by sha1(sso-session name)) always matches.
+	type sessionDef struct {
+		Name     string
+		StartURL string
+		Region   string
+	}
+	sessions := make([]sessionDef, 0, 1)
+	sessionByURL := map[string]string{}
+	sessionNameForURL := func(startURL, region string) string {
+		if name, ok := sessionByURL[startURL]; ok {
+			return name
+		}
+		name := c.Name
+		if len(sessions) > 0 {
+			name = fmt.Sprintf("%s-%d", c.Name, len(sessions)+1)
+		}
+		sessionByURL[startURL] = name
+		sessions = append(sessions, sessionDef{Name: name, StartURL: startURL, Region: region})
+		return name
+	}
+
 	for _, p := range profiles {
 		if p.StartURL == "" || p.AccountID == "" || p.RoleName == "" {
 			return "", nil, fmt.Errorf("aws profile %q is missing required sso fields (ssoStartUrl, accountId, roleName)", p.Name)
@@ -151,18 +215,13 @@ func (c StackConfig) RenderAWSConfig() (string, []string, error) {
 		if region == "" {
 			region = "eu-west-1"
 		}
+		sessionName := sessionNameForURL(p.StartURL, region)
 		available = append(available, p.Name)
 		b.WriteString("[profile ")
 		b.WriteString(p.Name)
 		b.WriteString("]\n")
-		b.WriteString("region = ")
-		b.WriteString(region)
-		b.WriteString("\n")
-		b.WriteString("sso_start_url = ")
-		b.WriteString(p.StartURL)
-		b.WriteString("\n")
-		b.WriteString("sso_region = ")
-		b.WriteString(region)
+		b.WriteString("sso_session = ")
+		b.WriteString(sessionName)
 		b.WriteString("\n")
 		b.WriteString("sso_account_id = ")
 		b.WriteString(p.AccountID)
@@ -170,7 +229,23 @@ func (c StackConfig) RenderAWSConfig() (string, []string, error) {
 		b.WriteString("sso_role_name = ")
 		b.WriteString(p.RoleName)
 		b.WriteString("\n")
+		b.WriteString("region = ")
+		b.WriteString(region)
+		b.WriteString("\n")
 		b.WriteString("output = json\n\n")
+	}
+
+	for _, s := range sessions {
+		b.WriteString("[sso-session ")
+		b.WriteString(s.Name)
+		b.WriteString("]\n")
+		b.WriteString("sso_start_url = ")
+		b.WriteString(s.StartURL)
+		b.WriteString("\n")
+		b.WriteString("sso_region = ")
+		b.WriteString(s.Region)
+		b.WriteString("\n")
+		b.WriteString("sso_registration_scopes = sso:account:access\n\n")
 	}
 
 	return b.String(), available, nil
