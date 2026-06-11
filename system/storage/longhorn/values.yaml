@@ -10,8 +10,19 @@ longhorn:
     taintToleration: "node-role.kubernetes.io/control-plane:NoSchedule;dedicated=master:NoSchedule"
     # Auto-create default disk on labeled nodes
     createDefaultDiskLabeledNodes: true
-    replicaSoftAntiAffinity: true
-    replicaAutoBalance: "least-effort"
+    # false: never place two replicas of the same volume on one node.
+    # On this 3-node cluster that means a 3-replica volume stays *degraded*
+    # (one good copy per surviving node) while a node is down, instead of
+    # stacking two copies on one node for false redundancy. The missing
+    # replica resumes/rebuilds on the node when it returns.
+    replicaSoftAntiAffinity: false
+    # best-effort: actively even out replica distribution across nodes, not just
+    # satisfy minimum redundancy. On this 3-node/3-replica cluster the balanced
+    # state is trivially one-per-node, so it's quiet in steady state and only acts
+    # on node events — auto-relocating stacked replicas onto a returned node and
+    # pruning the duplicate. Trade-off: a returning node gets a (throttled, 2/node)
+    # rebuild surge as placement re-evens.
+    replicaAutoBalance: "best-effort"
     # Allow volumes on any node/disk when no selectors specified (homelab flexibility)
     allowEmptyNodeSelectorVolume: true
     allowEmptyDiskSelectorVolume: true
