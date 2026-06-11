@@ -11,6 +11,10 @@ aws-tunnels-operator:
   stack:
     aws:
       region: eu-central-1
+      # Hands-off SSO auto-refresh: the operator silently re-mints STS creds from a captured
+      # refresh token and tunnels read the rotated creds from a mounted Secret in place, so they
+      # are not rolled (no ~hourly connection drop) when creds expire. Log in once per SSO session.
+      useRefresh: true
       ssoStartUrl: <secret:kv/data/proxies/aws-tunnel~sso-start-url>
       accountId: <secret:kv/data/proxies/aws-tunnel~account-id>
       roleName: <secret:kv/data/proxies/aws-tunnel~sso-role-name>

@@ -3,8 +3,8 @@ name: aws-tunnels
 description: Wrapper chart for the standalone aws-tunnels operator deployment
 type: application
 version: 0.1.0
-appVersion: "0.7.15"
+appVersion: "0.7.22"
 dependencies:
   - name: aws-tunnels-operator
-    version: 0.7.21
+    version: 0.7.22
     repository: oci://ghcr.io/coollision/charts
