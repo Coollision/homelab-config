@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/rds"
@@ -22,6 +23,8 @@ const (
 	stateDir           = "/tmp/tunnel-state"
 	retryCredDuration  = 30 * time.Second
 	retryErrorDuration = 10 * time.Second
+	// minLoopInterval floors the reconnect loop period so no failure path can busy-spin the CPU.
+	minLoopInterval = 2 * time.Second
 )
 
 // Config holds all runtime configuration for the tunnel-runner, sourced from env vars.
@@ -77,19 +80,34 @@ type Runner struct {
 	rds   RDSClient
 	state *StateWriter
 	log   *slog.Logger
+	// creds is non-nil only in refresh mode (AWS_CREDS_DIR set). When set, STS creds are resolved
+	// from it on demand (and re-resolved when they expire) rather than from static env vars, and
+	// the resolved creds are handed to each `aws ssm` subprocess so it uses the rotated values.
+	creds aws.CredentialsProvider
 }
 
 // Run is the main loop; it blocks until ctx is cancelled.
 func (r *Runner) Run(ctx context.Context) {
 	r.state.Set(StateStarting, "tunnel process started")
 
+	var lastLoopStart time.Time
 	for ctx.Err() == nil {
-		// Credentials are injected via EnvFrom from the K8s Secret.
-		// An empty key means the Secret is absent or expired; the operator
-		// will scale the pod to zero once it detects expiry.
-		if os.Getenv("AWS_ACCESS_KEY_ID") == "" {
+		// Floor the loop period so no path can spin the CPU — in particular a clean-but-immediate SSM
+		// exit, which (unlike the error paths) doesn't otherwise sleep before reconnecting. Long-lived
+		// sessions make `since` far exceed the floor, so normal reconnects aren't delayed.
+		if since := time.Since(lastLoopStart); since < minLoopInterval {
+			r.sleep(ctx, minLoopInterval-since)
+		}
+		lastLoopStart = time.Now()
+
+		// Resolve the creds to hand the SSM subprocess. In legacy mode they arrive via EnvFrom and
+		// ssmEnv is nil (the subprocess inherits them); in refresh mode they are read from the
+		// mounted, operator-refreshed Secret. Either way an empty result means creds aren't present
+		// yet — the operator scales the pod to zero once it detects expiry, so we just wait.
+		ssmEnv, ok := r.ssmCredentialsEnv(ctx)
+		if !ok {
 			r.log.Info("no credentials found, waiting")
-			r.state.Set(StateAuthRequired, "AWS_ACCESS_KEY_ID is empty — waiting for credential Secret")
+			r.state.Set(StateAuthRequired, "AWS credentials unavailable — waiting for the operator to provision them")
 			r.sleep(ctx, retryCredDuration)
 			continue
 		}
@@ -118,7 +136,7 @@ func (r *Runner) Run(ctx context.Context) {
 			"forwarding 0.0.0.0:%s → %s:%s", r.cfg.LocalPort, remoteHost, r.cfg.RemotePort,
 		))
 
-		isAuth, err := runSSMSession(ctx, instanceID, remoteHost, r.cfg)
+		isAuth, err := runSSMSession(ctx, instanceID, remoteHost, r.cfg, ssmEnv)
 		if err != nil {
 			r.handleError(ctx, "SSM session", forceAuth(err, isAuth))
 			continue
@@ -127,6 +145,34 @@ func (r *Runner) Run(ctx context.Context) {
 		// Clean exit (context cancelled or graceful close) — loop to reconnect.
 		r.state.Set(StateReconnecting, "SSM session ended cleanly")
 	}
+}
+
+// ssmCredentialsEnv reports whether usable creds are available and, in refresh mode, the extra env
+// vars to hand the `aws ssm` subprocess so it uses the operator-refreshed creds. In legacy mode the
+// subprocess inherits the static AWS_* vars from the pod env, so the returned slice is nil.
+func (r *Runner) ssmCredentialsEnv(ctx context.Context) ([]string, bool) {
+	if r.creds == nil {
+		return nil, os.Getenv("AWS_ACCESS_KEY_ID") != ""
+	}
+	c, err := r.creds.Retrieve(ctx)
+	if err != nil || c.AccessKeyID == "" {
+		if err != nil {
+			r.log.Info("credentials not available yet", "err", err)
+		}
+		return nil, false
+	}
+	if c.Expired() {
+		// The operator hasn't refreshed the mounted Secret (e.g. the SSO session has ended). Don't
+		// fire doomed EC2/RDS/SSM calls with stale creds — wait for the operator to provide fresh
+		// ones (it scales this pod to zero anyway once it sees the creds Secret expire).
+		r.log.Info("mounted credentials are expired, waiting for refresh")
+		return nil, false
+	}
+	return []string{
+		"AWS_ACCESS_KEY_ID=" + c.AccessKeyID,
+		"AWS_SECRET_ACCESS_KEY=" + c.SecretAccessKey,
+		"AWS_SESSION_TOKEN=" + c.SessionToken,
+	}, true
 }
 
 // handleError routes err to the correct retry state and sleep duration.
@@ -168,7 +214,19 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
-	awsCfg, err := awsconfig.LoadDefaultConfig(ctx)
+	// In refresh mode (AWS_CREDS_DIR set) the SDK resolves creds from the mounted Secret via a
+	// caching provider that re-reads the files when they expire, so EC2/RDS calls keep working
+	// across creds rotation without a restart. In legacy mode the SDK uses its default chain
+	// (the static AWS_* env vars from EnvFrom).
+	var credsProvider aws.CredentialsProvider
+	loadOpts := []func(*awsconfig.LoadOptions) error{}
+	if dir := os.Getenv(credsDirEnv); dir != "" {
+		credsProvider = aws.NewCredentialsCache(secretFileCredentials{dir: dir})
+		loadOpts = append(loadOpts, awsconfig.WithCredentialsProvider(credsProvider))
+		log.Info("refresh mode: resolving STS credentials from mounted Secret", "dir", dir)
+	}
+
+	awsCfg, err := awsconfig.LoadDefaultConfig(ctx, loadOpts...)
 	if err != nil {
 		log.Error("failed to load AWS config", "err", err)
 		os.Exit(1)
@@ -180,6 +238,7 @@ func main() {
 		rds:   rds.NewFromConfig(awsCfg),
 		state: sw,
 		log:   log,
+		creds: credsProvider,
 	}
 
 	runner.Run(ctx)

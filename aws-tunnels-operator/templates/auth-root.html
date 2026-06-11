@@ -191,9 +191,9 @@
       {{if .Err}}<div class="flash flash-err">{{.Err}}</div>{{end}}
       <div class="token-line">
         {{if .TokenImported}}
-          <span class="dot dot-ok"></span> SSO token imported — credentials refresh automatically until the session expires.
+          <span class="dot dot-ok"></span> SSO token captured — credentials refresh automatically until the session expires.
         {{else}}
-          <span class="dot dot-warn"></span> No SSO token imported. Run <code>hack/import-sso-token.sh</code> after <code>aws sso login</code>, or use Start Login below.
+          <span class="dot dot-warn"></span> No SSO token yet. Click a profile's login above and approve the device code in your browser — credentials then refresh automatically.
         {{end}}
       </div>
     </section>

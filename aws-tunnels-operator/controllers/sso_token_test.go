@@ -12,6 +12,47 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+func TestRefreshBackoff(t *testing.T) {
+	r := &SingleStackRunner{}
+	now := time.Unix(1_000_000, 0).UTC()
+
+	// No state yet → not in cooldown.
+	if r.refreshInCooldown("dev", now) {
+		t.Fatal("fresh profile should not be in cooldown")
+	}
+
+	// First failure parks the profile for refreshBackoffBase.
+	if got := r.recordRefreshFailure("dev", now); got != refreshBackoffBase {
+		t.Errorf("first backoff = %v, want %v", got, refreshBackoffBase)
+	}
+	if !r.refreshInCooldown("dev", now.Add(refreshBackoffBase-time.Second)) {
+		t.Error("should be in cooldown before the backoff elapses")
+	}
+	if r.refreshInCooldown("dev", now.Add(refreshBackoffBase+time.Second)) {
+		t.Error("should leave cooldown after the backoff elapses")
+	}
+
+	// Backoff doubles each consecutive failure and caps at refreshBackoffMax.
+	if got := r.recordRefreshFailure("dev", now); got != 2*refreshBackoffBase {
+		t.Errorf("second backoff = %v, want %v", got, 2*refreshBackoffBase)
+	}
+	for i := 0; i < 20; i++ {
+		r.recordRefreshFailure("dev", now)
+	}
+	if got := r.recordRefreshFailure("dev", now); got != refreshBackoffMax {
+		t.Errorf("backoff after many failures = %v, want cap %v", got, refreshBackoffMax)
+	}
+
+	// Clearing resets to no cooldown and back to base on the next failure.
+	r.clearRefreshBackoff("dev")
+	if r.refreshInCooldown("dev", now) {
+		t.Error("cleared profile should not be in cooldown")
+	}
+	if got := r.recordRefreshFailure("dev", now); got != refreshBackoffBase {
+		t.Errorf("backoff after clear = %v, want base %v", got, refreshBackoffBase)
+	}
+}
+
 func TestTokenSecretName(t *testing.T) {
 	cases := map[string]string{
 		"aws-tunnels": "aws-tunnels-sso-token",
@@ -67,12 +108,15 @@ func TestSeedAndPersistTokenCache(t *testing.T) {
 	}
 	c := newFakeClient(t, secret)
 
-	seeded, err := seedTokenCache(context.Background(), c, "default", "aws-tunnels")
+	seeded, version, err := seedTokenCache(context.Background(), c, "default", "aws-tunnels")
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	if !seeded {
 		t.Fatal("expected seeded=true")
+	}
+	if version != secret.ResourceVersion {
+		t.Errorf("version = %q, want the secret ResourceVersion %q", version, secret.ResourceVersion)
 	}
 	got, err := os.ReadFile(filepath.Join(ssoCacheDir(), "abc.json"))
 	if err != nil {
@@ -101,7 +145,7 @@ func TestSeedAndPersistTokenCache(t *testing.T) {
 func TestSeedTokenCache_NoSecret(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	c := newFakeClient(t)
-	seeded, err := seedTokenCache(context.Background(), c, "default", "aws-tunnels")
+	seeded, _, err := seedTokenCache(context.Background(), c, "default", "aws-tunnels")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

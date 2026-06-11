@@ -171,8 +171,8 @@ func TestTemplatesRenderWithNewFields(t *testing.T) {
 	if !strings.Contains(out, "/tunnel-toggle") {
 		t.Error("expected a stop/start toggle form in the rendered root page")
 	}
-	if !strings.Contains(out, "imported") {
-		t.Error("expected token-imported status line in the rendered root page")
+	if !strings.Contains(out, "captured") {
+		t.Error("expected the SSO-token-captured status line in the rendered root page")
 	}
 
 	buf.Reset()

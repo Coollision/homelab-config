@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -25,8 +26,10 @@ var authOutputKeywords = []string{
 }
 
 // runSSMSession starts an AWS SSM port-forwarding session and blocks until it exits.
-// It returns (isAuthErr, error); error is nil on a clean exit.
-func runSSMSession(ctx context.Context, instanceID, remoteHost string, cfg *Config) (isAuthErr bool, _ error) {
+// It returns (isAuthErr, error); error is nil on a clean exit. extraEnv, when non-empty, is appended
+// to the subprocess environment — in refresh mode it carries the freshly-resolved STS creds so each
+// (re)connect uses the operator's latest rotation rather than stale values.
+func runSSMSession(ctx context.Context, instanceID, remoteHost string, cfg *Config, extraEnv []string) (isAuthErr bool, _ error) {
 	params, err := json.Marshal(ssmParams{
 		Host:            []string{remoteHost},
 		PortNumber:      []string{cfg.RemotePort},
@@ -42,6 +45,9 @@ func runSSMSession(ctx context.Context, instanceID, remoteHost string, cfg *Conf
 		"--document-name", "AWS-StartPortForwardingSessionToRemoteHost",
 		"--parameters", string(params),
 	)
+	if len(extraEnv) > 0 {
+		cmd.Env = append(os.Environ(), extraEnv...)
+	}
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out

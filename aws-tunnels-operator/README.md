@@ -88,15 +88,24 @@ Primary flow — just click the login link, same as before:
 3. From then on, every reconcile tick the operator seeds that cache, and for each profile whose STS
    creds are expired or within ~10 min of expiry runs `aws configure export-credentials` — which
    **silently refreshes** the access token from the refresh token, no interactive login — writes
-   fresh STS creds, persists any rotated refresh token back, and rolls the affected tunnels.
+   fresh STS creds into the profile's `<stack>-<profile>` Secret, and persists any rotated refresh
+   token back.
+4. The tunnel pods **mount that creds Secret and read it on demand** (the operator is the single
+   holder of the SSO refresh token, so only it ever refreshes — pods just consume short-lived STS
+   creds). Kubernetes propagates the updated Secret into the running pod, the tunnel-runner's
+   credential provider re-reads it when the old creds expire, and the SSM session keeps running.
+   **No hourly pod roll, no dropped connections** at the ~1h STS boundary.
 
-So you log in **once per SSO session** instead of every time the ~hourly STS creds expire. It
-continues unattended until the AWS IAM Identity Center session duration (admin-set) is reached; then
-the tunnels scale to 0 and you click the login link once more. No corporate password is ever stored
-— only an AWS-scoped, revocable SSO token.
+So you log in **once per SSO session** instead of every time the ~hourly STS creds expire, and the
+tunnels stay up in place across every rotation. It continues unattended until the AWS IAM Identity
+Center session duration (admin-set) is reached; then the tunnels scale to 0 and you click the login
+link once more. No corporate password is ever stored — only an AWS-scoped, revocable SSO token.
 
-> Optional: `hack/import-sso-token.sh` seeds the same `<stack>-sso-token` Secret from a workstation
-> `aws sso login` instead of the in-cluster click — handy for headless setups. Not required.
+> An already-established SSM session rides an SSM-issued session token, not the STS creds, so it
+> survives STS expiry on its own; the refreshable creds matter on the next reconnect (SSM idle/max-
+> duration or a network blip), which then resolves fresh creds with no operator involvement. In
+> legacy mode (`useRefresh: false`) creds are immutable env vars, so the operator must roll the pod
+> on every rotation — that's the ~hourly reset this mode removes.
 
 #### Rolling tunnels onto refreshed creds
 
@@ -317,23 +326,6 @@ The SSO wait page (`/login-wait`) shows the verification URL and user code with 
 2. Open the auth UI and click **Start Login** for the profile; approve the device code in your
    browser (once). That's it — the operator persists the refresh-token-bearing cache and keeps STS
    creds fresh until the SSO session expires, then you click the link again.
-
-### Optional: seed the token from a workstation instead
-
-For headless setups you can seed the `<stack>-sso-token` Secret directly. Your `~/.aws/config` must
-define an `sso-session` block whose **name matches the operator's** (the stack name — the cache is
-keyed by session name):
-
-```ini
-[sso-session aws-tunnels]
-sso_start_url = https://YOUR-SSO.awsapps.com/start
-sso_region    = eu-west-1
-sso_registration_scopes = sso:account:access   ; REQUIRED — mints the refresh token
-```
-
-```bash
-NAMESPACE=proxies STACK=aws-tunnels ./hack/import-sso-token.sh
-```
 
 ## API reference
 
