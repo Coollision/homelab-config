@@ -102,6 +102,3 @@ affinity:
           - key: feature.node.kubernetes.io/iot-thread-border-router
             operator: In
             values: ["true"]
-          - key: kubernetes.io/hostname
-            operator: In
-            values: ["worker-blue"]
