@@ -1,0 +1,33 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: smarthome-db-pg
+  namespace: smarthome
+spec:
+  instances: 1
+  storage:
+    pvcTemplate:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 5Gi
+      storageClassName: longhorn
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+
+  bootstrap:
+    initdb: {}
+
+  managed:
+    roles:
+      - name: n8n_user
+        ensure: present
+        login: true
+        passwordSecret:
+          name: pgrole-n8n
