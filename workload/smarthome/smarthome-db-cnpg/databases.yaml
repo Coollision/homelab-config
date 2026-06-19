@@ -1,0 +1,11 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: db-n8n
+  namespace: smarthome
+spec:
+  name: n8n
+  owner: n8n_user
+  cluster:
+    name: smarthome-db-pg
+  databaseReclaimPolicy: retain
