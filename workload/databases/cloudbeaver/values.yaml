@@ -10,11 +10,11 @@ config:
   CLOUDBEAVER_SERVICE_PORT: 8978
 resources:
   requests:
-    cpu: 100m
-    memory: 256Mi
+    cpu: 70m
+    memory: 320Mi
   limits:
-    cpu: 500m
-    memory: 512Mi
+    cpu: 600m
+    memory: 448Mi
 ingress_internal:
   host: cloudbeaver.<secret:kv/data/domains~local>
   port: ingress

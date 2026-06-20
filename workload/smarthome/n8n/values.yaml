@@ -50,11 +50,11 @@ config:
 
 resources:
   requests:
-    cpu: 100m
-    memory: 256Mi
+    cpu: 20m
+    memory: 448Mi
   limits:
-    cpu: 500m
-    memory: 512Mi
+    cpu: 400m
+    memory: 640Mi
 
 ingress_internal_secure:
   host: n8n.<secret:kv/data/domains~domain>

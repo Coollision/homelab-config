@@ -69,11 +69,11 @@ probes:
 
 resources:
   requests:
-    memory: "96Mi"
-    cpu: "50m"
+    cpu: 10m
+    memory: 160Mi
   limits:
-    memory: "384Mi"
-    cpu: "500m"
+    cpu: 200m
+    memory: 256Mi
 
 labels:
   app.kubernetes.io/component: ha-mcp

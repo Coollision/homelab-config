@@ -75,11 +75,11 @@ multusNetworks:
 
 resources:
   requests:
-    memory: "32Mi"
-    cpu: "20m"
+    cpu: 10m
+    memory: 32Mi
   limits:
-    memory: "128Mi"
-    cpu: "200m"
+    cpu: 200m
+    memory: 64Mi
 
 labels:
   app.kubernetes.io/component: mdns-reflector

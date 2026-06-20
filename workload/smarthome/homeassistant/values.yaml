@@ -83,7 +83,13 @@ homeassistant:
       web: 8123
   config:
     TZ: Europe/Brussels
-  
+  resources:
+    requests:
+      cpu: 50m
+      memory: 2560Mi
+    limits:
+      cpu: 1000m
+      memory: 3584Mi
   securityContext:
     capabilities:
       add:
@@ -163,13 +169,6 @@ homeassistant:
       timeoutSeconds: 5
       failureThreshold: 5
 
-  resources:
-    requests:
-      memory: "1Gi"
-      cpu: "400m"
-    limits:
-      memory: "1.7Gi"
-      cpu: "1000m"
   labels:
     app.kubernetes.io/component: homeassistant
 

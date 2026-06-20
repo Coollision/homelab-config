@@ -22,6 +22,13 @@ statefulset:
     - cpu
 config:
   TZ: Europe/Brussels
+resources:
+  requests:
+    cpu: 60m
+    memory: 1024Mi
+  limits:
+    cpu: 2000m
+    memory: 1536Mi
 storage:
   - mountPath: /data
     nameSuffix: data

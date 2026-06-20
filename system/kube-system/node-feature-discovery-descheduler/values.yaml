@@ -68,6 +68,13 @@ descheduler:
   cmdOptions:
     v: 3
   deschedulerPolicy:
+    # Feed LowNodeUtilization with ACTUAL usage from metrics-server instead of the
+    # default (sum of pod *requests*). Requests-based balancing was pathological here:
+    # master-green sat at 94% CPU-requests from pinned/control-plane pods, so every
+    # cycle the descheduler burned its eviction budget on 0-request BestEffort pods
+    # that never moved the metric -> endless futile eviction loop.
+    metricsProviders:
+      - source: KubernetesMetrics
     maxNoOfPodsToEvictPerNode: 3
     maxNoOfPodsToEvictPerNamespace: 6
     maxNoOfPodsToEvictTotal: 10
@@ -99,15 +106,22 @@ descheduler:
           - name: "RemovePodsViolatingNodeTaints"
           - name: "LowNodeUtilization"
             args:
+              metricsUtilization:
+                source: KubernetesMetrics  # classify nodes by real CPU usage, not requests
               numberOfNodes: 1
               evictionLimits:
                 node: 2
               evictableNamespaces:
                 exclude:
                   - storage
+              # All three dimensions on ACTUAL usage (metrics-server). A node is an
+              # eviction TARGET (underutilized) only if below ALL `thresholds`, and a
+              # SOURCE (overutilized) if above ANY `targetThresholds`. Tuned so the
+              # steady state (master-green ~68% cpu / 80% mem / 60% pods) is
+              # "appropriately utilized" -> no churn; eviction only on genuine overload.
               thresholds:
-                cpu: 60
-                memory: 40
+                cpu: 50
+                memory: 70
                 pods: 55
               targetThresholds:
                 cpu: 80
@@ -152,20 +166,23 @@ descheduler:
           - name: "RemovePodsViolatingNodeTaints"
           - name: "LowNodeUtilization"
             args:
+              metricsUtilization:
+                source: KubernetesMetrics  # classify nodes by real CPU usage, not requests
               numberOfNodes: 1
               evictionLimits:
                 node: 2
               evictableNamespaces:
                 exclude:
                   - storage
+              # All three dimensions on actual usage (see mini-nodes profile).
               thresholds:
-                cpu: 60
-                memory: 25
-                pods: 45
+                cpu: 50
+                memory: 70
+                pods: 50
               targetThresholds:
-                cpu: 75
-                memory: 60
-                pods: 70
+                cpu: 80
+                memory: 85
+                pods: 80
         plugins:
           balance:
             enabled:

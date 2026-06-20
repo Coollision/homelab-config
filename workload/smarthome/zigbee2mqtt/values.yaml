@@ -23,6 +23,14 @@ storage:
     size: 128Mi
     protect: true
 
+resources:
+  requests:
+    cpu: 10m
+    memory: 160Mi
+  limits:
+    cpu: 200m
+    memory: 224Mi
+
 affinity:
   node:
     required:
