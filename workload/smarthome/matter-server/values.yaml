@@ -90,11 +90,11 @@ probes:
 
 resources:
   requests:
-    memory: "256Mi"
-    cpu: "100m"
+    cpu: 10m
+    memory: 224Mi
   limits:
-    memory: "512Mi"
-    cpu: "500m"
+    cpu: 400m
+    memory: 320Mi
 
 labels:
   app.kubernetes.io/component: matter-server

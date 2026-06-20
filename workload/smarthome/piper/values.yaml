@@ -12,6 +12,13 @@ deployment:
     - /data
 config:
   TZ: Europe/Brussels
+resources:
+  requests:
+    cpu: 10m
+    memory: 64Mi
+  limits:
+    cpu: 1000m
+    memory: 96Mi
 storage:
   - mountPath: /data
     nameSuffix: data

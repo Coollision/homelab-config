@@ -7,10 +7,18 @@ deployment:
     web: 6052
     webing: 6123
     webding: 5353
+
 config:
   TZ: Europe/Brussels
   ESPHOME_DASHBOARD_USE_PING: "true"
   ESPHOME_DASHBOARD_RELATIVE_URL: "/"
+resources:
+  requests:
+    cpu: 20m
+    memory: 64Mi
+  limits:
+    cpu: 2000m
+    memory: 96Mi
 ingress_internal_secure:
   host: esphome.<secret:kv/data/domains~domain>
   port: web

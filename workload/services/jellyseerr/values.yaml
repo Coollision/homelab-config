@@ -25,11 +25,11 @@ securityContext:
 
 resources:
   requests:
-    cpu: 100m
-    memory: 256Mi
+    cpu: 20m
+    memory: 384Mi
   limits:
     cpu: 500m
-    memory: 512Mi
+    memory: 576Mi
 
 config:
   TZ: Europe/Brussels

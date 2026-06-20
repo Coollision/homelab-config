@@ -75,11 +75,11 @@ spec:
               protocol: TCP
           resources:
             requests:
-              memory: 256Mi
-              cpu: 100m
-            limits:
+              cpu: 200m
               memory: 512Mi
-              cpu: 500m
+            limits:
+              cpu: 1000m
+              memory: 704Mi
           volumeMounts:
             - mountPath: /config
               name: bazarr-config

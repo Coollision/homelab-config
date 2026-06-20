@@ -77,11 +77,11 @@ config:
 
 resources:
   requests:
-    cpu: 100m
-    memory: 256Mi
+    cpu: 10m
+    memory: 224Mi
   limits:
-    cpu: 400m
-    memory: 512Mi
+    cpu: 300m
+    memory: 288Mi
 
 ingress_internal_secure:
   host: babybuddy.<secret:kv/data/domains~domain>

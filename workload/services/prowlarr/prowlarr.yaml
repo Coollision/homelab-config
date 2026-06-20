@@ -93,7 +93,13 @@ spec:
             - containerPort: 9696
               name: web
               protocol: TCP
-          resources: {}
+          resources:
+            requests:
+              cpu: 10m
+              memory: 256Mi
+            limits:
+              cpu: 400m
+              memory: 352Mi
           volumeMounts:
             - mountPath: /config
               name: prowlarr-config

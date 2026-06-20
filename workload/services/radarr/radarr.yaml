@@ -94,11 +94,11 @@ spec:
               protocol: TCP
           resources:
             requests:
-              memory: 256Mi
-              cpu: 100m
+              cpu: 20m
+              memory: 448Mi
             limits:
-              memory: 512Mi
-              cpu: 400m
+              cpu: 1000m
+              memory: 640Mi
           readinessProbe:
             httpGet:
               port: 7878
