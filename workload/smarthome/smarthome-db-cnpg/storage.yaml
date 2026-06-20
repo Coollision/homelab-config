@@ -1,0 +1,50 @@
+apiVersion: longhorn.io/v1beta2
+kind: Volume
+metadata:
+  name: smarthome-db-pg-data
+  namespace: storage
+  annotations:
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false
+  labels:
+    protect: "true"
+    backup-type: daily
+    recurring-job.longhorn.io/backup-daily: enabled
+    recurring-job.longhorn.io/snapshot-2h: enabled
+    recurring-job-group.longhorn.io/default: enabled
+spec:
+  accessMode: rwo
+  dataEngine: v1
+  dataLocality: best-effort
+  frontend: blockdev
+  numberOfReplicas: 3
+  size: "5368709120"
+  diskSelector: []
+  nodeSelector: []
+  replicaAutoBalance: ignored
+  revisionCounterDisabled: true
+  snapshotDataIntegrity: ignored
+  Standby: false
+  migratable: false
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: smarthome-db-pg-data
+  annotations:
+    longhorn.io/volume-name: smarthome-db-pg-data
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false
+spec:
+  capacity:
+    storage: 5Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: longhorn
+  csi:
+    driver: driver.longhorn.io
+    fsType: ext4
+    volumeHandle: smarthome-db-pg-data
+  claimRef:
+    namespace: smarthome
+    name: smarthome-db-pg-1
