@@ -13,6 +13,7 @@ spec:
         requests:
           storage: 5Gi
       storageClassName: longhorn
+      volumeName: smarthome-db-pg-data
 
   resources:
     requests:
