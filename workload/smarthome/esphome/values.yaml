@@ -10,18 +10,46 @@ deployment:
 
 config:
   TZ: Europe/Brussels
-  ESPHOME_DASHBOARD_USE_PING: "true"
+  # mDNS-based discovery: devices announce _esphomelib._tcp on VLAN 40 and are
+  # received over the net1 MACVLAN leg below. Ping-based status can't see them
+  # (multicast doesn't cross L3 VLANs) and is no longer needed.
+  ESPHOME_DASHBOARD_USE_PING: "false"
   ESPHOME_DASHBOARD_RELATIVE_URL: "/"
 resources:
   requests:
-    cpu: 20m
-    memory: 64Mi
+    cpu: 50m
+    memory: 256Mi
   limits:
+    # 2026.6 device_builder dashboard loads a large board/component catalog at
+    # boot (~200Mi idle); firmware compiles (PlatformIO/esp-idf) spike to >1Gi.
+    # The old 96Mi limit OOMKilled the new dashboard on startup.
     cpu: 2000m
-    memory: 96Mi
+    memory: 2Gi
 ingress_internal_secure:
   host: esphome.<secret:kv/data/domains~domain>
   port: web
+
+# MACVLAN leg on VLAN 40 (IoT) so the dashboard's mDNS browser is L2-adjacent to
+# the ESPHome devices (192.168.40.0/24) and receives their _esphomelib._tcp
+# announcements directly. Default route stays on eth0 (ingress/cluster); the
+# VLAN 40 subnet routes via net1. nodeLabelKey pins to vlan40-trunk nodes.
+multusNetworks:
+  - name: esphome-vlan40
+    interface: net1
+    mac: 02:40:67:9d:64:66
+    dhcpHostname: _stub_esphome-iot
+    parentInterface: vlan40
+    nodeLabelKey: vlan40-trunk
+    type: macvlan
+    mode: bridge
+    # sbr confines net1's DHCP-supplied routes (incl. its default gateway) to a
+    # separate table keyed by source IP. Without it the VLAN40 default route
+    # hijacks egress and the pod can't reach CoreDNS (10.43.0.10) → builds fail
+    # with "failed to resolve github.com". Default stays on eth0.
+    chainedPlugins:
+      - type: sbr
+    ipam:
+      type: dhcp
 storage:
   - mountPath: /config
     type: longhorn
