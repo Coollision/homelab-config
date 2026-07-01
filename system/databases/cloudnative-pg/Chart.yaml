@@ -6,6 +6,6 @@ version: 0.1.0
 appVersion: "1.29.1"
 dependencies:
   - name: cloudnative-pg
-    version: 0.28.3
+    version: 0.29.0
     # OCI registry (single chart, no huge classic index to parse)
     repository: oci://ghcr.io/cloudnative-pg/charts
