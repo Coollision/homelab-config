@@ -1,35 +1,29 @@
 fullnameOverride: mdns-reflector
 
+# mdns-repeater is a dumb L2 packet forwarder: it retransmits mDNS packets
+# between interfaces VERBATIM and never re-authors/re-publishes records.
+# Its predecessor here (flungo/avahi as a reflector) re-published records
+# under its own responder, so OTBR's advertising proxy heard echoes of its
+# own SRP-registered services back on net1, treated them as name conflicts,
+# and rejected every device SRP (re-)registration with error:Duplicated →
+# "Send fail response: 6" → devices never re-entered SRP/mDNS after any
+# address churn → mass "unavailable" in HA that no restart could fix
+# (525 rejections/12min observed on 2026-07-04).
+# NOTE: mdns-repeater forwards IPv4 mDNS (224.0.0.251) only. That covers
+# phone/HA discovery on VLAN 5 — AAAA/IPv6 addresses still travel inside
+# the forwarded record payloads. If an IPv6-multicast-only querier ever
+# shows up, revisit.
 deployment:
   image:
-    repository: flungo/avahi
-    tag: latest
-  command:
-    - /bin/sh
-    - -c
-    - |
-      cat > /etc/avahi/avahi-daemon.conf <<'EOF'
-      [server]
-      use-ipv4=yes
-      use-ipv6=yes
-      allow-interfaces=net1,net2
-      deny-interfaces=lo,eth0
-      ratelimit-interval-usec=1000000
-      ratelimit-burst=1000
-      enable-dbus=no
-      [wide-area]
-      enable-wide-area=no
-      [publish]
-      publish-hinfo=no
-      publish-workstation=no
-      publish-domain=no
-      publish-aaaa-on-ipv4=no
-      publish-a-on-ipv6=no
-      [reflector]
-      enable-reflector=yes
-      reflect-ipv=yes
-      EOF
-      exec avahi-daemon --no-drop-root --no-rlimits --no-chroot
+    repository: monstrenyatko/mdns-repeater
+    tag: "20230701"
+  # image entrypoint is /app/run.sh; args select the app + interfaces
+  # (-f = stay in foreground)
+  args:
+    - mdns-repeater-app
+    - -f
+    - net1
+    - net2
 
 config:
   TZ: Europe/Brussels
