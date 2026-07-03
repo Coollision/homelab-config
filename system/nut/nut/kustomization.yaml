@@ -111,8 +111,10 @@ patches:
             requests:
               cpu: 5m
               memory: 16Mi
+            # 50m throttled hard on scrape spikes (CPUThrottlingHigh); usage is
+            # tiny in absolute terms so give spike headroom instead.
             limits:
-              cpu: 50m
+              cpu: 200m
               memory: 32Mi
 
 generatorOptions:
