@@ -7,6 +7,31 @@ statefulset:
   ports:
     web: 8080
     rest: 8081
+  # Clamp the SRP server max lease to 15 min (default ~2h). The SRP registry
+  # lives in RAM only, so every otbr-agent restart wipes it; sleepy Thread
+  # devices don't re-register until their lease expires, which with the
+  # default lease means up to 2h where matter-server can't resolve device
+  # addresses ("Resolving (no address known)") and everything shows
+  # unavailable in HA. With a 900s max lease the post-restart discovery
+  # blackout is bounded to 15 min. Key-lease stays at 14 days.
+  # postStart retries until otbr-agent is up, then always exits 0 — a
+  # failed clamp must not crash-loop the border router.
+  lifecycle:
+    postStart:
+      exec:
+        command:
+          - sh
+          - -c
+          - |
+            for i in $(seq 1 60); do
+              if ot-ctl srp server lease 30 900 60 1209600 >/dev/null 2>&1; then
+                echo "SRP lease clamp applied"
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "WARNING: SRP lease clamp NOT applied (otbr-agent not ready after 120s)"
+            exit 0
 
 securityContext:
   capabilities:

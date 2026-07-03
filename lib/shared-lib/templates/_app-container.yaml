@@ -23,6 +23,10 @@ resources: {}
 securityContext:
   {{- toYaml .Values.securityContext | nindent 2 }}
 {{- end }}
+{{- if $config.lifecycle }}
+lifecycle:
+  {{- toYaml $config.lifecycle | nindent 2 }}
+{{- end }}
 {{- if (include "shared-lib.getPorts" . | fromYaml) }}
 ports:
   {{- range $key, $value := (include "shared-lib.getPorts" . | fromYaml) }}
