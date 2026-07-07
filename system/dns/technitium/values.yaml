@@ -16,7 +16,7 @@ defaults:
   statefulset:
     image:
       repository: technitium/dns-server
-      tag: "15.2.0"
+      tag: "15.3.0"
     ports:
       cluster: 53443     # admin web console (HTTPS) + Technitium cluster sync
       dns-tcp: 53
