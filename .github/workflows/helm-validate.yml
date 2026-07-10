@@ -40,14 +40,29 @@ jobs:
             fi
           fi
 
+          # A force-push or rebase can make the recorded base ref unreachable in
+          # the fetched history. Falling back to a full-repo scan in that case is
+          # slow and surfaces unrelated (e.g. disabled-*) charts, so resolve to a
+          # reachable base instead: HEAD~1 when the recorded base is missing.
+          if ! git rev-parse --verify --quiet "${BASE_REF}^{commit}" >/dev/null 2>&1; then
+            echo "Base ref '$BASE_REF' not found (force-push/rebase?), falling back to HEAD~1"
+            BASE_REF="HEAD~1"
+          fi
+
           echo "Comparing against base: $BASE_REF"
 
-          # Get all changed files
-          CHANGED_FILES=$(git diff --name-only "$BASE_REF" HEAD 2>/dev/null || echo "")
+          # Get all changed files. Only fall back to a full-repo scan when the diff
+          # genuinely returns nothing, never because the base ref was unresolvable.
+          if git rev-parse --verify --quiet "${BASE_REF}^{commit}" >/dev/null 2>&1; then
+            CHANGED_FILES=$(git diff --name-only "$BASE_REF" HEAD)
+          else
+            CHANGED_FILES=""
+          fi
 
           if [ -z "$CHANGED_FILES" ]; then
             echo "No changes detected, will validate all charts"
-            CHANGED_FILES=$(find . -name "Chart.yaml" -o -name "values.yaml" -o -name "*.yml" -o -name "*.yaml" | sed 's|^\./||')
+            CHANGED_FILES=$(find . -name "Chart.yaml" -o -name "values.yaml" -o -name "*.yml" -o -name "*.yaml" \
+              | grep -v '/disabled-' | sed 's|^\./||')
           fi
 
           echo "Changed files:"
@@ -61,6 +76,8 @@ jobs:
           add_chart_dir() {
             local dir="$1"
             [ -z "$dir" ] && return
+            # Disabled charts are excluded from ArgoCD discovery, so never validate them.
+            case "$dir" in */disabled-*|disabled-*) return;; esac
             if [ -z "$CHANGED_CHART_DIRS" ]; then
               CHANGED_CHART_DIRS="$dir"
             else
@@ -113,7 +130,7 @@ jobs:
             LIB_DIRS=$(echo "$CHANGED_FILES" | grep -oE '^lib/[^/]+/' | sort -u)
 
             # Collect candidate (non-vendored) chart directories once.
-            ALL_CHART_DIRS=$(find . -name Chart.yaml | sed 's|^\./||' | sed 's|/Chart.yaml$||' | grep -v '/charts/' || true)
+            ALL_CHART_DIRS=$(find . -name Chart.yaml | sed 's|^\./||' | sed 's|/Chart.yaml$||' | grep -v '/charts/' | grep -v '/disabled-' || true)
 
             for lib in $LIB_DIRS; do
               lib_dir="${lib%/}"
