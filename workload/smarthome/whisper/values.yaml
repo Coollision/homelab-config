@@ -2,7 +2,7 @@ fullnameOverride: whisper
 statefulset:
   image:
     repository: rhasspy/wyoming-whisper
-    tag: 3.4.1
+    tag: 3.5.0
   ports:
     whisper: 10300
   args:
@@ -20,14 +20,20 @@ statefulset:
     - int8
     - --device
     - cpu
+    # all 4 E-cores; must match resources.limits.cpu or CFS throttling adds latency
+    - --cpu-threads
+    - "4"
+    # biases the decoder with domain vocabulary; fixes first-word errors on short commands
+    - --initial-prompt
+    - "Zet het licht aan in de keuken. Zijn de luiken in de kinderkamer gesloten? Doe het rolluik van het grote raam omhoog. Zet de plafondspots in de woonkamer uit. Speel muziek in de keuken. Wat is de temperatuur buiten? Doe de lampen in de badkamer, slaapkamer, gang, berging en op zolder uit. Zet de lamp op het bureau aan. Doe de lamp boven de eetplaats aan en zet de spa, de boiler en het nachtlampje uit."
 config:
   TZ: Europe/Brussels
 resources:
   requests:
-    cpu: 60m
+    cpu: 250m
     memory: 1024Mi
   limits:
-    cpu: 2000m
+    cpu: 4000m
     memory: 1536Mi
 storage:
   - mountPath: /data
