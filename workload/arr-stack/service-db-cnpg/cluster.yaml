@@ -1,0 +1,70 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: service-db-pg
+  namespace: arr-stack
+spec:
+  instances: 1
+  # Bind to a NEW named Longhorn volume (arr-stack-service-db-pg-data). The old
+  # cluster's volume (service-db-pg-data, ns services) is left fully intact as the
+  # rollback. Data is populated via the one-time logical import below, NOT by
+  # reusing the old volume (CNPG cannot adopt a foreign PGDATA).
+  storage:
+    pvcTemplate:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 2Gi
+      storageClassName: longhorn
+      volumeName: arr-stack-service-db-pg-data
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+  # NOTE: the one-time bootstrap.initdb.import (monolith) + externalClusters stanza
+  # that seeded this cluster from the old `services` CNPG cluster was removed in the
+  # Phase 3 cleanup commit after the import was verified byte-identical, so a future
+  # DR re-create does not dangle on the (now decommissioned) source cluster. A fresh
+  # re-create would start empty and restore from Longhorn backups instead.
+
+  # Declarative user/password lifecycle (Vault-backed). Reconciles the imported
+  # roles: sets their pgrole-* passwords and re-grants dbadmin superuser.
+  managed:
+    roles:
+      # Personal superuser for CloudBeaver (view/update/maintain every DB).
+      - name: dbadmin
+        ensure: present
+        login: true
+        superuser: true
+        passwordSecret:
+          name: pgrole-dbadmin
+      - name: sonarr_user
+        ensure: present
+        login: true
+        passwordSecret:
+          name: pgrole-sonarr
+      - name: radarr_user
+        ensure: present
+        login: true
+        passwordSecret:
+          name: pgrole-radarr
+      - name: prowlarr_user
+        ensure: present
+        login: true
+        passwordSecret:
+          name: pgrole-prowlarr
+      - name: bazarr_user
+        ensure: present
+        login: true
+        passwordSecret:
+          name: pgrole-bazarr
+      - name: jellyseerr_user
+        ensure: present
+        login: true
+        passwordSecret:
+          name: pgrole-jellyseerr

@@ -1,0 +1,41 @@
+fullnameOverride: lazylibrarian
+deployment:
+  image:
+    repository: linuxserver/lazylibrarian
+    tag: latest
+    imagePullPolicy: Always
+  ports:
+    ingress: 5299
+config:
+  TZ: Europe/Brussels
+  PUID: "1000"
+  PGID: "1000"
+
+ingress_internal:
+  host: lazylibrarian.<secret:kv/data/domains~local>
+  port: ingress
+
+ingress_internal_secure:
+  host: lazylibrarian.<secret:kv/data/domains~domain>
+  port: ingress
+
+storage:
+  - mountPath: /config
+    size: 8Gi
+    type: longhorn
+    nameSuffix: config
+    volumeName: arr-stack-lazylibrarian-config
+    protect: true
+  - mountPath: /data/downloads
+    type: existingClaim
+    claimName: arr-stack-downloads
+    nameSuffix: "downloads"
+  - mountPath: /data/books
+    type: existingClaim
+    claimName: arr-stack-books
+    nameSuffix: "books"
+
+
+keel:
+  policy: force
+  pollSchedule: "@midnight"

@@ -1,0 +1,71 @@
+fullnameOverride: radarr
+statefulset:
+  image:
+    repository: linuxserver/radarr
+    tag: 6.3.0
+    imagePullPolicy: Always
+  ports:
+    web: 7878
+
+config:
+  TZ: Europe/Brussels
+  PUID: 1000
+  PGID: 1000
+
+arrXmlPostgres:
+  enabled: true
+  requireExistingConfig: false
+  userKey: radarr_user
+  passwordKey: radarr_password
+  mainDbKey: radarr_database
+  logDbKey: radarr_database_logs
+
+probes:
+  readiness:
+    httpGet:
+      path: /ping
+      port: web
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+  liveness:
+    httpGet:
+      path: /ping
+      port: web
+    initialDelaySeconds: 20
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 5
+
+resources:
+  requests:
+    cpu: 20m
+    memory: 448Mi
+  limits:
+    cpu: 1000m
+    memory: 640Mi
+
+ingress_internal:
+  host: radarr.<secret:kv/data/domains~local>
+  port: web
+
+ingress_internal_secure:
+  host: radarr.<secret:kv/data/domains~domain>
+  port: web
+
+storage:
+  - type: longhorn
+    mountPath: /config
+    size: 4Gi
+    nameSuffix: config
+    volumeName: arr-stack-radarr-config
+    protect: true
+  - type: existingClaim
+    mountPath: /data/downloads
+    claimName: arr-stack-downloads
+    nameSuffix: downloads
+  - type: existingClaim
+    mountPath: /data/videos
+    claimName: arr-stack-video
+    nameSuffix: videos

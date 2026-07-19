@@ -1,0 +1,57 @@
+# NEW named, backup-labeled Longhorn volume for the arr-stack CNPG cluster (matches
+# the shared-lib.longhorn static-provisioning convention: named Volume CR + static PV
+# + recurring backup/snapshot labels + protect). CNPG binds its PVC to this PV and
+# populates it via the one-time logical import in cluster.yaml. Distinct from the old
+# `arr-stack-service-db-pg-data` volume, which stays intact in the services namespace as rollback.
+apiVersion: longhorn.io/v1beta2
+kind: Volume
+metadata:
+  name: arr-stack-service-db-pg-data
+  namespace: storage
+  annotations:
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false
+  labels:
+    protect: "true"
+    backup-type: daily
+    recurring-job.longhorn.io/backup-daily: enabled
+    recurring-job.longhorn.io/snapshot-2h: enabled
+    recurring-job-group.longhorn.io/default: enabled
+spec:
+  accessMode: rwo
+  dataEngine: v1
+  dataLocality: best-effort
+  frontend: blockdev
+  numberOfReplicas: 3
+  size: "2147483648"
+  diskSelector: []
+  nodeSelector: []
+  replicaAutoBalance: ignored
+  revisionCounterDisabled: true
+  snapshotDataIntegrity: ignored
+  Standby: false
+  migratable: false
+  # NOTE: sized 2Gi (was 10Gi) — trimmed 2026-07-20 to ~2x actual DB usage (~870M).
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: arr-stack-service-db-pg-data
+  annotations:
+    longhorn.io/volume-name: arr-stack-service-db-pg-data
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false
+spec:
+  capacity:
+    storage: 2Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: longhorn
+  csi:
+    driver: driver.longhorn.io
+    fsType: ext4
+    volumeHandle: arr-stack-service-db-pg-data
+  # Pre-bind to the PVC CNPG will create for instance 1, so binding is deterministic.
+  claimRef:
+    namespace: arr-stack
+    name: service-db-pg-1
