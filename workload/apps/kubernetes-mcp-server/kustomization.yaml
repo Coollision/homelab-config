@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# The upstream kubernetes-mcp-server chart has no metadata.labels knob for its
+# Deployment (only podLabels, which Sablier's discovery doesn't read — it lists
+# Deployments by their own object labels, not pod template labels). This patch
+# adds the two labels Sablier needs directly.
+patches:
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: kubernetes-mcp-server
+    patch: |-
+      - op: add
+        path: /metadata/labels/sablier.enable
+        value: "true"
+      - op: add
+        path: /metadata/labels/sablier.group
+        value: kubernetes-mcp-server

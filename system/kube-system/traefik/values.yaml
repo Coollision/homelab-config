@@ -61,6 +61,13 @@ traefik:
                   - rpi
   metrics:
     prometheus: {}
+  experimental:
+    plugins:
+      # Scale-to-zero middleware plugin. Source is fetched from github.com and
+      # compiled in-process (Yaegi) at Traefik startup — the pod needs github egress.
+      sablier:
+        moduleName: "github.com/sablierapp/sablier-traefik-plugin"
+        version: "v1.3.0"
 
 # resources:
 #   requests:

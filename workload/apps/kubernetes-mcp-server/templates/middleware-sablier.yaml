@@ -1,0 +1,19 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: kubernetes-mcp-server-sablier
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: kubernetes-mcp-server
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  plugin:
+    sablier:
+      sablierUrl: http://sablier.kube-system.svc.cluster.local:10000
+      group: kubernetes-mcp-server
+      sessionDuration: 30m
+      blocking:
+        # MCP/JSON-RPC client, can't render an HTML waiting page — hold the
+        # request until the pod is ready instead.
+        timeout: 1m

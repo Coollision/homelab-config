@@ -1,0 +1,26 @@
+{{- define "shared-lib.middleware_sablier" -}}
+{{- $s := .Values.scaleToZero -}}
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "helm.fullname" . }}-sablier
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+spec:
+  plugin:
+    sablier:
+      sablierUrl: http://sablier.kube-system.svc.cluster.local:10000
+      group: {{ include "helm.fullname" . }}
+      sessionDuration: {{ $s.sessionDuration | default "30m" }}
+      {{- if eq ($s.strategy | default "dynamic") "blocking" }}
+      blocking:
+        timeout: {{ $s.blockingTimeout | default "1m" }}
+      {{- else }}
+      dynamic:
+        displayName: {{ include "helm.fullname" . }}
+        showDetails: true
+        theme: {{ $s.theme | default "hacker-terminal" }}
+        refreshFrequency: {{ $s.refreshFrequency | default "5s" }}
+      {{- end }}
+{{- end }}

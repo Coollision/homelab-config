@@ -284,6 +284,8 @@ promstack:
         memory: 768Mi
     sidecar:
       dashboards:
+        enabled: true
+        searchNamespace: ALL
         provider:
           allowUiUpdates: true
       alerts:

@@ -29,3 +29,6 @@ resources:
   limits:
     cpu: 200m
     memory: 192Mi
+
+scaleToZero:
+  enabled: true

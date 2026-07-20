@@ -1,0 +1,36 @@
+sablier:
+  replicas: 1
+  logLevel: "info"
+  # Chart default (appVersion 1.14.0) predates the per-session-expiry metrics
+  # gauge (sablier_session_expires_at_timestamp_seconds), added in 1.15.0 —
+  # needed for the "time to sleep" column/dashboard. No chart version bump
+  # needed, image.tag alone overrides the pulled image.
+  image:
+    tag: "1.15.0"
+  extraArgs:
+    - --server.metrics.enabled=true
+  # Explicit limits — this controller is always-on and the cluster runs memory-tight.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi
+  # We don't use CNPG hibernation, but rbac.cnpg MUST stay true anyway: Sablier's
+  # periodic 30s group-reconciliation loop (the safety net that lets it notice
+  # newly-labeled Deployments/StatefulSets without a pod restart) aggregates
+  # Deployments + StatefulSets + CNPG clusters in one call and aborts the WHOLE
+  # reconcile if any of the three errors. Without this RBAC, listing CNPG clusters
+  # returns 403 Forbidden (not 404 — the one case Sablier's code treats as "CRD
+  # absent, skip gracefully"), which silently broke reconciliation for every kind,
+  # not just CNPG. Confirmed by both the "cannot retrieve groups from provider"
+  # error in the logs and reproducing it locally: apps labeled after Sablier's
+  # boot were invisible to it until a manual restart forced a fresh initial scan.
+  # otkRedis stays off — unlike CNPG clusters, the redis-operator integration
+  # isn't part of the InstanceGroups()/InstanceList() aggregate reconcile call at
+  # all (checked upstream source), so there's no equivalent poisoning risk from
+  # leaving its RBAC disabled.
+  rbac:
+    cnpg: true
+    otkRedis: false

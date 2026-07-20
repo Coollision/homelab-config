@@ -80,6 +80,15 @@ traefik:
   metrics:
     prometheus: {}
 
+  experimental:
+    plugins:
+      # Same Sablier plugin as the internal traefik (system/kube-system/traefik) —
+      # needed here too so scale-to-zero works for apps using ingress_external_secure
+      # (e.g. babybuddy, which exposes both an internal and external route).
+      sablier:
+        moduleName: "github.com/sablierapp/sablier-traefik-plugin"
+        version: "v1.3.0"
+
 # resources:
 #   requests:
 #     cpu: 100m

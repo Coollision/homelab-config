@@ -28,3 +28,6 @@ storage:
     namesuffix: workspace
     volumeName: cloudbeaver-workspace
     protect: true
+
+scaleToZero:
+  enabled: true

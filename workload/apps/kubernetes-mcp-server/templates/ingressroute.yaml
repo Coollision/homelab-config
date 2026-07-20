@@ -14,7 +14,11 @@ spec:
     - kind: Rule
       match: Host(`{{ .Values.ingress_internal_secure.host }}`)
       middlewares:
+        # Auth gate first, then the scale-to-zero wake gate — so an
+        # unauthenticated request is rejected before it can ever wake the pod.
         - name: mcp-basicauth
+          namespace: {{ .Release.Namespace }}
+        - name: kubernetes-mcp-server-sablier
           namespace: {{ .Release.Namespace }}
       services:
         - kind: Service

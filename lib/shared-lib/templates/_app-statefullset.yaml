@@ -7,6 +7,10 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "helm.labels" . | nindent 4 }}
+    {{- if (default dict .Values.scaleToZero).enabled }}
+    sablier.enable: "true"
+    sablier.group: {{ include "helm.fullname" . }}
+    {{- end }}
   {{- if or .Values.syncWave .Values.keel }}
   annotations:
     {{- if .Values.syncWave }}

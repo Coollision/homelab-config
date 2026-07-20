@@ -1,0 +1,19 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: sablier
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: sablier
+    monitoring: yess
+spec:
+  selector:
+    matchLabels:
+      app: sablier
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  endpoints:
+    - interval: 15s
+      port: http
+      path: "/metrics"

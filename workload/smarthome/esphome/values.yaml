@@ -58,3 +58,7 @@ storage:
     storageClass: longhorn-shared
     replicas: 2  # firmware build cache, rebuildable — 2 replicas survive one node down
     protect: true
+
+scaleToZero:
+  enabled: true
+  sessionDuration: 3h  # longer than default — a batch of firmware compiles/OTA can run a while
