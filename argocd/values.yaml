@@ -274,6 +274,12 @@ argo-cd:
         cpu: 1000m
 
   server:
+    # Sablier discovery label — the server (UI/API) is safe to scale to zero
+    # since all reconcile/auto-sync/self-heal is the application-controller
+    # (a separate StatefulSet), not the server.
+    deploymentLabels:
+      sablier.enable: "true"
+      sablier.group: argocd-server
     affinity:
       nodeAffinity:
         preferredDuringSchedulingIgnoredDuringExecution:

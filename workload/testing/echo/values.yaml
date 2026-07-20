@@ -15,3 +15,7 @@ ingress_internal_secure:
   host: echo.<secret:kv/data/domains~domain>
   path: /
   port: http
+
+scaleToZero:
+  enabled: true
+  sessionDuration: 2m  # temporary — shortened for testing the idle scale-down; revert to default (30m) after

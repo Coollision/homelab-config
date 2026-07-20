@@ -1,0 +1,25 @@
+{{/*
+Stable alias Service for Sablier.
+
+The upstream chart names its Service `sablier-<release>`, and the release name
+produced by argocd-lovely-plugin isn't reliably predictable. Middlewares across
+the cluster reference Sablier by a fixed DNS name, so we expose one here whose
+name is constant (`sablier`) while its selector reuses the same `.Release.Name`
+the subchart stamps on its pods — so it matches regardless of what the release
+name turns out to be. Consumers use: http://sablier.kube-system.svc.cluster.local:10000
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: sablier
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: sablier
+spec:
+  selector:
+    app: sablier-{{ .Release.Name }}
+  ports:
+    - name: http
+      protocol: TCP
+      port: 10000
+      targetPort: 10000

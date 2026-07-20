@@ -24,3 +24,15 @@ spec:
       - CreateNamespace=true
       - PruneLast=true
       - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+  ignoreDifferences:
+    # Lets Sablier scale argocd-server to 0 without selfHeal reverting it.
+    # This app's syncPolicy previously had no RespectIgnoreDifferences at all
+    # (unlike the workloads/system ApplicationSets), so this entry alone would
+    # otherwise have no effect.
+    - group: apps
+      kind: Deployment
+      name: argocd-server
+      namespace: argocd
+      jsonPointers:
+        - /spec/replicas

@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# The longhorn chart hardcodes `app: longhorn-ui` on its UI Deployment with no
+# values-driven label knob (only service.ui.labels, which is the Service, not
+# the Deployment Sablier's discovery reads). This patch adds the two labels
+# Sablier needs directly. Scoped to the UI Deployment only — the data plane
+# (longhorn-manager DaemonSet, instance-managers, CSI driver) is untouched.
+patches:
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: longhorn-ui
+    patch: |-
+      - op: add
+        path: /metadata/labels/sablier.enable
+        value: "true"
+      - op: add
+        path: /metadata/labels/sablier.group
+        value: longhorn-ui

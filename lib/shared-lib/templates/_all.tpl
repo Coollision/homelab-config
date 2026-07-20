@@ -22,6 +22,10 @@ Main entrypoint for the shared library chart. It will render all underlying temp
 ---
 {{ include "shared-lib.service" . }}
 {{- end }}
+{{- if (default dict .Values.scaleToZero).enabled }}
+---
+{{ include "shared-lib.middleware_sablier" . }}
+{{- end }}
 {{- if .Values.ingress_internal }}
 ---
 {{ include "shared-lib.ingress_internal" . }}

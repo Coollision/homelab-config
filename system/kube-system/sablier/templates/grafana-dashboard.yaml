@@ -1,0 +1,22 @@
+{{/*
+Self-contained dashboard ConfigMap — deliberately NOT using the shared
+grafana-dashboards/*.json auto-publish mechanism in system/monitoring/monitoring
+(that gate is currently broken for an unrelated reason: it checks
+.Values.promstack.grafana.enabled, which isn't set anywhere, so none of the
+existing dashboards there actually render either). This is independent of
+that bug and works regardless of whether/when it gets fixed.
+
+Requires sidecar.dashboards.searchNamespace: ALL on the Grafana release (set
+in system/monitoring/monitoring/values.yaml) since this ConfigMap lives in
+kube-system, not monitoring.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sablier-grafana-dashboard
+  namespace: {{ .Release.Namespace }}
+  labels:
+    grafana_dashboard: "1"
+data:
+  sablier.json: |-
+    {{- .Files.Get "grafana-dashboard/sablier.json" | nindent 4 }}

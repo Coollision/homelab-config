@@ -20,6 +20,10 @@ spec:
            {{- if .Values.ingress_external_secure.additionalRules }}
            && {{ .Values.ingress_external_secure.additionalRules }}
            {{- end }}
+    {{- if (default dict .Values.scaleToZero).enabled }}
+    middlewares:
+    - name: {{ include "helm.fullname" . }}-sablier
+    {{- end }}
     services:
     - kind: Service
       name: {{ include "helm.fullname" . }}-service

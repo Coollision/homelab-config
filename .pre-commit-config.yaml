@@ -9,3 +9,11 @@ repos:
       - id: end-of-file-fixer
       - id: pretty-format-json
       - id: trailing-whitespace
+  - repo: local
+    hooks:
+      - id: gen-scale-to-zero-ignores
+        name: Regenerate scale-to-zero ArgoCD ignoreDifferences
+        entry: scripts/gen-scale-to-zero-ignores.sh
+        language: script
+        files: ^(workload|system)/.*/values\.yaml$|^applications/set-(workloads|system)\.yaml$
+        pass_filenames: false

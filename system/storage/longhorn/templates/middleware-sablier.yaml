@@ -1,0 +1,18 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: longhorn-ui-sablier
+  namespace: {{ .Release.Namespace }}
+spec:
+  plugin:
+    sablier:
+      sablierUrl: http://sablier.kube-system.svc.cluster.local:10000
+      group: longhorn-ui
+      sessionDuration: 30m
+      dynamic:
+        displayName: longhorn-ui
+        showDetails: true
+        theme: hacker-terminal
+        refreshFrequency: 5s
+{{- end }}

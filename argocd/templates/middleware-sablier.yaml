@@ -1,0 +1,38 @@
+{{/*
+Two middlewares for the same argocd-server group, not one — the server's
+IngressRoute has two rules: the regular UI/REST rule (a browser, fine with the
+HTML waiting page) and the gRPC rule (used by the argocd CLI/argocd-cd
+clients, e.g. every `argocd app get` used to validate this rollout — a gRPC
+client can't parse an HTML waiting page any more than an MCP client can, so it
+gets the blocking strategy instead).
+*/}}
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: argocd-server-sablier-dynamic
+  namespace: {{ .Release.Namespace }}
+spec:
+  plugin:
+    sablier:
+      sablierUrl: http://sablier.kube-system.svc.cluster.local:10000
+      group: argocd-server
+      sessionDuration: 30m
+      dynamic:
+        displayName: argocd-server
+        showDetails: true
+        theme: hacker-terminal
+        refreshFrequency: 5s
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: argocd-server-sablier-blocking
+  namespace: {{ .Release.Namespace }}
+spec:
+  plugin:
+    sablier:
+      sablierUrl: http://sablier.kube-system.svc.cluster.local:10000
+      group: argocd-server
+      sessionDuration: 30m
+      blocking:
+        timeout: 1m
