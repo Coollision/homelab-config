@@ -1,9 +1,3 @@
-{{ $homeassistantdbv := deepCopy . }}
-{{ $_ := unset $homeassistantdbv ".Values" }}
-{{ $_ := set $homeassistantdbv  "Values" .Values.homeassistantdb }}
-{{ include "shared-lib.all" $homeassistantdbv }}
----
-{{ $homeassistantv := deepCopy . }}
-{{ $_ := unset $homeassistantv ".Values" }}
-{{ $_ := set $homeassistantv  "Values" .Values.homeassistant }}
-{{ include "shared-lib.all" $homeassistantv }}
+{{/* Single-app chart since the bundled MariaDB was removed (recorder now on CNPG
+     smarthome-db-pg, 2026-07-22). Values are top-level; no per-app multiplexing needed. */}}
+{{ include "shared-lib.all" . }}

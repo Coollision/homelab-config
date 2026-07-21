@@ -1,186 +1,101 @@
-homeassistantdb:
-  syncWave: -10
-  fullnameOverride: homeassistant-db
-  statefulset:
-    image:
-      repository: mariadb
-      tag: 12.3.2
-    ports:
-      mysql: 3306
-    args:
-      - --innodb-buffer-pool-size=512M
-      - --innodb-flush-log-at-trx-commit=2
-      - --innodb-log-file-size=128M
-      - --max-connections=20
-      - --innodb-io-capacity=500
-      - --innodb-io-capacity-max=2000
-      - --tmp-table-size=32M
-      - --max-heap-table-size=32M
-      - --innodb-stats-on-metadata=0
-      - --query-cache-type=0
-      - --query-cache-size=0
-      - --skip-name-resolve
-  config:
-    ServerName: mariadb
-    MYSQL_ROOT_PASSWORD: <secret:kv/data/smarthome/homeassistant-db~root-password>
-    MYSQL_AUTO_UPGRADE: Enabled
-    MYSQL_DATABASE: <secret:kv/data/smarthome/homeassistant-db~name>
-    MYSQL_USER: <secret:kv/data/smarthome/homeassistant-db~user>
-    MYSQL_PASSWORD: <secret:kv/data/smarthome/homeassistant-db~password>
-  storage:
-    - mountPath: /var/lib/mysql
-      size: 20Gi
-      type: longhorn
-      volumeName: homeassistant-db
-      nameSuffix: db
-      protect: true
+fullnameOverride: homeassistant
+statefulset:
+  image:
+    repository: ghcr.io/home-assistant/home-assistant
+    tag: 2026.7.2
+  ports:
+    web: 8123
+config:
+  TZ: Europe/Brussels
+resources:
+  requests:
+    cpu: 50m
+    memory: 2560Mi
+  limits:
+    cpu: 1000m
+    memory: 3584Mi
+securityContext:
+  capabilities:
+    add:
+      - NET_RAW
+      - NET_ADMIN
 
-  probes:
-    livenessProbe:
-      exec:
-        command:
-        - mysqladmin
-        - ping
-      initialDelaySeconds: 40
-      periodSeconds: 15
-      timeoutSeconds: 5
-      failureThreshold: 4
-    readinessProbe:
-      exec:
-        command:
-        - mysqladmin
-        - ping
-      initialDelaySeconds: 15
-      periodSeconds: 15
-      timeoutSeconds: 5
-      failureThreshold: 4
-  resources:
-    requests:
-      memory: "700Mi"
-      cpu: "150m"
-    limits:
-      memory: "1Gi"
-      cpu: "500m"
-  labels:
-    app.kubernetes.io/component: homeassistant-db
-  affinity:
-    node:
-      preferred:
-        - weight: 50
-          matchExpressions:
-            - key: type
-              operator: In
-              values:
-                - mini
+initContainers:
+  - name: setup-thread-route
+    image: busybox:1.38
+    command:
+      - sh
+      - -c
+      - |
+        sleep 5
+        ip -6 route replace fd77:3621:418:1::/64 via 2a02:a03f:f412:d601:40:67ff:fe9d:6464 dev net2 || true
+    securityContext:
+      runAsUser: 0
+      runAsGroup: 0
+      capabilities:
+        add:
+          - NET_ADMIN
 
-homeassistant:
-  fullnameOverride: homeassistant
-  statefulset:
-    image:
-      repository: ghcr.io/home-assistant/home-assistant
-      tag: 2026.7.2
-    ports:
-      web: 8123
-  config:
-    TZ: Europe/Brussels
-  resources:
-    requests:
-      cpu: 50m
-      memory: 2560Mi
-    limits:
-      cpu: 1000m
-      memory: 3584Mi
-  securityContext:
-    capabilities:
-      add:
-        - NET_RAW
-        - NET_ADMIN
+ingress_internal:
+  host: homeassistant.<secret:kv/data/domains~local>
+  port: web
+ingress_internal_secure:
+  host: homeassistant.<secret:kv/data/domains~domain>
+  port: web
+ingress_external_secure:
+  host: homeassistant.<secret:kv/data/domains~domain>
+  port: web
+storage:
+  - mountPath: /config
+    size: 2Gi
+    type: longhorn
+    volumeName: homeassistant
+    nameSuffix: config
+    storageClass: longhorn-shared
+    protect: true
 
-  initContainers:
-    - name: setup-thread-route
-      image: busybox:1.38
-      command:
-        - sh
-        - -c
-        - |
-          sleep 5
-          ip -6 route replace fd77:3621:418:1::/64 via 2a02:a03f:f412:d601:40:67ff:fe9d:6464 dev net2 || true
-      securityContext:
-        runAsUser: 0
-        runAsGroup: 0
-        capabilities:
-          add:
-            - NET_ADMIN
+multusNetworks:
+  - name: homeassistant-vlan5
+    interface: net2
+    mac: 02:40:67:9d:64:65
+    dhcpHostname: _stub_homeassistant-lan
+    parentInterface: vlan5
+    nodeLabelKey: vlan5-trunk
+    type: macvlan
+    mode: bridge
+    chainedPlugins:
+      - type: sbr
+    ipam:
+      type: dhcp
+      routes:
+        - dst: "::/0"
+          gw: ""
 
-  ingress_internal:
-    host: homeassistant.<secret:kv/data/domains~local>
-    port: web
-  ingress_internal_secure:
-    host: homeassistant.<secret:kv/data/domains~domain>
-    port: web
-  ingress_external_secure:
-    host: homeassistant.<secret:kv/data/domains~domain>
-    port: web
-  storage:
-    - mountPath: /config
-      size: 2Gi
-      type: longhorn
-      volumeName: homeassistant
-      nameSuffix: config
-      storageClass: longhorn-shared
-      protect: true
+hostNetwork: false
+dnsPolicy: ClusterFirst
+imagePreSync: true
+serviceIp: <secret:kv/data/smarthome/homeassistant~ip>
+probes:
+  liveness:
+    httpGet:
+      path: /
+      port: web
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 5
+  readiness:
+    httpGet:
+      path: /
+      port: web
+    initialDelaySeconds: 15
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 5
 
-  multusNetworks:
-    - name: homeassistant-vlan5
-      interface: net2
-      mac: 02:40:67:9d:64:65
-      dhcpHostname: _stub_homeassistant-lan
-      parentInterface: vlan5
-      nodeLabelKey: vlan5-trunk
-      type: macvlan
-      mode: bridge
-      chainedPlugins:
-        - type: sbr
-      ipam:
-        type: dhcp
-        routes:
-          - dst: "::/0"
-            gw: ""
+labels:
+  app.kubernetes.io/component: homeassistant
 
-  hostNetwork: false
-  dnsPolicy: ClusterFirst
-  imagePreSync: true
-  serviceIp: <secret:kv/data/smarthome/homeassistant~ip>
-  probes:
-    liveness:
-      httpGet:
-        path: /
-        port: web
-      initialDelaySeconds: 60
-      periodSeconds: 10
-      timeoutSeconds: 5
-      failureThreshold: 5
-    readiness:
-      httpGet:
-        path: /
-        port: web
-      initialDelaySeconds: 15
-      periodSeconds: 15
-      timeoutSeconds: 5
-      failureThreshold: 5
-
-  labels:
-    app.kubernetes.io/component: homeassistant
-
-  affinity:
-    pod:
-      preferred:
-        - weight: 100
-          podAffinityTerm:
-            labelSelector:
-              matchExpressions:
-                - key: app.kubernetes.io/component
-                  operator: In
-                  values:
-                    - homeassistant-db
-            topologyKey: kubernetes.io/hostname
+# No DB co-location affinity: the recorder moves to CNPG (smarthome-db-pg), whose pod can
+# reschedule on failover, and same-node latency is negligible on the LAN for this workload.
+# HA placement is driven by its vlan5-trunk macvlan node requirement instead.

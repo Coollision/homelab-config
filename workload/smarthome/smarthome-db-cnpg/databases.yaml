@@ -9,3 +9,15 @@ spec:
   cluster:
     name: smarthome-db-pg
   databaseReclaimPolicy: retain
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: db-homeassistant
+  namespace: smarthome
+spec:
+  name: homeassistant
+  owner: homeassistant_user
+  cluster:
+    name: smarthome-db-pg
+  databaseReclaimPolicy: retain
