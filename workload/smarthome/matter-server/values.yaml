@@ -3,7 +3,7 @@ fullnameOverride: matter-server
 statefulset:
   image:
     repository: ghcr.io/matter-js/matterjs-server
-    tag: 1.2.7
+    tag: 1.2.8
   ports:
     ws: 5580
 
