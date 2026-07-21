@@ -273,11 +273,15 @@ promstack:
       type: Recreate
     resources:
       requests:
-        cpu: 100m
-        memory: 256Mi
+        cpu: 150m
+        memory: 320Mi
       limits:
-        cpu: 500m
-        memory: 512Mi
+        # Bumped from 500m/512Mi — CPUThrottlingHigh was tripping and memory
+        # was sitting at ~93% of its limit even at steady state (native alert
+        # sidecar + post-outage cold-start load). Not touching scale-to-zero
+        # here — kept always-on deliberately (log-based alerts depend on it).
+        cpu: 750m
+        memory: 768Mi
     sidecar:
       dashboards:
         provider:
