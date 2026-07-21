@@ -17,7 +17,7 @@ spec:
   dataLocality: best-effort
   frontend: blockdev
   numberOfReplicas: 3
-  size: "5368709120"
+  size: "26843545600"   # 25Gi — kept in sync with the PV capacity + cluster.yaml pvcTemplate below
   diskSelector: []
   nodeSelector: []
   replicaAutoBalance: ignored
@@ -35,7 +35,7 @@ metadata:
     argocd.argoproj.io/sync-options: Delete=false,Prune=false
 spec:
   capacity:
-    storage: 5Gi
+    storage: 25Gi
   volumeMode: Filesystem
   accessModes:
     - ReadWriteOnce

@@ -11,16 +11,31 @@ spec:
         - ReadWriteOnce
       resources:
         requests:
-          storage: 5Gi
+          storage: 25Gi        # phase-1 capacity floor for the HA recorder DB (~10GB + WAL + index temp)
       storageClassName: longhorn
       volumeName: smarthome-db-pg-data
 
+  # Phase 2 tuning (evidence-driven via scripts/ha-pg-perf-bench.sh). Only knobs with a real,
+  # reproducible effect kept — MariaDB tweaks were NOT cargo-culted:
+  #  * work_mem 32MB: DETERMINISTIC win — the energy-dashboard GROUP BY switches from an
+  #    on-disk "external merge" to an in-memory quicksort. (InnoDB tmp-table-size analog.)
+  #  * effective_cache_size / random_page_cost / effective_io_concurrency: correctness for
+  #    an NVMe/Longhorn-backed pod (stock assumes spinning disk + fictitious 4GB cache).
+  #  * shared_buffers left at STOCK 128MB: bumping it to 512MB showed NO reproducible win on
+  #    this (live, noisy) workload — Postgres relies on the OS page cache, unlike InnoDB — so
+  #    it only wasted RAM. synchronous_commit left default: recorder shows no write lag.
+  postgresql:
+    parameters:
+      work_mem: "32MB"
+      effective_cache_size: "768MB"    # realistic for a 1Gi pod (was an over-optimistic 4GB)
+      random_page_cost: "1.1"          # NVMe/Longhorn, not spinning disk
+      effective_io_concurrency: "200"
   resources:
     requests:
-      cpu: 50m
-      memory: 128Mi
+      cpu: 250m
+      memory: 512Mi
     limits:
-      memory: 256Mi
+      memory: 1Gi               # stock shared_buffers -> lean; 1Gi is the proven floor
 
   bootstrap:
     initdb: {}
@@ -32,3 +47,8 @@ spec:
         login: true
         passwordSecret:
           name: pgrole-n8n
+      - name: homeassistant_user
+        ensure: present
+        login: true
+        passwordSecret:
+          name: pgrole-homeassistant
