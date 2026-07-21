@@ -28,10 +28,14 @@ config:
   # (scheme + host), or the OAuth redirects break.
   MCP_BASE_URL: https://ha-mcp.<secret:kv/data/domains~domain>
 
-  # Persists the key that signs/encrypts issued OAuth tokens across pod restarts,
-  # so clients don't have to re-login every time the pod is rescheduled.
-  # Vault value = output of `openssl rand -base64 32`.
-  OAUTH_ENCRYPTION_KEY: <secret:kv/data/smarthome/ha-mcp~oauth-encryption-key>
+  # ha-mcp persists its DCR client registrations (oauth_clients.json) and HMAC
+  # signing secret (oauth_hmac_secret, auto-generated on first boot if absent)
+  # under this directory — without it, both are written to the ephemeral
+  # container filesystem and are lost on every restart, forcing every client
+  # to redo the OAuth consent flow. (The OAUTH_ENCRYPTION_KEY env var this
+  # used to set doesn't exist anywhere in ha-mcp's actual source — it did
+  # nothing; removed.)
+  HA_MCP_CONFIG_DIR: /data
 
   # HTTP listener binding (must match deployment.ports.web).
   MCP_PORT: "8086"
@@ -42,6 +46,16 @@ securityContext:
   capabilities:
     drop:
       - ALL
+
+# fsGroup (not runAsUser — the image sets its own non-root user via USER in the
+# Dockerfile) so the /data PVC is group-writable regardless of that user's UID.
+podSecurityContext:
+  fsGroup: 1000
+
+storage:
+  - mountPath: /data
+    size: 128Mi
+    type: longhorn
 
 # LAN access for multiple PCs over TLS, internal only (websecure entrypoint, no external ingress).
 # Reuses the wildcard cert for the internal domain that homeassistant already uses.
