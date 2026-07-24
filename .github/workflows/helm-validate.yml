@@ -75,9 +75,9 @@ jobs:
 
           add_chart_dir() {
             local dir="$1"
-            [ -z "$dir" ] && return
+            [ -z "$dir" ] && return 0
             # Disabled charts are excluded from ArgoCD discovery, so never validate them.
-            case "$dir" in */disabled-*|disabled-*) return;; esac
+            case "$dir" in */disabled-*|disabled-*) return 0;; esac
             if [ -z "$CHANGED_CHART_DIRS" ]; then
               CHANGED_CHART_DIRS="$dir"
             else
