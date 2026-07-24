@@ -122,6 +122,18 @@ argo-cd:
           return hs
         end
 
+        -- A detached volume reports robustness "unknown", not "healthy" —
+        -- Longhorn only assesses replica health while something has it
+        -- attached, so "unknown" here means "not in use", not a fault.
+        -- Sablier (scale-to-zero) detaches volumes routinely on idle, so
+        -- without this every sleeping app with a PVC shows stuck
+        -- "Progressing" forever instead of Healthy.
+        if obj.status.state == "detached" and obj.status.robustness == "unknown" then
+          hs.status = "Healthy"
+          hs.message = "Longhorn volume is detached (not in use)"
+          return hs
+        end
+
         if obj.status.robustness == "faulted" then
           hs.status = "Degraded"
           hs.message = "Longhorn volume is faulted"
