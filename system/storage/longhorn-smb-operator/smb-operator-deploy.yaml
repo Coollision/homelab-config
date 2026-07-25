@@ -31,7 +31,9 @@ rules:
     verbs: ["get", "list", "watch", "create", "update", "patch"]
   - apiGroups: ["longhorn.io"]
     resources: ["volumes"]
-    verbs: ["get", "list"]
+    # watch: needed to react to attach/detach (status.shareEndpoint/shareState/state).
+    # A scale-to-zero produces no PVC event at all — only a Volume status change.
+    verbs: ["get", "list", "watch"]
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list"]

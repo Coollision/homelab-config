@@ -19,6 +19,17 @@ data:
       image: crazymax/samba:latest
       workgroup: WORKGROUP
       serverString: Homelab Storage Server
+      # 'soft' is required: Longhorn stops a share-manager the moment its volume
+      # detaches (e.g. an app scaled to zero by Sablier). A hard mount against the
+      # dead server wedges smbd in uninterruptible sleep and the pod hangs in
+      # Terminating forever, blocking its own replacement. timeo is in deciseconds.
+      nfsMountOptions: vers=4.2,noresvport,soft,timeo=50,retrans=2
+      # In-pod mount reconciler: applies endpoint attach/detach without restarting SMB.
+      # Kubelet takes up to ~60s to propagate a ConfigMap change into the pod, so
+      # polling much faster than this buys nothing.
+      mountReconcileInterval: 15
+      # How long smbd waits at startup for the initial mounts before accepting clients.
+      initialMountWait: 30
       security:
         encryptionLevel: default
         ntlmAuth: yes

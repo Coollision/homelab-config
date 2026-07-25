@@ -44,6 +44,15 @@ REQUIRED_CONFIG_KEYS = [
     ('operator', 'namespace'),
 ]
 
+# Mount table: the operator publishes live Longhorn NFS endpoints here and the in-pod
+# reconciler applies them. Mounted as a whole directory (never subPath) so kubelet
+# propagates ConfigMap updates into the running pod.
+MOUNT_TABLE_CONFIGMAP = 'smb-mounts'
+MOUNT_TABLE_KEY = 'mounts.tsv'
+MOUNT_TABLE_DIR = '/etc/smb-mounts'
+MOUNT_TABLE_PATH = f'{MOUNT_TABLE_DIR}/{MOUNT_TABLE_KEY}'
+MOUNT_RECONCILER_PATH = '/usr/local/bin/smb-mount-reconciler.sh'
+
 # Metrics
 class Metrics:
     """Simple metrics tracking"""
@@ -81,7 +90,20 @@ class Config:
     smb_image: str = 'dperson/samba:latest'
     smb_workgroup: str = 'WORKGROUP'
     smb_server_string: str = 'Homelab Storage'
-    
+    # NFS client options for RWX share mounts.
+    # 'soft' is load-bearing: Longhorn tears down a share-manager as soon as its
+    # volume detaches (e.g. an app scaled to zero by Sablier). A hard mount against
+    # the vanished server puts the samba process in uninterruptible sleep, which
+    # SIGKILL cannot clear — the pod then hangs in Terminating forever and blocks
+    # its own replacement. soft + a short timeo makes those I/Os fail instead.
+    nfs_mount_options: str = 'vers=4.2,noresvport,soft,timeo=50,retrans=2'
+    # How often the in-pod reconciler re-reads the mount table. Kubelet takes up to
+    # ~60s to propagate a ConfigMap change into the pod, so polling faster than this
+    # mostly just burns cycles.
+    mount_reconcile_interval: int = 15
+    # Seconds smbd waits at startup for the reconciler to establish initial mounts.
+    initial_mount_wait: int = 30
+
     # Longhorn settings
     longhorn_namespace: str = 'storage'
     longhorn_group: str = 'longhorn.io'
@@ -157,7 +179,11 @@ class Config:
                 smb_image=data.get('smb', {}).get('image', 'dperson/samba:latest'),
                 smb_workgroup=data.get('smb', {}).get('workgroup', 'WORKGROUP'),
                 smb_server_string=data.get('smb', {}).get('serverString', 'Homelab Storage'),
-                
+                nfs_mount_options=data.get('smb', {}).get(
+                    'nfsMountOptions', 'vers=4.2,noresvport,soft,timeo=50,retrans=2'),
+                mount_reconcile_interval=data.get('smb', {}).get('mountReconcileInterval', 15),
+                initial_mount_wait=data.get('smb', {}).get('initialMountWait', 30),
+
                 longhorn_namespace=data.get('longhorn', {}).get('namespace', 'storage'),
                 longhorn_group=data.get('longhorn', {}).get('group', 'longhorn.io'),
                 longhorn_version=data.get('longhorn', {}).get('version', 'v1beta2'),
@@ -310,9 +336,16 @@ class SMBShare:
     """Represents a single SMB share configuration.
 
     mount_type:
-      'nfs'    — RWX volume; the startup script mounts via NFS from the Longhorn share endpoint.
+      'nfs'    — RWX volume; mounted at runtime by the in-pod mount reconciler from
+                 the Longhorn share endpoint. The endpoint is NOT part of the pod spec.
       'direct' — RWO volume; a temp PV+PVC is created so the CSI driver mounts it directly
                  into the SMB server pod. No NFS mount in the startup script.
+
+    attached:
+      False for an RWX volume whose Longhorn share-manager is currently down (the volume
+      detached because its consumer scaled to zero). The share stays in smb.conf and keeps
+      its slot in the mount table with an empty endpoint, so a scale-down never changes the
+      pod spec — the reconciler just unmounts it and remounts when the endpoint returns.
     """
     name: str
     path: str
@@ -323,6 +356,7 @@ class SMBShare:
     nfs_server: str = ''
     nfs_path: str = ''
     longhorn_volume_name: str = ''  # set for direct mounts; used to build PV/PVC names
+    attached: bool = True
 
     @property
     def readonly(self) -> bool:
@@ -331,6 +365,24 @@ class SMBShare:
     @property
     def unique_id(self) -> str:
         return f"{self.namespace}/{self.pvc_name}"
+
+    @property
+    def endpoint(self) -> str:
+        """'server:/path' for a live NFS share, '' when detached or direct-mounted."""
+        if self.mount_type != 'nfs' or not self.attached:
+            return ''
+        if not self.nfs_server or not self.nfs_path:
+            return ''
+        return f"{self.nfs_server}:{self.nfs_path}"
+
+    @property
+    def structural_key(self) -> str:
+        """Identity of this share *as it appears in the pod spec*.
+
+        Deliberately excludes the NFS endpoint and attachment state — those live in the
+        mount-table ConfigMap and are applied without restarting the pod.
+        """
+        return f"{self.unique_id}|{self.name}|{self.path}|{self.mount_type}|{self.access_mode}"
 
     @property
     def migration_pv_name(self) -> str:
@@ -364,6 +416,9 @@ class SMBOperator:
         self.custom_api = client.CustomObjectsApi()
         self.config = cfg
         self.current_shares: Set[str] = set()
+        # Structural fingerprint of the shares as rendered into the pod spec. Drives
+        # whether a reconcile needs to touch the Deployment at all.
+        self.current_structure: Set[str] = set()
         self.operator_uid: Optional[str] = None
         self.operator_labels: Dict[str, str] = {}  # cached from own deployment
 
@@ -724,6 +779,52 @@ class SMBOperator:
                 else:
                     logger.warning(f"Migration: failed to read PVC {pvc_name}: {e}")
 
+    def resolve_share_endpoint(self, volume: Dict[str, Any], volume_name: str,
+                               share_name: str, namespace: str,
+                               pvc_name: str) -> Optional[tuple]:
+        """Resolve a Longhorn volume to (nfs_server, nfs_path, attached).
+
+        Returns None when the volume cannot back an SMB share at all and should be
+        skipped. A detached RWX volume is NOT a skip: it returns ('', '', False) so the
+        share keeps its slot in smb.conf and the mount table, and the pod spec is
+        unaffected by the scale-down.
+        """
+        status = volume.get('status', {})
+        share_endpoint = status.get('shareEndpoint', '')
+
+        if share_endpoint:
+            parsed = self.parse_nfs_endpoint(share_endpoint)
+            if not parsed:
+                logger.error(f"Failed to parse NFS endpoint: {share_endpoint}")
+                self.update_pvc_annotations(namespace, pvc_name, 'error', '')
+                return None
+            nfs_server, nfs_path = parsed
+            logger.info(f"  NFS endpoint: {nfs_server}:{nfs_path}")
+            return nfs_server, nfs_path, True
+
+        if volume.get('spec', {}).get('accessMode', '') == 'rwx':
+            # RWX but no endpoint: the share-manager is down because the volume
+            # detached (typically the consuming app scaled to zero). Expected and
+            # transient — keep the share and let the in-pod reconciler remount it when
+            # the endpoint returns. Dropping it would change the pod spec and force a
+            # full SMB restart, and the resulting teardown is what used to wedge the pod.
+            logger.info(f"  Volume {volume_name} detached "
+                        f"(state={status.get('state') or 'unknown'}, "
+                        f"shareState={status.get('shareState') or 'none'}) "
+                        f"— keeping share '{share_name}', unmounted until it reattaches")
+            self.update_pvc_annotations(namespace, pvc_name, 'detached', '')
+            self.record_event('PersistentVolumeClaim', pvc_name, namespace,
+                            'ShareDetached',
+                            f'Longhorn volume {volume_name} is detached; SMB share is '
+                            f'present but unmounted until the volume reattaches')
+            return '', '', False
+
+        logger.warning(f"No share endpoint for volume {volume_name} and it is not RWX, skipping")
+        self.update_pvc_annotations(namespace, pvc_name, 'error', '')
+        self.record_event('PersistentVolumeClaim', pvc_name, namespace,
+                        'NoShareEndpoint', 'Volume does not have NFS share endpoint (must be RWX)', 'Warning')
+        return None
+
     def discover_shares(self) -> List[SMBShare]:
         """Discover all SMB shares from labeled PVCs"""
         shares = []
@@ -760,23 +861,12 @@ class SMBOperator:
                                     'VolumeNotFound', f'Longhorn volume {volume_name} not found', 'Warning')
                     continue
                 
-                share_endpoint = volume.get('status', {}).get('shareEndpoint', '')
-                if not share_endpoint:
-                    logger.warning(f"No share endpoint for volume {volume_name} (not RWX?)")
-                    self.update_pvc_annotations(namespace, pvc_name, 'error', '')
-                    self.record_event('PersistentVolumeClaim', pvc_name, namespace,
-                                    'NoShareEndpoint', 'Volume does not have NFS share endpoint (must be RWX)', 'Warning')
+                resolved = self.resolve_share_endpoint(
+                    volume, volume_name, share_name, namespace, pvc_name)
+                if resolved is None:
                     continue
-                
-                parsed = self.parse_nfs_endpoint(share_endpoint)
-                if not parsed:
-                    logger.error(f"Failed to parse NFS endpoint: {share_endpoint}")
-                    self.update_pvc_annotations(namespace, pvc_name, 'error', '')
-                    continue
-                
-                nfs_server, nfs_path = parsed
-                logger.info(f"  NFS endpoint: {nfs_server}:{nfs_path}")
-                
+                nfs_server, nfs_path, attached = resolved
+
                 share = SMBShare(
                     name=share_name,
                     path=f"/shares/{share_name}",
@@ -784,14 +874,16 @@ class SMBOperator:
                     pvc_name=pvc_name,
                     access_mode=access_mode,
                     nfs_server=nfs_server,
-                    nfs_path=nfs_path
+                    nfs_path=nfs_path,
+                    attached=attached,
                 )
                 shares.append(share)
-                
-                # Update PVC with success status
-                share_path = f"//{self.config.smb_loadbalancer_ip}/{share_name}"
-                self.update_pvc_annotations(namespace, pvc_name, 'active', share_path)
-                
+
+                if attached:
+                    # Update PVC with success status
+                    share_path = f"//{self.config.smb_loadbalancer_ip}/{share_name}"
+                    self.update_pvc_annotations(namespace, pvc_name, 'active', share_path)
+
             except Exception as e:
                 logger.error(f"Error processing PVC {namespace}/{pvc_name}: {e}", exc_info=True)
                 self.update_pvc_annotations(namespace, pvc_name, 'error', '')
@@ -860,8 +952,112 @@ class SMBOperator:
         
         return "\n".join(lines)
     
+    def generate_mount_reconciler(self) -> str:
+        """The in-pod NFS mount reconciler.
+
+        Runs as a background loop next to smbd and drives every RWX mount from the
+        mount-table ConfigMap, which the operator rewrites as Longhorn endpoints come
+        and go. Because endpoints never appear in the pod spec, an app scaling to zero
+        (or reattaching on a different node with a new share-manager ClusterIP) costs
+        an unmount/remount inside the running pod instead of a full SMB restart.
+
+        Truth for "what is mounted" is /proc/self/mounts, not in-memory state, so the
+        loop is correct even if it is restarted or a mount dies underneath it.
+        """
+        return f"""#!/bin/bash
+# Managed by smb-operator. Reconciles /shares/* NFS mounts against the mount table.
+TABLE={MOUNT_TABLE_PATH}
+OPTS='{self.config.nfs_mount_options}'
+INTERVAL={self.config.mount_reconcile_interval}
+
+log() {{ echo "[mount-reconciler] $*"; }}
+
+# Current NFS mount for a path, as 'server:/export', or empty if not mounted.
+current_mount() {{
+  awk -v p="$1" '$2==p && $3 ~ /^nfs/ {{print $1}}' /proc/self/mounts | tail -n 1
+}}
+
+# Detach a mount. Try a clean unmount first, time-boxed because it can block on a
+# dead server, then fall back to a lazy unmount which always succeeds immediately.
+#
+# Success is judged by the resulting state, not by exit codes: a umount killed by
+# `timeout` can still complete in the kernel, so the mount is gone while every command
+# in the chain reported failure. Trusting the rc there produced spurious "could not
+# unmount" warnings and made the caller skip a reconcile cycle.
+detach() {{
+  local mp="$1"
+  timeout 5 umount "$mp" 2>/dev/null \\
+    || timeout 5 umount -f "$mp" 2>/dev/null \\
+    || umount -l "$mp" 2>/dev/null
+  [ -z "$(current_mount "$mp")" ]
+}}
+
+# Is this mount path listed in the table at all?
+in_table() {{
+  awk -F'\\t' -v p="$1" '$1 !~ /^#/ && $2 == p {{ found = 1 }} END {{ exit !found }}' "$TABLE"
+}}
+
+# Bring one mount point in line with its desired endpoint ('' means keep it unmounted).
+reconcile_one() {{
+  local mpath="$1" want="$2" have
+  have="$(current_mount "$mpath")"
+
+  [ "$want" = "$have" ] && return 0
+
+  if [ -n "$have" ]; then
+    if detach "$mpath"; then
+      log "unmounted $have from $mpath"
+    else
+      log "WARNING: could not unmount $mpath (had $have)"
+      return 1
+    fi
+  fi
+
+  if [ -z "$want" ]; then
+    log "$mpath is detached (no endpoint); serving empty share"
+    return 0
+  fi
+
+  mkdir -p "$mpath"
+  if timeout 30 mount -t nfs -o "$OPTS" "$want" "$mpath"; then
+    log "mounted $want -> $mpath"
+  else
+    log "mount failed: $want -> $mpath (will retry in ${{INTERVAL}}s)"
+  fi
+}}
+
+log "started (interval=${{INTERVAL}}s, opts=${{OPTS}})"
+
+while true; do
+  if [ -r "$TABLE" ]; then
+    while IFS=$'\\t' read -r name mpath endpoint; do
+      case "$name" in ''|'#'*) continue ;; esac
+      [ -n "$mpath" ] || continue
+      reconcile_one "$mpath" "$endpoint"
+    done < "$TABLE"
+
+    # Drop any /shares/* NFS mount the table no longer knows about.
+    while read -r src mp fstype _; do
+      case "$fstype" in nfs*) ;; *) continue ;; esac
+      case "$mp" in /shares/*) ;; *) continue ;; esac
+      if ! in_table "$mp"; then
+        detach "$mp" && log "unmounted orphaned $src from $mp"
+      fi
+    done < /proc/self/mounts
+  else
+    log "mount table $TABLE not readable yet"
+  fi
+  sleep "$INTERVAL"
+done
+"""
+
     def generate_startup_script(self, shares: List[SMBShare]) -> str:
-        """Generate container startup script with NFS mounts and SMB user setup"""
+        """Generate the container startup script.
+
+        Contains no NFS endpoints by design — only share names and paths — so the pod
+        spec stays byte-identical across attach/detach cycles. Mounts are established
+        by the background reconciler reading the mount-table ConfigMap.
+        """
         lines = [
             "#!/bin/bash",
             "set -e",
@@ -873,45 +1069,105 @@ class SMBOperator:
             f"echo -e \"$SMB_PASSWORD\\n$SMB_PASSWORD\" | smbpasswd -a -s {self.config.smb_username}",
             f"echo 'SMB user {self.config.smb_username} configured'",
             "echo ''",
-            ""
+            "",
         ]
-        
+
         for share in shares:
             if share.mount_type == 'direct':
                 # CSI mounts the volume directly into the pod at share.path —
                 # just ensure the directory exists (it will already be mounted).
-                lines.extend([
-                    f"echo 'Direct CSI mount ready: {share.name}'",
-                    f"mkdir -p {share.path}",
-                    "echo ''",
-                    ""
-                ])
+                lines.append(f"echo 'Direct CSI mount ready: {share.name}'")
             else:
-                lines.extend([
-                    f"echo 'Mounting share: {share.name}'",
-                    f"mkdir -p {share.path}",
-                    f"mount -t nfs -o vers=4.2,noresvport {share.nfs_server}:{share.nfs_path} {share.path} || {{",
-                    f"  echo 'Failed to mount {share.name}'",
-                    "  exit 1",
-                    "}",
-                    f"echo '  Mounted: {share.nfs_server}:{share.nfs_path} -> {share.path}'",
-                    "echo ''",
-                    ""
-                ])
-        
+                lines.append(f"echo 'NFS share (reconciler-managed): {share.name}'")
+            lines.append(f"mkdir -p {share.path}")
+        lines.append("echo ''")
+        lines.append("")
+
+        reconciler = self.generate_mount_reconciler()
         lines.extend([
-            "echo 'Starting Samba daemon...'",
-            "exec /usr/sbin/smbd --foreground --no-process-group"
+            "# Install and start the NFS mount reconciler",
+            f"cat > {MOUNT_RECONCILER_PATH} <<'SMB_OPERATOR_RECONCILER_EOF'",
+            reconciler.rstrip("\n"),
+            "SMB_OPERATOR_RECONCILER_EOF",
+            f"chmod +x {MOUNT_RECONCILER_PATH}",
+            f"{MOUNT_RECONCILER_PATH} &",
+            "echo 'Mount reconciler started'",
+            "echo ''",
+            "",
         ])
-        
+
+        # Give the reconciler a chance to establish the initial mounts before smbd
+        # accepts connections, so clients don't briefly see empty shares on a restart.
+        lines.extend([
+            f"echo 'Waiting up to {self.config.initial_mount_wait}s for initial mounts...'",
+            f"for _ in $(seq 1 {self.config.initial_mount_wait}); do",
+            # Only shares with a live endpoint are expected to mount; detached ones
+            # would otherwise make this always burn the full timeout.
+            f"  want=$(awk -F'\\t' '$1 !~ /^#/ && NF>=3 && $3 != \"\" {{c++}} END {{print c+0}}' "
+            f"{MOUNT_TABLE_PATH} 2>/dev/null || echo 0)",
+            "  have=$(awk '$3 ~ /^nfs/ && $2 ~ /^\\/shares\\// {c++} END {print c+0}' /proc/self/mounts)",
+            "  [ \"$have\" -ge \"$want\" ] && break",
+            "  sleep 1",
+            "done",
+            "echo ''",
+            "",
+            "echo 'Starting Samba daemon...'",
+            "exec /usr/sbin/smbd --foreground --no-process-group",
+        ])
+
         return "\n".join(lines)
-    
+
+    def generate_mount_table(self, shares: List[SMBShare]) -> str:
+        """Render the mount table consumed by the in-pod reconciler.
+
+        TSV so the reconciler can parse it with bash builtins (no jq in the samba image):
+            <share name>\\t<mount path>\\t<server:/export or empty when detached>
+        """
+        lines = [
+            "# Managed by smb-operator — do not edit.",
+            "# name\tpath\tendpoint (empty = detached, reconciler keeps it unmounted)",
+        ]
+        for share in shares:
+            if share.mount_type == 'direct':
+                continue  # CSI handles these; the reconciler must not touch them
+            lines.append(f"{share.name}\t{share.path}\t{share.endpoint}")
+        return "\n".join(lines) + "\n"
+
+    def generate_prestop_script(self, shares: List[SMBShare]) -> str:
+        """Generate the preStop hook: drain clients, then detach every NFS mount.
+
+        A lazy unmount ('umount -l') detaches the mount from the namespace
+        immediately even when the NFS server is gone, so the samba process never
+        ends up blocked in uninterruptible I/O during teardown. Plain 'umount -f'
+        is tried first (clean), but is time-boxed because it can itself block on a
+        dead server.
+        """
+        nfs_paths = [s.path for s in shares if s.mount_type != 'direct']
+
+        lines = [
+            "echo 'Shutting down gracefully...'",
+            "sleep 5",
+        ]
+        for path in nfs_paths:
+            lines.extend([
+                f"echo 'Unmounting {path}'",
+                f"timeout 5 umount -f {path} 2>/dev/null "
+                f"|| umount -l {path} 2>/dev/null "
+                f"|| echo '  already gone: {path}'",
+            ])
+        lines.append("echo 'preStop complete'")
+        # Never fail the hook — a non-zero preStop just spams events.
+        lines.append("exit 0")
+
+        return "\n".join(lines)
+
     @retry_on_error
     def generate_deployment(self, shares: List[SMBShare]) -> client.V1Deployment:
         """Generate SMB server deployment with retry"""
         smb_config = self.generate_smb_config(shares)
         startup_script = self.generate_startup_script(shares)
-        
+        prestop_script = self.generate_prestop_script(shares)
+
         container = client.V1Container(
             name='samba',
             image=self.config.smb_image,
@@ -933,7 +1189,10 @@ class SMBOperator:
                 client.V1ContainerPort(container_port=139, protocol='TCP')
             ],
             volume_mounts=[
-                client.V1VolumeMount(name='smb-config', mount_path='/etc/samba/smb.conf', sub_path='smb.conf')
+                client.V1VolumeMount(name='smb-config', mount_path='/etc/samba/smb.conf', sub_path='smb.conf'),
+                # Whole directory, NOT sub_path: subPath-mounted ConfigMaps are snapshotted
+                # at pod start and never updated, which would defeat the whole design.
+                client.V1VolumeMount(name='smb-mounts', mount_path=MOUNT_TABLE_DIR, read_only=True),
             ] + [
                 # Direct CSI mounts for RWO migration volumes
                 client.V1VolumeMount(
@@ -970,11 +1229,12 @@ class SMBOperator:
                 timeout_seconds=3,
                 failure_threshold=3
             ),
-            # Graceful shutdown - give time for connections to drain
+            # Graceful shutdown - drain connections, then detach NFS mounts so a
+            # dead share-manager can't wedge the container in Terminating.
             lifecycle=client.V1Lifecycle(
                 pre_stop=client.V1LifecycleHandler(
                     _exec=client.V1ExecAction(
-                        command=['/bin/bash', '-c', 'echo "Shutting down gracefully..." && sleep 5']
+                        command=['/bin/bash', '-c', prestop_script]
                     )
                 )
             )
@@ -983,11 +1243,14 @@ class SMBOperator:
         template = client.V1PodTemplateSpec(
             metadata=client.V1ObjectMeta(
                 labels={'app': self.config.smb_deployment_name},
+                # NOTE: nothing time-varying belongs in the POD TEMPLATE annotations —
+                # any change here rolls the pod. A timestamp used to live here, which
+                # meant every reconcile that reached apply_deployment restarted SMB.
+                # Mutable state (endpoints, attachment) lives in the mount table instead.
                 annotations={
-                    'smb-operator/version': '2.0',
+                    'smb-operator/version': '2.1',
                     'smb-operator/shares-count': str(len(shares)),
                     'smb-operator/share-list': ','.join([s.name for s in shares]),
-                    'smb-operator/last-updated': datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'),
                 }
             ),
             spec=client.V1PodSpec(
@@ -998,6 +1261,13 @@ class SMBOperator:
                         config_map=client.V1ConfigMapVolumeSource(
                             name='smb-config',
                             items=[client.V1KeyToPath(key='smb.conf', path='smb.conf')]
+                        )
+                    ),
+                    client.V1Volume(
+                        name='smb-mounts',
+                        config_map=client.V1ConfigMapVolumeSource(
+                            name=MOUNT_TABLE_CONFIGMAP,
+                            optional=True,  # reconciler tolerates it being absent on first boot
                         )
                     )
                 ] + [
@@ -1020,6 +1290,10 @@ class SMBOperator:
             replicas=1,
             selector=client.V1LabelSelector(match_labels={'app': self.config.smb_deployment_name}),
             strategy=client.V1DeploymentStrategy(type='Recreate'),
+            # Structural changes are rare now that endpoints no longer touch the pod
+            # spec, so a deep history buys nothing and the default of 10 left a pile of
+            # dead ReplicaSets behind from the pre-mount-table churn.
+            revision_history_limit=3,
             template=template
         )
         
@@ -1031,9 +1305,11 @@ class SMBOperator:
                 namespace=self.config.namespace,
                 labels=self.get_child_labels({'app': self.config.smb_deployment_name}),
                 annotations={
-                    'smb-operator/version': '2.0',
+                    'smb-operator/version': '2.1',
                     'smb-operator/shares-count': str(len(shares)),
                     'smb-operator/share-list': ','.join([s.name for s in shares]),
+                    # Safe here: Deployment-level annotations do not roll the pod.
+                    'smb-operator/last-updated': datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'),
                 }
             ),
             spec=spec
@@ -1116,6 +1392,36 @@ class SMBOperator:
                 raise
     
     @retry_on_error
+    def update_mount_table(self, mount_table: str) -> bool:
+        """Publish the mount table ConfigMap. Returns True if the content changed.
+
+        This is the hot path for attach/detach: it is written on every reconcile and
+        never touches the Deployment, so endpoints can churn without restarting SMB.
+        """
+        try:
+            cm = self.core_v1.read_namespaced_config_map(MOUNT_TABLE_CONFIGMAP, self.config.namespace)
+            if (cm.data or {}).get(MOUNT_TABLE_KEY) == mount_table:
+                return False
+            cm.data = {MOUNT_TABLE_KEY: mount_table}
+            self.core_v1.patch_namespaced_config_map(MOUNT_TABLE_CONFIGMAP, self.config.namespace, cm)
+            logger.info("Updated mount table ConfigMap (no pod restart required)")
+            return True
+        except ApiException as e:
+            if e.status == 404:
+                cm = client.V1ConfigMap(
+                    metadata=client.V1ObjectMeta(
+                        name=MOUNT_TABLE_CONFIGMAP,
+                        namespace=self.config.namespace,
+                        labels=self.get_child_labels(),
+                    ),
+                    data={MOUNT_TABLE_KEY: mount_table}
+                )
+                self.core_v1.create_namespaced_config_map(self.config.namespace, cm)
+                logger.info("Created mount table ConfigMap")
+                return True
+            raise
+
+    @retry_on_error
     def apply_deployment(self, deployment: client.V1Deployment) -> bool:
         """Apply or update the deployment with retry"""
         try:
@@ -1182,12 +1488,22 @@ class SMBOperator:
                 logger.info(f"Including {len(migration_shares)} migration share(s) in SMB server: "
                             f"{[s.name for s in migration_shares]}")
 
+            # Endpoint/attachment churn is applied via the mount table on every pass.
+            # This never restarts SMB, so it is safe to do before the structural check.
+            if self.update_mount_table(self.generate_mount_table(shares)):
+                detached = [s.name for s in shares if s.mount_type == 'nfs' and not s.attached]
+                if detached:
+                    logger.info(f"  Detached (unmounted, share still published): {', '.join(sorted(detached))}")
+
             new_shares = {s.unique_id for s in shares}
-            
-            if new_shares == self.current_shares:
-                logger.info(f"No changes detected ({len(shares)} shares)")
+            new_structure = {s.structural_key for s in shares}
+
+            # Compare on structural_key, not unique_id: unique_id ignores path/mount_type
+            # changes, and deliberately ignores endpoints so attach/detach is not a rollout.
+            if new_structure == self.current_structure:
+                logger.debug(f"No structural changes ({len(shares)} shares)")
                 return True
-            
+
             logger.info("Share configuration changed:")
             logger.info(f"  Previous: {len(self.current_shares)} shares")
             logger.info(f"  Current:  {len(new_shares)} shares")
@@ -1214,6 +1530,7 @@ class SMBOperator:
             if success:
                 self.ensure_service()
                 self.current_shares = new_shares
+                self.current_structure = new_structure
                 logger.info("Reconciliation completed successfully")
                 
                 # Record events for added/removed shares
@@ -1295,12 +1612,71 @@ class SMBOperator:
                     logger.error(f"Unexpected migration ConfigMap watch error: {e}", exc_info=True)
                     time.sleep(10)
 
-        # Run both watchers in parallel threads
+        def watch_longhorn_volumes_stream():
+            """Watch Longhorn Volume CRs for attach/detach so mounts follow within seconds.
+
+            PVC events alone are not enough: when an app scales to zero the PVC does not
+            change at all — only the Volume's status.shareEndpoint / shareState / state do.
+            Without this watch, a detach or a reattach-on-a-different-node (new
+            share-manager ClusterIP) would only be noticed at the next periodic resync.
+            """
+            w = watch.Watch()
+            # Only reconcile when a field we actually render changes; Longhorn updates
+            # Volume status constantly (robustness, actualSize, conditions...).
+            last_seen: Dict[str, tuple] = {}
+            while not shutdown_event.is_set():
+                try:
+                    for event in w.stream(
+                        self.custom_api.list_namespaced_custom_object,
+                        group=self.config.longhorn_group,
+                        version=self.config.longhorn_version,
+                        namespace=self.config.longhorn_namespace,
+                        plural=self.config.longhorn_plural,
+                        timeout_seconds=self.config.reconcile_interval
+                    ):
+                        if shutdown_event.is_set():
+                            return
+                        vol = event.get('object') or {}
+                        if not isinstance(vol, dict):
+                            continue
+                        name = vol.get('metadata', {}).get('name', '')
+                        status = vol.get('status', {})
+                        relevant = (
+                            status.get('shareEndpoint', ''),
+                            status.get('shareState', ''),
+                            status.get('state', ''),
+                        )
+                        if last_seen.get(name) == relevant:
+                            continue
+                        previous = last_seen.get(name)
+                        last_seen[name] = relevant
+                        if previous is None:
+                            continue  # initial sync of existing volumes; periodic resync covers it
+                        logger.info(f"Longhorn volume event: {event.get('type')} {name} "
+                                    f"endpoint={relevant[0] or 'none'} shareState={relevant[1] or 'none'} "
+                                    f"state={relevant[2] or 'none'}")
+                        if self.reconcile():
+                            metrics.reconcile_count += 1
+                            metrics.last_reconcile_time = time.time()
+                            metrics.shares_managed = len(self.current_shares)
+                except ApiException as e:
+                    if e.status == 410:
+                        logger.warning("Longhorn volume watch expired, restarting...")
+                        continue
+                    logger.error(f"Longhorn volume watch error: {e}", exc_info=True)
+                    time.sleep(10)
+                except Exception as e:
+                    logger.error(f"Unexpected Longhorn volume watch error: {e}", exc_info=True)
+                    time.sleep(10)
+
+        # Run all watchers in parallel threads
         pvc_thread = threading.Thread(target=watch_pvcs_stream, daemon=True, name='watch-pvcs')
         migration_thread = threading.Thread(target=watch_migration_configmap_stream, daemon=True, name='watch-migration-cm')
+        volume_thread = threading.Thread(target=watch_longhorn_volumes_stream, daemon=True, name='watch-lh-volumes')
 
         pvc_thread.start()
         migration_thread.start()
+        volume_thread.start()
 
         # Block until shutdown
         while not shutdown_event.is_set():
@@ -1308,6 +1684,7 @@ class SMBOperator:
 
         pvc_thread.join(timeout=10)
         migration_thread.join(timeout=10)
+        volume_thread.join(timeout=10)
 
     def run(self):
         """Main operator loop with graceful shutdown"""
