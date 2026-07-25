@@ -76,8 +76,8 @@ probes:
   readiness:
     tcpSocket:
       port: web
-    initialDelaySeconds: 10
-    periodSeconds: 15
+    initialDelaySeconds: 2
+    periodSeconds: 3
     timeoutSeconds: 5
     failureThreshold: 4
 
@@ -95,3 +95,4 @@ labels:
 scaleToZero:
   enabled: true
   strategy: blocking  # MCP/JSON-RPC client can't render an HTML waiting page
+  blockingTimeout: 2m

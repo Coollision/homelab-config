@@ -16,4 +16,4 @@ spec:
       blocking:
         # MCP/JSON-RPC client, can't render an HTML waiting page — hold the
         # request until the pod is ready instead.
-        timeout: 1m
+        timeout: 2m

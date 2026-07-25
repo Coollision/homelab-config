@@ -46,6 +46,9 @@ kubernetes-mcp-server:
           name: cluster-admin
           external: true
 
+  readinessProbe:
+    periodSeconds: 3
+
   resources:
     requests:
       cpu: 10m
