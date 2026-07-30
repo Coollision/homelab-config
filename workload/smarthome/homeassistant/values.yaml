@@ -28,7 +28,19 @@ initContainers:
       - -c
       - |
         sleep 5
-        ip -6 route replace fd77:3621:418:1::/64 via 2a02:a03f:f412:d601:40:67ff:fe9d:6464 dev net2 || true
+        # Route to the Thread mesh (OTBR's OMR prefix, a ULA it generates and persists
+        # itself, so it is unaffected by ISP prefix changes).
+        #
+        # The next hop MUST be a link-local address. This previously used the border
+        # router's global VLAN40 address (2a02:a03f:f412:d601:...), which silently died
+        # when the ISP rotated the delegated prefix to 2a02:a03f:e41f::/48 — `|| true`
+        # swallowed the failure and HA lost all direct Thread reachability. Link-local is
+        # derived from the interface MAC, which is pinned in the border router's Multus
+        # config (02:05:67:9d:64:64 on VLAN5 -> fe80::5:67ff:fe9d:6464), so it survives
+        # any renumbering. Use the VLAN5 address because that is the link this pod's net2
+        # actually shares with the border router.
+        ip -6 route replace fd77:3621:418:1::/64 via fe80::5:67ff:fe9d:6464 dev net2 || true
+        ip -6 route get fd77:3621:418:1::1 || echo "WARNING: thread route not installed"
     securityContext:
       runAsUser: 0
       runAsGroup: 0
