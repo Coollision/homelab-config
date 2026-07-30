@@ -109,7 +109,25 @@ primary:
       volumeName: technitium-primary-config
       nameSuffix: config
       protect: true
-  # VLAN 30 MACVLAN — SLAAC IPv6: 2a02:a03f:f412:d600:53:ff:fe00:1
+  # VLAN 30 MACVLAN — SLAAC interface ID is ::53:ff:fe00:1 (EUI-64 of the pinned MAC).
+  #
+  # Reachable over IPv6 at fd4f:64d9:fcab:30:53:ff:fe00:1 — a ULA, and the address UniFi
+  # advertises as an RA DNS server. The ISP-delegated GUA is deliberately NOT used for
+  # this: when the delegation last rotated (2a02:a03f:f412:d6xx -> 2a02:a03f:e41f:60xx),
+  # UniFi kept advertising the old GUA, so every dual-stack client burned a DNS timeout
+  # per lookup before falling back to IPv4. That is what made Home Assistant
+  # intermittently unreachable in browsers and the companion app.
+  #
+  # Both halves of the ULA are now renumber-proof: the /64 is ours (set per-VLAN under
+  # UniFi's "Additional IPs", advertised alongside the delegated prefix so clients keep
+  # their GUA and IPv6 internet), and the interface ID is the EUI-64 of the MAC pinned
+  # below. Advertising the resolver over IPv6 also keeps split-horizon intact — an
+  # IPv6-capable client that would otherwise reach an external resolver and get the
+  # public Cloudflare view of declerck.dev instead of the internal one.
+  #
+  # The other two advertised resolvers are ::53:ff:fe00:2 (secondary, below) and
+  # fd4f:64d9:fcab:30:211:32ff:feca:c93d (a container on the Synology). Do not record
+  # GUAs for any of them anywhere — that is the mistake this comment exists to prevent.
   # IPv4 via static DHCP lease in UniFi for MAC 02:53:00:00:00:01.
   # parentInterface: enp1s0 = native (untagged) VLAN 30; no vlan30 sub-interface needed.
   multusNetworks:
@@ -146,7 +164,8 @@ secondary:
       volumeName: technitium-secondary-config
       nameSuffix: config
       protect: true
-  # VLAN 30 MACVLAN — SLAAC IPv6: 2a02:a03f:f412:d600:53:ff:fe00:2
+  # VLAN 30 MACVLAN — SLAAC interface ID is ::53:ff:fe00:2 (EUI-64 of the pinned MAC).
+  # See the primary above for why the full GUA is not recorded here.
   # IPv4 via static DHCP lease in UniFi for MAC 02:53:00:00:00:02.
   multusNetworks:
     - name: technitium-secondary-vlan30
