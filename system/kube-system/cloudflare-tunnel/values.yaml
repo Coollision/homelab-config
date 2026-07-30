@@ -47,6 +47,25 @@ traefik:
       operator: "Exists"
       effect: "NoSchedule"
 
+  # See system/kube-system/traefik/values.yaml — same failure-only access logging.
+  # Extra value here: this is the hop behind cloudflared, so a failed external
+  # request shows whether the real client IP survived the tunnel or was replaced
+  # by the cloudflared pod IP.
+  accessLog:
+    enabled: true
+    format: json
+    filters:
+      statusCodes: "400-599"
+      retryAttempts: true
+    fields:
+      headers:
+        defaultMode: drop
+        names:
+          X-Forwarded-For: keep
+          X-Forwarded-Proto: keep
+          X-Forwarded-Host: keep
+          Cf-Connecting-Ip: keep
+          User-Agent: keep
   additionalArguments:
     - '--entryPoints.web.forwardedHeaders.trustedIPs=<secret:kv/data/kube-system/traefik~trusted-ips>'
     - '--entryPoints.websecure.forwardedHeaders.trustedIPs=<secret:kv/data/kube-system/traefik~trusted-ips>'

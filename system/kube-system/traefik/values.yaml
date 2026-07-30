@@ -34,6 +34,26 @@ traefik:
     - key: "node-role.kubernetes.io/master"
       operator: "Exists"
       effect: "NoSchedule"
+  # Access logs are filtered to failures only (4xx/5xx + retries), so volume stays
+  # low enough to ship to Loki continuously. Without this Traefik logs nothing but
+  # its daily version-check line, which makes intermittent client-side errors
+  # (e.g. the HA companion app failing on /?external_auth=1) impossible to attribute
+  # to a proxy hop. The forwarded headers are kept so the real client IP and the
+  # scheme/host HA is told about are both visible on a failed request.
+  accessLog:
+    enabled: true
+    format: json
+    filters:
+      statusCodes: "400-599"
+      retryAttempts: true
+    fields:
+      headers:
+        defaultMode: drop
+        names:
+          X-Forwarded-For: keep
+          X-Forwarded-Proto: keep
+          X-Forwarded-Host: keep
+          User-Agent: keep
   additionalArguments:
     - "--entryPoints.web.forwardedHeaders.trustedIPs=<secret:kv/data/kube-system/traefik~trusted-ips>"
     - "--entryPoints.websecure.forwardedHeaders.trustedIPs=<secret:kv/data/kube-system/traefik~trusted-ips>"
