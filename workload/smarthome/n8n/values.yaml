@@ -42,11 +42,34 @@ config:
   N8N_HOST: n8n.<secret:kv/data/domains~domain>
   N8N_PORT: "5678"
   N8N_PROTOCOL: https
-  WEBHOOK_URL: https://n8n.<secret:kv/data/domains~domain>/
-  N8N_RUNNERS_ENABLED: "true"
+  # Renamed in 2.x: WEBHOOK_URL is deprecated in favour of N8N_WEBHOOK_URL, which sets
+  # the base URL for both test and production webhooks.
+  N8N_WEBHOOK_URL: https://n8n.<secret:kv/data/domains~domain>/
+  # N8N_RUNNERS_ENABLED removed — task runners are always on as of 2.x and n8n now
+  # warns that the variable is no longer needed.
   # Opschonen van oude uitvoeringen (7 dagen)
   EXECUTIONS_DATA_PRUNE: "true"
   EXECUTIONS_DATA_MAX_AGE: "168"
+
+  # --- Defaults pinned explicitly ------------------------------------------------
+  # n8n warns about each of these because it intends to change the default in a future
+  # release. Setting them here freezes today's behaviour so an image bump can't quietly
+  # change it, and silences the startup deprecation notices.
+
+  # Required to keep the installed community package (n8n-nodes-imap) loadable — the
+  # default flips to false, which would stop unverified packages from installing.
+  N8N_UNVERIFIED_PACKAGES_ENABLED: "true"
+
+  # Default drops 300s -> 60s. Kept at 300s; some flows do slow external HTTP calls.
+  N8N_RUNNERS_TASK_TIMEOUT: "300"
+
+  # Default drops 5000 -> 1000. Kept at 5000 (entry count is cheap).
+  N8N_COMPRESSION_NODE_MAX_ZIP_ENTRIES: "5000"
+
+  # Deliberately NOT the current 2 GiB default: this pod is capped at 640Mi, so a
+  # decompression anywhere near 2 GiB would OOM-kill it long before the limit applied.
+  # 256 MiB (the upcoming default) is a guard that can actually fire.
+  N8N_COMPRESSION_NODE_MAX_DECOMPRESSED_SIZE_BYTES: "268435456"
 
 resources:
   requests:

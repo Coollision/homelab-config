@@ -66,17 +66,26 @@ ingress_internal_secure:
 # The MCP endpoint rejects bare requests (anything without the secret path), so HTTP GET
 # probes would fail health checks. A TCP check on the listening port is the correct signal.
 probes:
+  # Boot takes ~9s (auto-discovery of 40 tool modules + two PyPI version checks) and
+  # scales with tool count, so the liveness probe used to fire mid-startup and log
+  # "connection refused" before the app had bound :8086. The startupProbe gates both
+  # other probes until the port is actually listening: 40 x 3s = 120s of headroom,
+  # after which liveness takes over and a real hang is still caught within ~80s.
+  startup:
+    tcpSocket:
+      port: web
+    periodSeconds: 3
+    timeoutSeconds: 5
+    failureThreshold: 40
   liveness:
     tcpSocket:
       port: web
-    initialDelaySeconds: 20
     periodSeconds: 20
     timeoutSeconds: 5
     failureThreshold: 4
   readiness:
     tcpSocket:
       port: web
-    initialDelaySeconds: 2
     periodSeconds: 3
     timeoutSeconds: 5
     failureThreshold: 4

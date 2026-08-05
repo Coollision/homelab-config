@@ -85,6 +85,14 @@ livenessProbe:
 readinessProbe:
   {{- toYaml .Values.probes.readiness | nindent 2 -}}
 {{- end -}}
+{{- /* A startupProbe suspends the liveness/readiness probes until it first succeeds,
+       so slow-booting apps can't be killed mid-startup by a liveness failure. Prefer
+       this over inflating livenessProbe.initialDelaySeconds: the delay has to cover
+       the worst-case boot, which then also delays detection of a real hang. */ -}}
+{{- if .Values.probes.startup }}
+startupProbe:
+  {{- toYaml .Values.probes.startup | nindent 2 -}}
+{{- end -}}
 {{- end }}
 {{- end -}}
 
