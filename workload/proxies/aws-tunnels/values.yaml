@@ -26,6 +26,37 @@ aws-tunnels-operator:
           roleName: <secret:kv/data/proxies/aws-tunnel~prod-sso-role-name>
     auth:
       host: aws-auth.<secret:kv/data/domains~domain>
+    tunnelDefaults:
+      # session-manager-plugin needs ~226m while streaming; the chart default limit of 200m
+      # throttles it in ~80% of CFS periods (measured 2026-08-07). That costs latency jitter,
+      # not throughput — a single SSM session tops out at ~700 KB/s regardless of CPU, so this
+      # is a smoothness fix only. Requests stay low; tunnels idle at ~0m.
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 300m
+          memory: 128Mi
+    # All three DB tunnels below run the compressed SSH transport, which requires TLS to terminate
+    # at Traefik rather than pass through to RDS.
+    #
+    # Why both settings move together: passthrough routes by SNI, which forces the client to speak
+    # TLS, which makes every byte crossing the tunnel client↔RDS ciphertext — and ciphertext cannot
+    # be compressed. Terminating at the ingress creates a plaintext segment exactly where AWS's
+    # ~0.7 MB/s per-session cap bites, so `ssh -C` can gzip it on the bastion first. Measured on a
+    # Postgres bulk COPY: 0.62 → 2.36 MB/s (3.8x). See docs/aws-tunnels-throughput.md.
+    #
+    # Clients are unaffected: still sslmode=require to the same host on :443, and SNI still matches
+    # because Traefik presents the default TLSStore wildcard.
+    #
+    # Trade-off: TLS is no longer one end-to-end session to the database. The path becomes
+    # client→Traefik (TLS), Traefik→pod (in-cluster), pod→bastion (SSH), bastion→RDS (plaintext,
+    # inside the VPC). rds.force_ssl verified 0 on dev, preprod and prod clusters (2026-08-07);
+    # if that is ever turned on, the payload stays TLS end-to-end and the gain disappears.
+    #
+    # gitlab-dev is deliberately left alone — it already carries plaintext HTTP that GitLab gzips
+    # for any client sending Accept-Encoding, so there is little left to win.
     tunnels:
       - name: gitlab-dev
         bastionName: bastion-dev
@@ -41,7 +72,9 @@ aws-tunnels-operator:
         host: dev-db-work.<secret:kv/data/domains~domain>
         ingressMode: tcp
         tls:
-          passthrough: true
+          passthrough: false
+        ssh:
+          enabled: true
         rds:
           clusterPrefix: <secret:kv/data/proxies/aws-tunnel~dev-db-cluster-prefix>
       - name: preprod-db
@@ -52,7 +85,9 @@ aws-tunnels-operator:
         host: preprod-db-work.<secret:kv/data/domains~domain>
         ingressMode: tcp
         tls:
-          passthrough: true
+          passthrough: false
+        ssh:
+          enabled: true
         rds:
           clusterPrefix: <secret:kv/data/proxies/aws-tunnel~preprod-db-cluster-prefix>
       - name: prod-db
@@ -65,6 +100,8 @@ aws-tunnels-operator:
         host: prod-db-work.<secret:kv/data/domains~domain>
         ingressMode: tcp
         tls:
-          passthrough: true
+          passthrough: false
+        ssh:
+          enabled: true
         rds:
           clusterPrefix: <secret:kv/data/proxies/aws-tunnel~prod-db-cluster-prefix>
