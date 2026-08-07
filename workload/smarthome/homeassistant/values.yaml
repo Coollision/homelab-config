@@ -41,6 +41,29 @@ initContainers:
         # actually shares with the border router.
         ip -6 route replace fd77:3621:418:1::/64 via fe80::5:67ff:fe9d:6464 dev net2 || true
         ip -6 route get fd77:3621:418:1::1 || echo "WARNING: thread route not installed"
+
+        # Sonos host routes. The sbr chained plugin parks net2's routes in table
+        # 100, which is only consulted for traffic ALREADY sourced from net2's
+        # address, so a destination lookup for a VLAN5 host falls through to the
+        # eth0 default route and HA sources it from the pod IP. SoCo derives its
+        # UPnP event-listener bind address from that source IP (get_listen_ip()
+        # does a UDP connect to the speaker and reads the local address), so it
+        # binds and advertises 10.42.x.x — unreachable from the speakers. Every
+        # subscription then fails and the integration silently degrades to
+        # polling ("Subscription to <speaker> failed, attempting to poll
+        # directly"). A host route per speaker makes net2 the egress, so the
+        # listener binds 192.168.5.x and callbacks arrive over the shared L2.
+        #
+        # Deliberately /32 per speaker, NOT the whole 192.168.5.0/24: a blanket
+        # route would also capture HA's replies to Traefik (a VLAN5 address in
+        # http.trusted_proxies), pushing them out net2 asymmetrically.
+        #
+        # The speakers hold fixed addresses, so these routes are stable; if one
+        # is ever renumbered its route goes stale and Sonos quietly falls back
+        # to polling rather than failing loudly.
+        for speaker in 192.168.5.40 192.168.5.42 192.168.5.43; do
+          ip route replace "$speaker/32" dev net2 || echo "WARNING: no route for $speaker"
+        done
     securityContext:
       runAsUser: 0
       runAsGroup: 0
