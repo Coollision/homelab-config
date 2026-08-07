@@ -84,6 +84,38 @@ Request body:
 
 `action` is `stop` or `start`. Also accepts a form POST from the status UI.
 
+### `POST /tunnel-scale`
+
+Sets how many pods — and therefore how many independent SSM sessions — a tunnel runs.
+
+The count is pinned via the `proxies.homelab.io/manualReplicas` annotation and is read by the
+reconcile loop, so a scale done here survives the next tick instead of being reverted. Send
+`"auto"` to drop the pin and return the tunnel to its configured `replicas`.
+
+Scaling also clears a manual stop, since otherwise the new count would immediately be overridden
+back to zero. If credentials are not currently valid the count is recorded but applied as 0, and
+the reconcile loop scales up once creds arrive.
+
+Request body:
+
+```json
+{
+  "namespace": "proxies",
+  "stack": "aws-tunnels",
+  "tunnel": "db",
+  "replicas": "3"
+}
+```
+
+`replicas` is `1`–`10`, or `"auto"`. Zero is rejected — use `/tunnel-toggle` with `stop` to scale
+to zero, so "off" stays a distinct state from "how many". Also accepts a form POST from the status
+UI.
+
+> Raising this only helps workloads that open **several connections**: AWS rate-limits each SSM
+> session to ~0.7 MB/s and all connections through one tunnel share a single session, so the
+> Service spreading connections across pods is what buys throughput. A single stream is unaffected
+> — for that, enable the compressed SSH transport (`ssh.enabled`) instead.
+
 ### `GET /login-wait`
 
 HTML wait page used by form login to display AWS SSO URL while login is in progress.

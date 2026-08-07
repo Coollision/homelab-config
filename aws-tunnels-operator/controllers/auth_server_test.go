@@ -160,8 +160,11 @@ func TestTemplatesRenderWithNewFields(t *testing.T) {
 
 	var buf bytes.Buffer
 	rootData := authRootPageData{
-		Targets:       []loginTarget{{Namespace: "n", Stack: "s", Profile: "dev", Valid: true}},
-		Tunnels:       []tunnelStatus{{Name: "db", Desired: 1, Ready: 1}, {Name: "prod", Stopped: true}},
+		Targets: []loginTarget{{Namespace: "n", Stack: "s", Profile: "dev", Valid: true}},
+		Tunnels: []tunnelStatus{
+			{Name: "db", Desired: 3, Ready: 3, Configured: 3, Manual: true, SSH: true, MaxReplicas: 10},
+			{Name: "prod", Stopped: true, Configured: 1, MaxReplicas: 10},
+		},
 		TokenImported: true,
 	}
 	if err := s.templates["auth-root"].Execute(&buf, rootData); err != nil {
@@ -170,6 +173,16 @@ func TestTemplatesRenderWithNewFields(t *testing.T) {
 	out := buf.String()
 	if !strings.Contains(out, "/tunnel-toggle") {
 		t.Error("expected a stop/start toggle form in the rendered root page")
+	}
+	if !strings.Contains(out, "/tunnel-scale") {
+		t.Error("expected a replica scale form in the rendered root page")
+	}
+	// A pinned tunnel must offer a way back to the configured value, or the pin becomes a trap.
+	if !strings.Contains(out, "reset to config") {
+		t.Error("expected a reset-to-config control for the pinned tunnel")
+	}
+	if !strings.Contains(out, `max="10"`) {
+		t.Error("expected the scale input to be bounded by MaxReplicas")
 	}
 	if !strings.Contains(out, "captured") {
 		t.Error("expected the SSO-token-captured status line in the rendered root page")

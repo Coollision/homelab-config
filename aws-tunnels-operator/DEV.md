@@ -26,9 +26,23 @@ The old stack used a PVC to persist AWS credentials across pod restarts. The ope
 - Standard Kubernetes tooling to inspect/rotate credentials.
 - ArgoCD `ignoreDifferences` to suppress false diffs on Secret data.
 
-### Tunnel Deployment scaling (0 or 1)
+### Tunnel Deployment scaling (0 or N)
 
 The operator does not delete tunnel Deployments when credentials expire — it scales them to `replicas=0`. This preserves the Deployment resource (and its history/events) and avoids the create/delete churn on every login cycle.
+
+When credentials *are* valid the count comes from, in order: the `annotManualReplicas` pin set by the auth-server scale control, then the per-tunnel `replicas`, then `tunnelDefaults.replicas`, then 1. The manual pin is deliberately read by the reconcile loop so a scale done in the UI isn't reverted on the next ~30s tick — the same pattern as `annotManuallyStopped`. Counts are clamped to `[1, maxTunnelReplicas]`; zero is not a valid replica count because "off" is expressed with the stop annotation instead, keeping the two states distinct.
+
+Replicas exist for throughput, not availability: AWS rate-limits each SSM session to ~0.7 MB/s, and every connection through one tunnel is smux-multiplexed onto a single datachannel. Extra replicas therefore add capacity only for workloads that open several connections (the Service spreads them over pods, each with its own session). A single stream is unaffected — for that, use the compressed SSH transport.
+
+### Compressed SSH transport (`ssh.enabled`)
+
+Because the ~0.7 MB/s cap applies to bytes on the wire, the only way to move a single stream faster is to send fewer bytes. In this mode the runner forwards the bastion's `:22` over SSM and runs `ssh -C -L` through it, so payloads are gzipped on the bastion before entering the bottleneck. Measured on a Postgres bulk read: 0.62 MB/s plain, 0.65 MB/s over SSH *without* `-C` (so the SSH layer itself is free), and 2.36 MB/s with `-C`.
+
+Two subprocesses are supervised instead of one, each started in its own process group. That matters: `aws ssm start-session` forks `session-manager-plugin`, and killing only the `aws` wrapper orphans the plugin, which holds the local port open and makes the next reconnect fail with "address already in use".
+
+Authentication uses EC2 Instance Connect (`SendSSHPublicKey`): the key is generated per pod, pushed immediately before dialling, and expires after 60s — nothing long-lived lands on the bastion. It is re-pushed on every reconnect because of that expiry. The AWS role needs `ec2-instance-connect:SendSSHPublicKey`, and the image needs `openssh-clients`.
+
+Do not enable it for `tls.passthrough` tunnels: their payload is client-to-target ciphertext, which cannot compress and is measurably *slower* (0.61 → 0.56 MB/s). For a database tunnel, terminate TLS at the ingress (`tls.secretName`, or leave it empty to use the cluster's default TLSStore certificate) so the payload is plaintext from the ingress inwards. Clients keep using `sslmode=require` and SNI routing is unaffected, but TLS is no longer end-to-end to the database — that is a deliberate security trade-off, not a config detail.
 
 ---
 

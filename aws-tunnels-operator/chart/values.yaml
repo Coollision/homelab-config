@@ -99,6 +99,27 @@ stack:
     image: ghcr.io/coollision/aws-tunnel-runner:v0.7.32
     proxyImage: alpine/socat:1.8.1.3
     servicePort: 8080
+    # Pods per tunnel, i.e. independent SSM sessions. AWS rate-limits each session to ~0.7 MB/s
+    # and all connections through one tunnel share a single session, so raising this helps only
+    # workloads that open several connections — a single stream gains nothing. Overridable per
+    # tunnel, and adjustable at runtime from the auth UI (which pins it until reset).
+    replicas: 1
+    # Compressed SSH transport. Forwards the bastion's :22 over SSM and runs `ssh -C -L` through
+    # it, so payloads are gzipped BEFORE crossing the ~0.7 MB/s cap. Measured 3.8x on a Postgres
+    # bulk read; plain SSH with no compression measures the same as raw SSM, so the gain is
+    # entirely from sending fewer bytes.
+    #
+    # Requires ec2-instance-connect:SendSSHPublicKey on the tunnel's AWS role. Keys are ephemeral
+    # (60s), so nothing long-lived is stored on the bastion.
+    #
+    # Do NOT enable for tls.passthrough tunnels: their payload is client-to-target ciphertext,
+    # which cannot compress and measurably slows down (0.61 -> 0.56 MB/s). To use this on a DB
+    # tunnel, terminate TLS at the ingress instead (tls.secretName).
+    ssh:
+      enabled: false
+      # compression: true      # -C; the entire benefit. false = plain SSH (no gain, no loss).
+      # user: ec2-user         # bastion OS user
+      # localSshPort: 2222     # loopback port for the bastion :22 forward; must differ from localPort
     livenessProbe:
       initialDelaySeconds: 30
       periodSeconds: 30
