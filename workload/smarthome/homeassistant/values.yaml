@@ -92,7 +92,10 @@ storage:
 multusNetworks:
   - name: homeassistant-vlan5
     interface: net2
-    mac: 02:40:67:9d:64:65
+    # Was 02:40:67:9d:64:65 — a VLAN40 prefix on a VLAN5 interface. Harmless on
+    # the wire, but the second octet is what makes a stub identifiable at a glance
+    # in UniFi's client list, so it has to be honest. Scheme: see _multus.yaml.
+    mac: 02:05:67:9d:64:65
     dhcpHostname: _stub_homeassistant-lan
     parentInterface: vlan5
     nodeLabelKey: vlan5-trunk

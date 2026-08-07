@@ -20,6 +20,36 @@ IPv6 DHCP Example - Add to multusNetworks in values.yaml:
             gw: ""               # Gateway will be learned from DHCPv6
       chainedPlugins:
         - type: sbr              # Enable source-based routing for multiple NICs
+
+MAC + DHCP-hostname allocation (`mac:` / `dhcpHostname:`)
+---------------------------------------------------------
+Every macvlan attachment puts a NIC on a real VLAN, so each one shows up in UniFi's
+client list as its own device. Both fields exist to make that entry identifiable and
+stable; neither is optional on a new attachment.
+
+  mac:           02:<vlan>:67:9d:64:<app>   locally-administered (02: prefix)
+                   <vlan> = the VLAN tag, written as-is (05, 40)
+                   <app>  = one id per workload, SHARED across its VLANs
+                            61 mdns-reflector  63 matter-server  64 thread-border-router
+                            65 homeassistant   66 esphome
+                 The DNS cluster predates this and uses its own 02:53:00:00:00:<n>.
+
+  dhcpHostname:  _stub_<workload>-<iot|lan>   sent as DHCP option 12 (host-name)
+
+Two rules the scheme depends on:
+
+  1. MACs must be globally unique across the homelab, not just per-VLAN. Two stubs on
+     different VLANs may share a MAC quite happily on the wire, but UniFi keys clients
+     on the MAC alone, so they merge into one flip-flopping entry that can be neither
+     named nor given a fixed lease. Pin the workload id in the last octet and let the
+     second octet carry the VLAN and that cannot happen.
+  2. Pinning the MAC also pins the IPv6 link-local / SLAAC interface ID (EUI-64), which
+     several routes are written against by hand — e.g. the border router's
+     02:05:67:9d:64:64 is the fe80::5:67ff:fe9d:6464 next hop in homeassistant's
+     initContainer. grep for the EUI-64 form before renumbering anything.
+
+Changing a `mac:` costs a new DHCP lease, so the UniFi fixed-IP reservation and client
+alias have to be re-pointed at the new address in the same change.
 */ -}}
 {{- $names := list -}}
 {{- range $network := .Values.multusNetworks -}}
