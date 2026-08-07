@@ -242,15 +242,23 @@ on a real VLAN, so each gets its own DHCP lease and its own UniFi client entry.
 
 They are pinned rather than random precisely so they can be named and reserved. Each
 attachment declares a `mac:` (locally-administered `02:` prefix, second octet = VLAN tag,
-last octet = workload id) and a `dhcpHostname:` of the form `_stub_<workload>-<vlan-role>`,
-sent as DHCP option 12 — the leading `_stub_` is what marks the entry as a pod interface
-rather than a host. The scheme and the full allocation table live in
+last octet = workload id) and a `dhcpHostname:` of the form `_stub_<workload>-<vlan-role>`.
+The scheme and the full allocation table live in
 [`lib/shared-lib/templates/_multus.yaml`](../lib/shared-lib/templates/_multus.yaml); the
 values are in each workload's `values.yaml`. **That is the source of truth — the UniFi
 client list mirrors it, never the other way round.**
 
-For each attachment, give the UniFi client a fixed IP and an alias matching its
-`dhcpHostname`. Two things to know before touching one:
+> **`dhcpHostname` does not actually name anything in UniFi.** It renders correctly into the
+> NAD as a `provide` of DHCP option 12, and the bundled CNI `dhcp` plugin supports the
+> option, but no stub has ever registered a hostname on the controller — verified on a stub
+> whose UniFi record was created the same day the option was added to its config. UniFi
+> therefore falls back to fingerprinting, which confidently mislabels pod interfaces as
+> consumer hardware (a reflector stub was listed as a printer at 99% confidence). Treat
+> `dhcpHostname` as documentation-in-config only; **the UniFi alias is what actually names
+> the client**, and it outranks both fingerprint and hostname in the UI.
+
+For each attachment, set the UniFi alias to exactly the `dhcpHostname` string and give it a
+fixed IP. Two things to know before touching one:
 
 - **A MAC must be unique across the whole homelab, not merely per-VLAN.** UniFi keys clients
   on the MAC alone, so two stubs sharing one on different VLANs collapse into a single entry
@@ -259,6 +267,39 @@ For each attachment, give the UniFi client a fixed IP and an alias matching its
 - **Changing a `mac:` changes the IPv6 link-local (EUI-64) too,** and several IPv6 routes are
   written against those by hand. `grep` for the EUI-64 form before renumbering, and re-point
   the fixed reservation in the same change or the pod silently picks up a new address.
+
+### Client alias prefixes
+
+The controller's client list uses a prefix convention that makes it sort and scan usefully.
+Keep new entries inside it:
+
+| Prefix | Scope | Form |
+|---|---|---|
+| `_stub_` | Multus pod interfaces | `_stub_<workload>-<iot\|lan>`, verbatim from `dhcpHostname` |
+| `_` | cluster nodes and infra hosts | `_<Hostname>`, capitalised |
+| `Z_` | IoT / smart-home devices | `Z_<domain>.<room>.<detail>`, lowercase, dot-separated |
+| *(none)* | people's devices, AV, misc | free text, `<Type> <Person>` |
+
+The two underscore prefixes exist to sort infrastructure above everything else; `Z_` sorts
+the large IoT population to the bottom. Within `Z_`, prefer the dotted form that mirrors the
+Home Assistant entity id — spaces are the outlier, not the norm.
+
+### Editing clients over the API
+
+The Network **integration** API (`/proxy/network/integration/v1`) is read-only for clients —
+it can list them and run actions, but has no field for an alias or a fixed IP. Renaming and
+reserving must go through the **legacy** endpoint, which accepts the same API key:
+
+```http
+PUT  /proxy/network/api/s/default/rest/user/<_id>
+  {"name": "...", "use_fixedip": true, "fixed_ip": "...", "network_id": "..."}
+POST /proxy/network/api/s/default/rest/user          # create a record for a MAC not yet seen
+```
+
+`network_id` is required whenever `fixed_ip` is set. A reservation for an address another
+client currently holds is rejected with `api.err.FixedIpAlreadyUsedByClient` — the old client
+has to be forgotten first, which matters when a pod is being renumbered onto a new MAC while
+its old interface still holds the lease.
 
 ---
 
