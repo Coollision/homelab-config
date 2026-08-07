@@ -22,9 +22,9 @@ import (
 
 type mockAPIError struct{ code, message string }
 
-func (e mockAPIError) Error() string           { return e.message }
-func (e mockAPIError) ErrorCode() string       { return e.code }
-func (e mockAPIError) ErrorMessage() string    { return e.message }
+func (e mockAPIError) Error() string                 { return e.message }
+func (e mockAPIError) ErrorCode() string             { return e.code }
+func (e mockAPIError) ErrorMessage() string          { return e.message }
 func (e mockAPIError) ErrorFault() smithy.ErrorFault { return smithy.FaultUnknown }
 
 // --- mock AWS clients ---

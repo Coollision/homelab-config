@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -110,6 +111,18 @@ type tunnelStatus struct {
 	Desired  int32
 	Restarts int32
 	Stopped  bool
+
+	// Configured is the replica count from the stack config, and Manual reports whether an
+	// operator has pinned a different count via the scale control (annotManualReplicas). The UI
+	// shows both so it's obvious when the live count no longer matches git.
+	Configured int32
+	Manual     bool
+
+	// SSH reports whether this tunnel uses the compressed SSH transport, so the UI can show why
+	// one tunnel is much faster than another.
+	SSH bool
+	// MaxReplicas bounds the scale input in the rendered form.
+	MaxReplicas int32
 }
 
 type authRootPageData struct {
@@ -156,6 +169,7 @@ func (s *AuthServer) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/login-poll.json", s.handleLoginPoll)
 	mux.HandleFunc("/restart", s.handleRestart)
 	mux.HandleFunc("/tunnel-toggle", s.handleTunnelToggle)
+	mux.HandleFunc("/tunnel-scale", s.handleTunnelScale)
 
 	go s.cleanupSSOSessions()
 }
@@ -816,6 +830,150 @@ func (s *AuthServer) handleTunnelToggle(w http.ResponseWriter, r *http.Request) 
 	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "tunnel": tunnel, "action": action, "message": message})
 }
 
+// handleTunnelScale pins a tunnel to a chosen replica count, or clears the pin so the configured
+// value applies again ("auto"). The count is stored as annotManualReplicas so the reconcile loop
+// honours it on the next tick instead of reverting it ~30s later.
+//
+// Extra replicas add throughput only for multi-connection workloads: AWS rate-limits each SSM
+// session, and all connections through one tunnel share a single datachannel. A single stream is
+// unaffected no matter how high this goes.
+func (s *AuthServer) handleTunnelScale(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	formMode := isFormPost(r)
+	namespace := strings.TrimSpace(r.FormValue("namespace"))
+	stack := strings.TrimSpace(r.FormValue("stack"))
+	tunnel := strings.TrimSpace(r.FormValue("tunnel"))
+	replicas := strings.TrimSpace(r.FormValue("replicas"))
+	if !formMode {
+		var payload struct {
+			Namespace string `json:"namespace"`
+			Stack     string `json:"stack"`
+			Tunnel    string `json:"tunnel"`
+			Replicas  string `json:"replicas"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err == nil {
+			if namespace == "" {
+				namespace = strings.TrimSpace(payload.Namespace)
+			}
+			if stack == "" {
+				stack = strings.TrimSpace(payload.Stack)
+			}
+			if tunnel == "" {
+				tunnel = strings.TrimSpace(payload.Tunnel)
+			}
+			if replicas == "" {
+				replicas = strings.TrimSpace(payload.Replicas)
+			}
+		}
+	}
+
+	if namespace == "" {
+		namespace = s.StackNamespace
+	}
+	cfg, err := LoadStackConfig(r.Context(), s.Client, namespace, s.StackConfigName)
+	if err != nil {
+		s.redirectOrError(w, r, formMode, fmt.Sprintf("failed to load stack config: %v", err), http.StatusInternalServerError)
+		return
+	}
+	if stack == "" {
+		stack = cfg.Name
+	}
+	if tunnel == "" {
+		s.redirectOrError(w, r, formMode, "tunnel is required", http.StatusBadRequest)
+		return
+	}
+
+	var spec TunnelSpec
+	found := false
+	for _, t := range cfg.Spec.Tunnels {
+		if t.Name == tunnel {
+			spec, found = t, true
+			break
+		}
+	}
+	if !found {
+		s.redirectOrError(w, r, formMode, fmt.Sprintf("tunnel %q not found in stack", tunnel), http.StatusBadRequest)
+		return
+	}
+
+	// "auto" (or empty) drops the pin and returns the tunnel to its configured count.
+	clearPin := replicas == "" || strings.EqualFold(replicas, "auto")
+	var want int32
+	if !clearPin {
+		n, convErr := strconv.Atoi(replicas)
+		if convErr != nil {
+			s.redirectOrError(w, r, formMode, fmt.Sprintf("replicas must be a number or 'auto', got %q", replicas), http.StatusBadRequest)
+			return
+		}
+		if n < 1 || n > maxTunnelReplicas {
+			s.redirectOrError(w, r, formMode, fmt.Sprintf("replicas must be between 1 and %d (use the Stop button to scale to zero)", maxTunnelReplicas), http.StatusBadRequest)
+			return
+		}
+		want = int32(n)
+	}
+
+	depName := fmt.Sprintf("%s-%s", stack, tunnel)
+	dep := &appsv1.Deployment{}
+	if err := s.Client.Get(r.Context(), types.NamespacedName{Namespace: namespace, Name: depName}, dep); err != nil {
+		s.redirectOrError(w, r, formMode, fmt.Sprintf("failed to get tunnel deployment: %v", err), http.StatusInternalServerError)
+		return
+	}
+	if dep.Annotations == nil {
+		dep.Annotations = map[string]string{}
+	}
+
+	effective := resolveReplicas(spec, cfg.Spec.TunnelDefaults)
+	if clearPin {
+		delete(dep.Annotations, annotManualReplicas)
+	} else {
+		dep.Annotations[annotManualReplicas] = strconv.Itoa(int(want))
+		effective = want
+	}
+
+	// Scaling implies the tunnel should run, so a scale action also lifts a manual stop —
+	// otherwise the new count would be silently overridden to 0 on the next reconcile.
+	delete(dep.Annotations, annotManuallyStopped)
+
+	// Only apply the count now if creds are usable; otherwise leave it at 0 and let the
+	// reconcile loop scale up when credentials arrive.
+	applied := int32(0)
+	profile := spec.AWSProfile
+	if profile == "" {
+		profile = cfg.Spec.AWS.Profile
+	}
+	credSecret := &corev1.Secret{}
+	if err := s.Client.Get(r.Context(), types.NamespacedName{Namespace: namespace, Name: credsSecretName(stack, profile)}, credSecret); err == nil && IsCredentialValid(credSecret) {
+		applied = effective
+	}
+	dep.Spec.Replicas = &applied
+
+	if err := s.Client.Update(r.Context(), dep); err != nil {
+		s.redirectOrError(w, r, formMode, fmt.Sprintf("failed to scale tunnel deployment: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	message := fmt.Sprintf("tunnel %q scaled to %d replica(s)", tunnel, effective)
+	if clearPin {
+		message = fmt.Sprintf("tunnel %q reset to configured %d replica(s)", tunnel, effective)
+	}
+	if applied == 0 {
+		message += " — pending credentials"
+	}
+	authLog.Info("tunnel scale", "tunnel", tunnel, "stack", stack, "replicas", effective, "manual", !clearPin, "applied", applied)
+	if formMode {
+		http.Redirect(w, r, "/?msg="+url.QueryEscape(message), http.StatusSeeOther)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok": true, "tunnel": tunnel, "replicas": effective, "manual": !clearPin, "message": message,
+	})
+}
+
 func decodeLoginRequest(r *http.Request) (loginRequest, bool, error) {
 	if isFormPost(r) {
 		if err := r.ParseForm(); err != nil {
@@ -896,11 +1054,14 @@ func (s *AuthServer) discoverTunnelStatuses(ctx context.Context) ([]tunnelStatus
 			profile = cfg.Spec.AWS.Profile
 		}
 		ts := tunnelStatus{
-			Name:     t.Name,
-			Profile:  profile,
-			Bastion:  t.BastionName,
-			Host:     t.Host,
-			Restarts: maxRestarts[depName],
+			Name:        t.Name,
+			Profile:     profile,
+			Bastion:     t.BastionName,
+			Host:        t.Host,
+			Restarts:    maxRestarts[depName],
+			Configured:  resolveReplicas(t, cfg.Spec.TunnelDefaults),
+			SSH:         resolveSSH(t, cfg.Spec.TunnelDefaults).Enabled,
+			MaxReplicas: maxTunnelReplicas,
 		}
 		if dep, ok := depMap[depName]; ok {
 			desired := int32(1)
@@ -910,6 +1071,10 @@ func (s *AuthServer) discoverTunnelStatuses(ctx context.Context) ([]tunnelStatus
 			ts.Desired = desired
 			ts.Ready = dep.Status.ReadyReplicas
 			ts.Stopped = dep.Annotations[annotManuallyStopped] == "true"
+			if manual, ok := manualReplicaOverride(dep); ok {
+				ts.Manual = true
+				ts.Configured = manual
+			}
 		}
 		statuses = append(statuses, ts)
 	}

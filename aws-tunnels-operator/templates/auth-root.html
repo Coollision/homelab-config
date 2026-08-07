@@ -265,6 +265,7 @@
             <th>Bastion</th>
             <th>URL</th>
             <th>Ready</th>
+            <th title="Replicas = independent SSM sessions. Each session is rate-limited by AWS to ~0.7 MB/s, and all connections through one tunnel share a single session. More replicas therefore help only workloads that open several connections — a single stream gains nothing.">Replicas</th>
             <th>Restarts</th>
             <th>Control</th>
           </tr>
@@ -293,6 +294,28 @@
                 <span style="display:inline-flex;align-items:center;gap:7px"><span class="dot dot-bad"></span> {{.Ready}}/{{.Desired}}</span>
               {{else}}
                 <span style="display:inline-flex;align-items:center;gap:7px"><span class="dot dot-warn"></span> {{.Ready}}/{{.Desired}}</span>
+              {{end}}
+            </td>
+            <td>
+              <form method="POST" action="/tunnel-scale" style="margin:0;display:flex;align-items:center;gap:5px">
+                <input type="hidden" name="tunnel" value="{{.Name}}">
+                <input type="number" name="replicas" value="{{.Configured}}" min="1" max="{{.MaxReplicas}}"
+                       style="width:52px;padding:3px 5px;border-radius:5px;border:1px solid #2a3f52;background:#0e1a24;color:inherit;font-size:.85rem"
+                       title="Independent SSM sessions. Only helps multi-connection workloads.">
+                <button class="btn" type="submit" style="padding:3px 8px;font-size:.8rem">Set</button>
+                {{if .Manual}}
+                  <span title="Pinned from this UI — overrides the configured value until reset" style="color:var(--accent-2);font-size:.75rem">pinned</span>
+                {{end}}
+                {{if .SSH}}
+                  <span title="Using the compressed SSH transport" style="color:#5fb37a;font-size:.75rem">gz</span>
+                {{end}}
+              </form>
+              {{if .Manual}}
+                <form method="POST" action="/tunnel-scale" style="margin:3px 0 0 0">
+                  <input type="hidden" name="tunnel" value="{{.Name}}">
+                  <input type="hidden" name="replicas" value="auto">
+                  <button class="btn" type="submit" style="padding:1px 6px;font-size:.72rem;opacity:.75">reset to config</button>
+                </form>
               {{end}}
             </td>
             <td>

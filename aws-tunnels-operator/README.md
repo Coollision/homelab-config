@@ -209,12 +209,17 @@ Use `extraProfiles` to define additional named AWS profiles for multi-account se
     "image": "amazon/aws-cli:2.27.9",
     "proxyImage": "alpine/socat:1.8.0.3",
     "servicePort": 8080,
+    "replicas": 1,
+    "ssh": { "enabled": false },
     "resources": {
       "requests": { "cpu": "50m", "memory": "64Mi" }
     }
   }
 }
 ```
+
+`replicas` and `ssh` are the two throughput knobs — see [Throughput](#throughput) for which one
+applies to your workload.
 
 #### `tunnels` — list of tunnel definitions
 
@@ -231,13 +236,45 @@ Use `extraProfiles` to define additional named AWS profiles for multi-account se
       "awsProfile": "",        // overrides stack-level aws.profile if set
       "awsRegion": "",         // overrides stack-level aws.region if set
       "ingressMode": "http",   // "http" (IngressRoute) or "tcp" (IngressRouteTCP)
-      "tls": { "passthrough": false }
+      "tls": { "passthrough": false },
+      "replicas": 1,           // overrides tunnelDefaults.replicas
+      "ssh": { "enabled": false }
     }
   ]
 }
 ```
 
 `ingressMode: "tcp"` creates a Traefik `IngressRouteTCP` with SNI matching; `"http"` (default) creates an `IngressRoute` with `Host()` matching.
+
+For `tcp` mode, `tls.passthrough: true` forwards the client's TLS session untouched, while
+`tls.secretName` (or `tls.certResolver`, or neither — to use the cluster's default TLSStore
+certificate) terminates TLS at the ingress instead. Clients connect with TLS either way, so SNI
+routing and `sslmode=require` are unchanged.
+
+## Throughput
+
+A single SSM session is rate-limited by AWS to **~0.7 MB/s**. It is not CPU, RTT or instance size:
+raising the tunnel's CPU limit from 200m (80% CFS-throttled) to 2 cores (0% throttled) leaves
+throughput unchanged. All connections through one tunnel are smux-multiplexed onto a single
+datachannel, so the cap is per *session*, not per connection.
+
+Two knobs, for two different problems:
+
+| Problem | Knob | Effect |
+|---|---|---|
+| Many concurrent connections | `replicas` | Each pod holds its own SSM session and the Service spreads connections across them, so aggregate throughput scales. Does nothing for one stream. |
+| One big stream | `ssh.enabled` | Forwards the bastion's `:22` and runs `ssh -C -L` through it, gzipping payloads **before** they cross the cap. Measured 3.8× on a Postgres bulk read. |
+
+`replicas` is also adjustable at runtime from the status UI (`POST /tunnel-scale`), which pins the
+count until reset so a reconcile does not undo it.
+
+`ssh.enabled` requires `ec2-instance-connect:SendSSHPublicKey` on the tunnel's AWS role; keys are
+generated per pod and expire after 60s, so nothing long-lived is stored on the bastion.
+
+**Only enable it for compressible traffic.** Encrypted or already-compressed payloads get slightly
+*slower* (0.61 → 0.56 MB/s), so it must stay off for `tls.passthrough` tunnels — their bytes are
+client-to-target ciphertext. To use it on a database tunnel, terminate TLS at the ingress instead;
+that makes the payload compressible but means TLS is no longer end-to-end to the database.
 
 ### Environment variables
 

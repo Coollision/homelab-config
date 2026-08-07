@@ -13,16 +13,21 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/ec2instanceconnect"
 	"github.com/aws/aws-sdk-go-v2/service/rds"
 )
 
 const (
-	defaultLocalPort   = "8080"
-	defaultTunnelName  = "aws-tunnel"
-	defaultRegion      = "eu-west-1"
-	stateDir           = "/tmp/tunnel-state"
-	retryCredDuration  = 30 * time.Second
-	retryErrorDuration = 10 * time.Second
+	defaultLocalPort  = "8080"
+	defaultTunnelName = "aws-tunnel"
+	defaultRegion     = "eu-west-1"
+	defaultSSHUser    = "ec2-user"
+	// defaultSSHLocalPort is a loopback-only port inside the pod used to reach the bastion's :22
+	// through the SSM forward. It must differ from LOCAL_PORT.
+	defaultSSHLocalPort = "2222"
+	stateDir            = "/tmp/tunnel-state"
+	retryCredDuration   = 30 * time.Second
+	retryErrorDuration  = 10 * time.Second
 	// minLoopInterval floors the reconnect loop period so no failure path can busy-spin the CPU.
 	minLoopInterval = 2 * time.Second
 )
@@ -37,6 +42,14 @@ type Config struct {
 	AWSRegion         string
 	RDSClusterPrefix  string
 	RDSInstancePrefix string
+
+	// Compressed SSH transport. When SSHEnabled, the runner forwards the bastion's :22 over SSM
+	// and runs `ssh -C -L` through it instead of forwarding the target port directly, so payloads
+	// are gzipped on the bastion before crossing AWS's ~0.7 MB/s per-session cap. See ssh.go.
+	SSHEnabled     bool
+	SSHCompression bool
+	SSHUser        string
+	SSHLocalPort   string
 }
 
 // configFromEnv builds a Config from the process environment.
@@ -51,6 +64,13 @@ func configFromEnv() (*Config, error) {
 		AWSRegion:         envOrDefault("AWS_REGION", defaultRegion),
 		RDSClusterPrefix:  os.Getenv("RDS_CLUSTER_PREFIX"),
 		RDSInstancePrefix: os.Getenv("RDS_INSTANCE_PREFIX"),
+
+		SSHEnabled: os.Getenv("SSH_ENABLED") == "true",
+		// Compression is the whole reason for SSH mode, so it defaults on and must be turned off
+		// explicitly (useful to confirm the SSH layer itself is free).
+		SSHCompression: envOrDefault("SSH_COMPRESSION", "true") == "true",
+		SSHUser:        envOrDefault("SSH_USER", defaultSSHUser),
+		SSHLocalPort:   envOrDefault("SSH_LOCAL_PORT", defaultSSHLocalPort),
 	}
 
 	var missing []string
@@ -62,6 +82,9 @@ func configFromEnv() (*Config, error) {
 	}
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("required env vars not set: %s", strings.Join(missing, ", "))
+	}
+	if err := validateSSHConfig(cfg); err != nil {
+		return nil, err
 	}
 	return cfg, nil
 }
@@ -78,8 +101,13 @@ type Runner struct {
 	cfg   *Config
 	ec2   EC2Client
 	rds   RDSClient
+	eic   EICClient
 	state *StateWriter
 	log   *slog.Logger
+	// sshKey is the ephemeral keypair used in SSH mode. It is generated once per process; the
+	// public half is re-pushed to the bastion on every reconnect because EC2 Instance Connect
+	// keys expire after 60s.
+	sshKey *sshKeyPair
 	// creds is non-nil only in refresh mode (AWS_CREDS_DIR set). When set, STS creds are resolved
 	// from it on demand (and re-resolved when they expire) rather than from static env vars, and
 	// the resolved creds are handed to each `aws ssm` subprocess so it uses the rotated values.
@@ -124,7 +152,15 @@ func (r *Runner) Run(ctx context.Context) {
 			continue
 		}
 
-		r.log.Info("starting SSM session",
+		transport := "SSM"
+		if r.cfg.SSHEnabled {
+			transport = "SSH-over-SSM"
+			if r.cfg.SSHCompression {
+				transport += " (compressed)"
+			}
+		}
+		r.log.Info("starting session",
+			"transport", transport,
 			"tunnel", r.cfg.TunnelName,
 			"bastion", r.cfg.BastionName,
 			"instanceID", instanceID,
@@ -133,17 +169,22 @@ func (r *Runner) Run(ctx context.Context) {
 			"localPort", r.cfg.LocalPort,
 		)
 		r.state.Set(StateRunning, fmt.Sprintf(
-			"forwarding 0.0.0.0:%s → %s:%s", r.cfg.LocalPort, remoteHost, r.cfg.RemotePort,
+			"forwarding 0.0.0.0:%s → %s:%s via %s", r.cfg.LocalPort, remoteHost, r.cfg.RemotePort, transport,
 		))
 
-		isAuth, err := runSSMSession(ctx, instanceID, remoteHost, r.cfg, ssmEnv)
+		var isAuth bool
+		if r.cfg.SSHEnabled {
+			isAuth, err = runSSHSession(ctx, instanceID, remoteHost, r.cfg, r.sshKey, r.eic, ssmEnv)
+		} else {
+			isAuth, err = runSSMSession(ctx, instanceID, remoteHost, r.cfg, ssmEnv)
+		}
 		if err != nil {
-			r.handleError(ctx, "SSM session", forceAuth(err, isAuth))
+			r.handleError(ctx, transport+" session", forceAuth(err, isAuth))
 			continue
 		}
 
 		// Clean exit (context cancelled or graceful close) — loop to reconnect.
-		r.state.Set(StateReconnecting, "SSM session ended cleanly")
+		r.state.Set(StateReconnecting, "session ended cleanly")
 	}
 }
 
@@ -236,9 +277,24 @@ func main() {
 		cfg:   cfg,
 		ec2:   ec2.NewFromConfig(awsCfg),
 		rds:   rds.NewFromConfig(awsCfg),
+		eic:   ec2instanceconnect.NewFromConfig(awsCfg),
 		state: sw,
 		log:   log,
 		creds: credsProvider,
+	}
+
+	// SSH mode needs a keypair for the whole process lifetime; only the 60s-lived public half
+	// ever reaches the bastion.
+	if cfg.SSHEnabled {
+		key, keyErr := newSSHKeyPair()
+		if keyErr != nil {
+			log.Error("failed to generate ephemeral SSH key", "err", keyErr)
+			os.Exit(1)
+		}
+		defer key.cleanup()
+		runner.sshKey = key
+		log.Info("compressed SSH transport enabled",
+			"user", cfg.SSHUser, "sshLocalPort", cfg.SSHLocalPort, "compression", cfg.SSHCompression)
 	}
 
 	runner.Run(ctx)

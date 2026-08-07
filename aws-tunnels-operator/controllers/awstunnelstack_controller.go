@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -63,6 +64,26 @@ const (
 	// credentials are valid. Set/cleared by the auth-server stop/start toggle and respected by the
 	// reconcile loop so a manual stop survives the next reconcile tick.
 	annotManuallyStopped = "proxies.homelab.io/manuallyStopped"
+
+	// annotManualReplicas pins a tunnel to an operator-chosen replica count, overriding the
+	// configured value. Set by the auth-server scale control; cleared by scaling back to "auto".
+	// Like annotManuallyStopped it is read by the reconcile loop, so a manual scale survives the
+	// next tick instead of being reverted ~30s later.
+	//
+	// Replicas matter because AWS rate-limits each SSM session to ~0.7 MB/s and all connections
+	// through one tunnel are smux-multiplexed onto a single datachannel. Extra replicas therefore
+	// add throughput only for workloads that open several connections (the Service spreads them
+	// across pods, each with its own session) — a single stream gains nothing.
+	annotManualReplicas = "proxies.homelab.io/manualReplicas"
+
+	// maxTunnelReplicas bounds the scale control. Each replica holds an independent SSM session,
+	// so this is a guard against a typo opening dozens of sessions against one bastion.
+	maxTunnelReplicas = 10
+
+	// Defaults for the compressed SSH transport (see SSHSpec). 2222 is a loopback-only port
+	// inside the pod, used to reach the bastion's :22 through the SSM forward.
+	defaultSSHUser      = "ec2-user"
+	defaultLocalSSHPort = int32(2222)
 )
 
 // argoTrackingID builds a NON-SELF-REFERENCING argocd.argoproj.io/tracking-id annotation.
@@ -100,13 +121,108 @@ func IsCredentialValid(secret *corev1.Secret) bool {
 	return time.Now().UTC().Before(exp)
 }
 
-func desiredReplicas(validCreds bool) *int32 {
-	if validCreds {
-		v := int32(1)
-		return &v
-	}
+// desiredReplicas returns the replica count for a tunnel Deployment. Without valid credentials
+// the tunnel is scaled to zero regardless of what was requested — the runner cannot start an SSM
+// session anyway, and the operator re-scales it once creds arrive.
+func desiredReplicas(validCreds bool, want int32) *int32 {
 	v := int32(0)
+	if validCreds {
+		v = clampReplicas(want)
+	}
 	return &v
+}
+
+// clampReplicas keeps a requested count within [1, maxTunnelReplicas]. Zero is not a valid
+// *configured* value — stopping a tunnel is expressed with annotManuallyStopped, so that "off"
+// stays a distinct, explicit state rather than an easily-mistyped replica count.
+func clampReplicas(want int32) int32 {
+	switch {
+	case want < 1:
+		return 1
+	case want > maxTunnelReplicas:
+		return maxTunnelReplicas
+	default:
+		return want
+	}
+}
+
+// resolveReplicas picks the configured replica count for a tunnel: per-tunnel value, else the
+// stack default, else 1.
+func resolveReplicas(tunnel TunnelSpec, defaults TunnelDefaultSpec) int32 {
+	if tunnel.Replicas != nil {
+		return clampReplicas(*tunnel.Replicas)
+	}
+	if defaults.Replicas != nil {
+		return clampReplicas(*defaults.Replicas)
+	}
+	return 1
+}
+
+// tcpTLSSpec renders the `tls` block of an IngressRouteTCP.
+//
+// Passthrough forwards the client's TLS session untouched (payload stays ciphertext, so it cannot
+// be compressed). Otherwise TLS terminates at the ingress using the supplied secret or ACME
+// resolver, which keeps SNI routing and client-side `sslmode=require` working while making the
+// payload compressible from the ingress inwards.
+func tcpTLSSpec(spec TLSSpec) map[string]any {
+	if spec.Passthrough {
+		// A passthrough route must not also carry a certificate — Traefik cannot do both.
+		return map[string]any{"passthrough": true}
+	}
+	out := map[string]any{"passthrough": false}
+	if spec.SecretName != "" {
+		out["secretName"] = spec.SecretName
+	}
+	if spec.CertResolver != "" {
+		out["certResolver"] = spec.CertResolver
+	}
+	return out
+}
+
+// resolveSSH merges the per-tunnel SSH settings over the stack defaults and fills in the blanks.
+// A tunnel opts in by setting ssh.enabled itself, or inherits the stack default.
+func resolveSSH(tunnel TunnelSpec, defaults TunnelDefaultSpec) SSHSpec {
+	out := defaults.SSH
+	if tunnel.SSH.Enabled {
+		out.Enabled = true
+	}
+	if tunnel.SSH.Compression != nil {
+		out.Compression = tunnel.SSH.Compression
+	}
+	if tunnel.SSH.User != "" {
+		out.User = tunnel.SSH.User
+	}
+	if tunnel.SSH.LocalSSHPort != 0 {
+		out.LocalSSHPort = tunnel.SSH.LocalSSHPort
+	}
+
+	if out.User == "" {
+		out.User = defaultSSHUser
+	}
+	if out.LocalSSHPort == 0 {
+		out.LocalSSHPort = defaultLocalSSHPort
+	}
+	// Compression is the entire point of this mode, so it is on unless explicitly disabled.
+	if out.Compression == nil {
+		on := true
+		out.Compression = &on
+	}
+	return out
+}
+
+// manualReplicaOverride reads annotManualReplicas off a Deployment. A missing, empty or
+// unparseable annotation means "no override" so a hand-edited bad value falls back to config
+// rather than wedging the tunnel.
+func manualReplicaOverride(dep *appsv1.Deployment) (int32, bool) {
+	raw, ok := dep.Annotations[annotManualReplicas]
+	if !ok || strings.TrimSpace(raw) == "" {
+		return 0, false
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil {
+		return 0, false
+	}
+	return clampReplicas(int32(n)), true
 }
 
 func (r *SingleStackRunner) Start(ctx context.Context) error {
@@ -332,7 +448,13 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 			// A manual stop (set via the auth-server toggle) pins the tunnel down even when
 			// creds are valid — e.g. keeping a prod tunnel closed until explicitly started.
 			manuallyStopped := dep.Annotations[annotManuallyStopped] == "true"
-			dep.Spec.Replicas = desiredReplicas(validCreds && !manuallyStopped)
+			// A manual scale set via the auth-server UI wins over the configured count, so an
+			// operator bumping replicas to push more throughput isn't reverted on the next tick.
+			wantReplicas := resolveReplicas(tunnel, stack.TunnelDefaults)
+			if manual, ok := manualReplicaOverride(dep); ok {
+				wantReplicas = manual
+			}
+			dep.Spec.Replicas = desiredReplicas(validCreds && !manuallyStopped, wantReplicas)
 			// Surge the replacement pod up before retiring the old one so the Service never has
 			// zero endpoints across a roll (config change, or a creds roll in legacy mode). Existing
 			// TCP streams through the old pod still reset once at the swap.
@@ -399,6 +521,18 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 				{Name: "TUNNEL_NAME", Value: tunnelName},
 				{Name: "HOME", Value: "/root"},
 			}
+			// Compressed SSH transport: the runner forwards the bastion's :22 over SSM and runs
+			// `ssh -C -L` through it, so payloads are gzipped before crossing AWS's per-session
+			// rate limit. Off unless configured — it is a loss on incompressible traffic.
+			if sshCfg := resolveSSH(tunnel, stack.TunnelDefaults); sshCfg.Enabled {
+				tunnelEnv = append(tunnelEnv,
+					corev1.EnvVar{Name: "SSH_ENABLED", Value: "true"},
+					corev1.EnvVar{Name: "SSH_COMPRESSION", Value: strconv.FormatBool(*sshCfg.Compression)},
+					corev1.EnvVar{Name: "SSH_USER", Value: sshCfg.User},
+					corev1.EnvVar{Name: "SSH_LOCAL_PORT", Value: fmt.Sprintf("%d", sshCfg.LocalSSHPort)},
+				)
+			}
+
 			tunnelMounts := []corev1.VolumeMount{
 				{Name: tunnelStateVolumeName, MountPath: tunnelStateMountPath},
 			}
@@ -520,7 +654,7 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 				ing.Object["spec"] = map[string]any{
 					"entryPoints": []any{"websecure"},
 					"routes":      []any{map[string]any{"match": fmt.Sprintf("HostSNI(`%s`)", tunnel.Host), "services": []any{map[string]any{"name": tunnelName, "namespace": cfg.Namespace, "port": svcPort}}}},
-					"tls":         map[string]any{"passthrough": tunnel.TLS.Passthrough},
+					"tls":         tcpTLSSpec(tunnel.TLS),
 				}
 				return nil
 			})
