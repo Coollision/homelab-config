@@ -51,7 +51,13 @@ multusNetworks:
       type: dhcp
   - name: matter-server-vlan5
     interface: net2
-    mac: 02:40:67:9d:64:64
+    # Was 02:40:67:9d:64:64 — a duplicate of the border router's VLAN40 MAC (see
+    # thread-border-router/values.yaml, and the fe80::40:67ff:fe9d:6464 next hop
+    # above). It worked, because the two live on different broadcast domains, but
+    # UniFi keys its client list on the MAC alone: both stubs collapsed into one
+    # entry that flipped between VLAN40 and VLAN5, so neither could be named or
+    # given a fixed lease. Renumbered to the scheme in lib/shared-lib/_multus.yaml.
+    mac: 02:05:67:9d:64:63
     dhcpHostname: _stub_matter-server-lan
     parentInterface: vlan5
     nodeLabelKey: vlan5-trunk
