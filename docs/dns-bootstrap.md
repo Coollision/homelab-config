@@ -267,6 +267,11 @@ fixed IP. Two things to know before touching one:
 - **Changing a `mac:` changes the IPv6 link-local (EUI-64) too,** and several IPv6 routes are
   written against those by hand. `grep` for the EUI-64 form before renumbering, and re-point
   the fixed reservation in the same change or the pod silently picks up a new address.
+- **Never age out a `_stub_` entry on `last_seen`.** UniFi does not maintain that field for
+  these clients — stubs that are connected *right now* report a `last_seen` months in the
+  past, and the two DNS stubs report `never`. A "delete anything not seen in 30 days" sweep
+  would therefore wipe live infrastructure. Check membership in `/stat/sta` instead, and
+  exclude the `_stub_` prefix from any such cleanup.
 
 ### Client alias prefixes
 
