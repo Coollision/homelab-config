@@ -10,7 +10,7 @@
 # The base image pin provides reproducibility; the 'latest' SSM plugin URL is
 # intentional so a fresh build always picks up the latest plugin release.
 
-FROM amazon/aws-cli:2.36.14
+FROM amazon/aws-cli:2.36.19
 
 ARG TARGETARCH
 
