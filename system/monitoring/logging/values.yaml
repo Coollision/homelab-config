@@ -146,14 +146,14 @@ alloy:
             regex  = "__meta_kubernetes_pod_label_(.+)"
           }
 
-          # The two labelmap rules above copy EVERY pod label into a Loki stream label,
-          # so an operator that stamps many labels on its pods can push a stream past
-          # Loki's max_label_names_per_series and get the whole stream rejected. That is
-          # exactly what happened to CloudNativePG: its pods carry cnpg_io_cluster,
-          # cnpg_io_instanceName, cnpg_io_instanceRole and cnpg_io_podRole, which took
-          # service-db-pg to 17 labels against a limit of 15 — every Postgres log line was
-          # dropped with a 400. The instance/role ones are redundant with `pod`, so drop
-          # them and keep cnpg_io_cluster for filtering by database cluster.
+          // The two labelmap rules above copy EVERY pod label into a Loki stream label,
+          // so an operator that stamps many labels on its pods can push a stream past
+          // Loki's max_label_names_per_series and get the whole stream rejected. That is
+          // exactly what happened to CloudNativePG: its pods carry cnpg_io_cluster,
+          // cnpg_io_instanceName, cnpg_io_instanceRole and cnpg_io_podRole, which took
+          // service-db-pg to 17 labels against a limit of 15 — every Postgres log line was
+          // dropped with a 400. The instance/role ones are redundant with `pod`, so drop
+          // them and keep cnpg_io_cluster for filtering by database cluster.
           rule {
             action = "labeldrop"
             regex  = "pod_template_hash|controller_revision_hash|pod_template_generation|apps_kubernetes_io_pod_index|statefulset_kubernetes_io_pod_name|helm_sh_chart|chart|heritage|jobLabel|app_kubernetes_io_.+|cnpg_io_instanceName|cnpg_io_instanceRole|cnpg_io_podRole|managed_by"
