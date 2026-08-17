@@ -9,7 +9,7 @@ maintainers:
     email: Coollision@users.noreply.github.com
 dependencies:
   - name: loki
-    version: 7.2.0
+    version: 7.3.0
     repository: https://grafana.github.io/helm-charts
   - name: alloy
     version: 1.11.1
