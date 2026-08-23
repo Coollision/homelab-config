@@ -4,7 +4,7 @@ namespaceOverride: ""
 
 image:
   repository: ghcr.io/coollision/aws-tunnels-operator
-  tag: v0.8.2
+  tag: v0.8.3
   pullPolicy: IfNotPresent
 
 replicaCount: 1
@@ -96,7 +96,7 @@ stack:
   nodeAffinity:
     excludedType: ""
   tunnelDefaults:
-    image: ghcr.io/coollision/aws-tunnel-runner:v0.8.2
+    image: ghcr.io/coollision/aws-tunnel-runner:v0.8.3
     proxyImage: alpine/socat:1.8.1.3
     servicePort: 8080
     # Pods per tunnel, i.e. independent SSM sessions. AWS rate-limits each session to ~0.7 MB/s
