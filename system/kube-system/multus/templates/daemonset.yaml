@@ -73,7 +73,14 @@ spec:
               cpu: 25m
               memory: 64Mi
             limits:
-              memory: 256Mi
+              # Was 256Mi. OOMKilled repeatedly on master-green during a
+              # worker drain: evicting a full node's workloads reschedules a
+              # burst of pods (several needing macvlan/vlan40/vlan5 attachments
+              # each) onto the remaining nodes near-simultaneously, and that
+              # burst of concurrent CNI ADD calls spiked kube-multus well past
+              # 256Mi. Confirmed live 2026-08-24 during cluster_update.yml
+              # testing — see docs/cluster-update-playbook.md.
+              memory: 512Mi
           securityContext:
             privileged: true
           volumeMounts:
