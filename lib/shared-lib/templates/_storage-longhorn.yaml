@@ -36,6 +36,7 @@
 {{- $sc := .storage.storageClass | default "longhorn" -}}
 {{- $replicas := .storage.replicas | default 3 -}}
 {{- $accessMode := .storage.volumeAccessMode | default (ternary "rwx" "rwo" (eq $sc "longhorn-shared")) -}}
+{{- $staleReplicaTimeout := .storage.staleReplicaTimeout | default (ternary 1440 30 (eq $sc "longhorn-shared")) -}}
 {{- $protect := ne .storage.protect false -}}
 {{ $sizeBytes := include "shared-lib.storage.sizeToBytes" .storage }}
 ---
@@ -65,6 +66,7 @@ spec:
   dataLocality: {{ .storage.dataLocality | default "best-effort" }}
   frontend: blockdev
   numberOfReplicas: {{ $replicas }}
+  staleReplicaTimeout: {{ $staleReplicaTimeout }}
   size: {{ $sizeBytes | quote }}
   diskSelector: []
   nodeSelector: []
