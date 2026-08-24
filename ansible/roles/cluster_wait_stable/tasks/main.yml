@@ -1,0 +1,55 @@
+---
+# Shared "stable run" gate used by node_update after touching a node. Waits
+# until every pod scheduled on the node has settled AND every Longhorn volume
+# cluster-wide is back to Healthy before the calling playbook moves on to the
+# next node — deliberately a hard barrier between nodes, not just a courtesy
+# check, so two nodes' worth of Longhorn replica-rebuild I/O never overlaps.
+#
+# Requires: k3s_node_name, kubectl_context, stabilize_retries, stabilize_delay,
+# longhorn_heal_retries, longhorn_heal_delay
+
+- name: "[{{ k3s_node_name }}] Wait for pods on this node to settle (Running/Succeeded)"
+  # NOT `grep -v ... | wc -l`: grep exits 1 when it finds zero matching
+  # lines — which is exactly the success case here (zero unsettled pods) —
+  # so under pipefail the pipeline hard-fails at the exact moment it
+  # succeeds. Confirmed live: rc=1 with the correct stdout "0" already in
+  # hand. jq has no such exit-code quirk for a plain select(), same pattern
+  # as the Longhorn check below.
+  ansible.builtin.shell: >
+    set -o pipefail &&
+    kubectl --context {{ kubectl_context }} get pods -A
+    --field-selector spec.nodeName={{ k3s_node_name }} -o json |
+    jq -r '.items[] | select(.status.phase != "Running" and .status.phase != "Succeeded") | (.metadata.namespace + "/" + .metadata.name + ": " + .status.phase)'
+  args:
+    executable: /bin/bash
+  delegate_to: localhost
+  become: false
+  register: unsettled_pods
+  until: unsettled_pods.stdout_lines | length == 0
+  retries: "{{ stabilize_retries }}"
+  delay: "{{ stabilize_delay }}"
+  changed_when: false
+
+- name: "[{{ k3s_node_name }}] Wait for no Longhorn volumes to be degraded/faulted (own budget — a reboot degrades every 3-replica volume that had a copy here, and rebuilds take a lot longer than pods settling)"
+  # Not "== Healthy" for all: some volumes sit at "unknown" long-term when their
+  # workload is scaled to zero (Sablier) and nothing has it attached — that's
+  # normal, not a stability blocker. Only degraded/faulted actually matters here.
+  # Lists the actual volumes, not just a count, so a timeout failure shows
+  # exactly what's still rebuilding instead of a bare "task failed".
+  ansible.builtin.shell: >
+    set -o pipefail &&
+    kubectl --context {{ kubectl_context }} get volumes.longhorn.io -A -o json |
+    jq -r '.items[] | select((.status.robustness | ascii_downcase) as $r | $r == "degraded" or $r == "faulted") | (.metadata.namespace + "/" + .metadata.name + ": " + .status.robustness)'
+  args:
+    executable: /bin/bash
+  delegate_to: localhost
+  become: false
+  register: unhealthy_volumes
+  until: unhealthy_volumes.stdout_lines | length == 0
+  retries: "{{ longhorn_heal_retries }}"
+  delay: "{{ longhorn_heal_delay }}"
+  changed_when: false
+
+- name: "[{{ k3s_node_name }}] Node confirmed stable"
+  ansible.builtin.debug:
+    msg: "{{ k3s_node_name }}: pods settled, all Longhorn volumes Healthy."

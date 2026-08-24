@@ -1,0 +1,54 @@
+---
+# Safe-by-default: nothing mutates unless the playbook is run with
+# -e dry_run=false
+dry_run: true
+
+# Toggle each concern independently, but they still share ONE
+# cordon/drain/uncordon cycle per node (see tasks/main.yml).
+patch_os: true
+upgrade_k3s: true
+
+# Bump this alongside k3s_pre_version in playbooks/k3s_setup.yml once a real
+# (non-dry-run) upgrade has succeeded, so future fresh node installs match.
+k3s_target_version: "v1.36.3+k3s1"
+
+# Overridden per-play in playbooks/cluster_update.yml:
+# "k3s" on k3smaster, "k3s-node" on k3sworkers.
+k3s_service_name: k3s
+
+kubectl_context: "{{ k3s_cluster_name | default('k3s') }}"
+
+# No longer Longhorn-related: drain uses --disable-eviction now, which
+# bypasses every PDB directly rather than negotiating with Longhorn's. This
+# is just the grace period for CNPG to notice/react to its maintenance
+# window before we start deleting things.
+longhorn_eviction_grace: 20  # seconds
+
+# Kept generous even though --disable-eviction no longer needs to wait out
+# PDB negotiation — a genuinely slow drain (large emptyDir data, many pods)
+# still deserves room rather than a premature rollback.
+drain_timeout: 1200          # seconds -> up to 20 min
+node_ready_timeout: 300     # seconds
+reboot_timeout: 1200        # seconds -> up to 20 min, ansible.builtin.reboot ceiling.
+                             # Was 600 — confirmed live worker-blue's own reboot took
+                             # noticeably longer than that (timed out at 616s while
+                             # the box was still mid-boot per pam_nologin; ended up
+                             # taking several more minutes past that). Same "just be
+                             # more patient" reasoning as drain_timeout/longhorn_heal_*.
+stabilize_retries: 18
+stabilize_delay: 10          # seconds -> up to 3 min waiting for pods to settle
+
+# A reboot degrades every 3-replica volume that had a copy on that node (normal
+# on this 3-node cluster — see docs/cluster-update-playbook.md), and Longhorn
+# rate-limits how many replicas it rebuilds at once, so this needs a much more
+# patient budget than pod-settling. This is a hard barrier before the next
+# node starts, specifically so two nodes' rebuild I/O never overlaps — bump
+# these (-e longhorn_heal_retries=... -e longhorn_heal_delay=...) if a run
+# legitimately needs longer, rather than letting nodes overlap.
+longhorn_heal_retries: 120
+longhorn_heal_delay: 15      # seconds -> up to 30 min waiting for Longhorn to heal
+
+# If a drain gets stuck on a bare pod (no Deployment/StatefulSet/Job owner),
+# --force will evict/delete it anyway and it will NOT come back on its own.
+# Leave false and fix the offending pod manually unless you're sure.
+force_drain: false

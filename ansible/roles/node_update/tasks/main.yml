@@ -1,0 +1,402 @@
+---
+# Careful, SINGLE cordon/drain/uncordon pass per node covering both OS/kernel
+# packages and the k3s binary bump (toggle either off with patch_os=false /
+# upgrade_k3s=false, but the node is still only drained once).
+#
+# kubectl always runs delegate_to: localhost (nodes carry no kubeconfig,
+# see memory: cluster_access) against the {{ kubectl_context }} context.
+
+# ---------------------------------------------------------------------------
+# 1. Reporting — always runs, mutates nothing, works even with dry_run=true.
+# ---------------------------------------------------------------------------
+
+- name: "[{{ k3s_node_name }}] Current node status"
+  ansible.builtin.command: "kubectl --context {{ kubectl_context }} get node {{ k3s_node_name }} --no-headers"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  register: node_status_before
+
+- name: "[{{ k3s_node_name }}] {{ node_status_before.stdout }}"
+  ansible.builtin.debug:
+    msg: "{{ node_status_before.stdout }}"
+
+- name: "[{{ k3s_node_name }}] Check for pre-existing unhealthy Longhorn volumes"
+  ansible.builtin.shell: >
+    set -o pipefail &&
+    kubectl --context {{ kubectl_context }} get volumes.longhorn.io -A -o json |
+    jq -r '.items[] | select((.status.robustness | ascii_downcase) as $r | $r == "degraded" or $r == "faulted") | (.metadata.namespace + "/" + .metadata.name + ": " + .status.robustness)'
+  args:
+    executable: /bin/bash
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  register: longhorn_unhealthy
+
+- name: "[{{ k3s_node_name }}] Check for bare/unmanaged pods on this node (drain refuses these without --force)"
+  ansible.builtin.shell: >
+    set -o pipefail &&
+    kubectl --context {{ kubectl_context }} get pods -A --field-selector spec.nodeName={{ k3s_node_name }} -o json |
+    jq -r '.items[] | select((.metadata.ownerReferences // []) | length == 0) | (.metadata.namespace + "/" + .metadata.name)'
+  args:
+    executable: /bin/bash
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  register: bare_pods
+
+- name: "[{{ k3s_node_name }}] Check for PodDisruptionBudgets currently allowing zero disruptions"
+  ansible.builtin.shell: >
+    set -o pipefail &&
+    kubectl --context {{ kubectl_context }} get pdb -A -o json |
+    jq -r '.items[] | select(.status.disruptionsAllowed == 0) | (.metadata.namespace + "/" + .metadata.name)'
+  args:
+    executable: /bin/bash
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  register: blocking_pdbs
+
+- name: "[{{ k3s_node_name }}] Warn about potential drain blockers"
+  ansible.builtin.debug:
+    msg: >-
+      Potential drain blockers on {{ k3s_node_name }}: bare/unmanaged pods=
+      {{ bare_pods.stdout_lines }}; PDBs at zero allowed disruptions cluster-wide=
+      {{ blocking_pdbs.stdout_lines }}. Drain uses --disable-eviction, so ALL of
+      these PDBs (Longhorn instance-manager, CNPG, anything else) are bypassed
+      entirely rather than negotiated with — safe here only because the
+      earlier "storage already degraded" check guarantees full replica
+      redundancy exists elsewhere for every volume first. Bare pods are
+      handled explicitly by an ansible-level check, not by drain itself (which
+      no longer refuses them on its own under --disable-eviction) — this run
+      will hard-fail before touching the node unless force_drain=true (which
+      then deletes them for good, no controller to recreate them).
+  when: (bare_pods.stdout_lines | length > 0) or (blocking_pdbs.stdout_lines | length > 0)
+
+- name: "[{{ k3s_node_name }}] Find single-instance CNPG clusters pinned to this node (no failover target)"
+  ansible.builtin.shell: >
+    set -o pipefail &&
+    comm -12
+    <(kubectl --context {{ kubectl_context }} get pods -A -l cnpg.io/cluster --field-selector spec.nodeName={{ k3s_node_name }} -o json | jq -r '.items[] | .metadata.namespace + "/" + .metadata.labels["cnpg.io/cluster"]' | sort -u)
+    <(kubectl --context {{ kubectl_context }} get clusters.postgresql.cnpg.io -A -o json | jq -r '.items[] | select(.spec.instances == 1) | .metadata.namespace + "/" + .metadata.name' | sort -u)
+  args:
+    executable: /bin/bash
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  register: cnpg_pinned_singletons
+
+- name: "[{{ k3s_node_name }}] Warn about single-instance CNPG primaries pinned here"
+  ansible.builtin.debug:
+    msg: >-
+      Single-instance CNPG cluster(s) {{ cnpg_pinned_singletons.stdout_lines }}
+      have no replica to fail over to, so their PDB (minAvailable:1) would
+      otherwise block the drain indefinitely. We'll flip
+      spec.nodeMaintenanceWindow (inProgress+reusePVC) on before draining so
+      CNPG allows a controlled restart on another node instead — expect a
+      short Postgres restart for these, then it flips back off afterwards.
+  when: cnpg_pinned_singletons.stdout_lines | length > 0
+
+- name: "[{{ k3s_node_name }}] apt-get update (metadata refresh only)"
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 0
+  become: true
+  when: patch_os | bool
+
+- name: "[{{ k3s_node_name }}] Simulate dist-upgrade (no changes made)"
+  ansible.builtin.command: apt-get -s dist-upgrade
+  become: true
+  changed_when: false
+  register: apt_simulation
+  when: patch_os | bool
+
+- name: "[{{ k3s_node_name }}] Packages that would be upgraded"
+  ansible.builtin.debug:
+    msg: "{{ apt_simulation.stdout_lines | select('match', '^Inst ') | list }}"
+  when: patch_os | bool
+
+- name: "[{{ k3s_node_name }}] Check currently installed k3s version"
+  ansible.builtin.command: /usr/local/bin/k3s --version
+  changed_when: false
+  register: k3s_version_before
+  when: upgrade_k3s | bool
+
+- name: "[{{ k3s_node_name }}] k3s version report"
+  ansible.builtin.debug:
+    msg: "installed: {{ k3s_version_before.stdout_lines[0] }} | target: {{ k3s_target_version }}"
+  when: upgrade_k3s | bool
+
+- name: "[{{ k3s_node_name }}] Check whether a reboot is already pending"
+  # A prior interrupted run can leave a new kernel fully installed (dpkg ii)
+  # but never booted into -- apt then has nothing left to offer, so without
+  # this check will_patch_os/will_upgrade_k3s both go false and the node
+  # gets skipped as "nothing to do" forever, never actually rebooting.
+  # Same dpkg-vs-uname comparison as the later in-block check (see there for
+  # why /var/run/reboot-required alone doesn't work on this OS image).
+  ansible.builtin.shell: >
+    set -o pipefail &&
+    running="$(uname -r)";
+    latest="$(dpkg -l 'linux-image-*' 2>/dev/null | awk '$1=="ii" && $2 ~ /^linux-image-[0-9]/ {print $2}' | sed 's/^linux-image-//' | sort -V | tail -1)";
+    if [ -f /var/run/reboot-required ] || [ -n "$latest" ] && [ "$running" != "$latest" ]; then echo true; else echo false; fi
+  args:
+    executable: /bin/bash
+  register: reboot_check_before
+  changed_when: false
+
+- name: "[{{ k3s_node_name }}] Compute what actually needs doing"
+  ansible.builtin.set_fact:
+    will_patch_os: "{{ (patch_os | bool) and (apt_simulation.stdout_lines | default([]) | select('match', '^Inst ') | list | length > 0) }}"
+    will_upgrade_k3s: "{{ (upgrade_k3s | bool) and (k3s_target_version not in (k3s_version_before.stdout | default(''))) }}"
+    will_reboot: "{{ reboot_check_before.stdout == 'true' }}"
+
+- name: "[{{ k3s_node_name }}] Nothing to do — OS up to date{{ ' and k3s already on target' if (upgrade_k3s | bool) else '' }}"
+  ansible.builtin.meta: end_host
+  when: not (will_patch_os or will_upgrade_k3s or will_reboot)
+
+- name: "[{{ k3s_node_name }}] DRY RUN — stopping here, no changes made"
+  ansible.builtin.debug:
+    msg: >-
+      DRY RUN for {{ k3s_node_name }}: would cordon + drain ONCE, then
+      {{ 'apply dist-upgrade' if will_patch_os else 'skip OS packages (up to date or patch_os=false)' }},
+      {{ 'download k3s ' + k3s_target_version + ' and restart ' + k3s_service_name + '.service'
+         if will_upgrade_k3s else 'skip k3s bump (already current or upgrade_k3s=false)' }},
+      {{ 'reboot (already pending from an earlier run, or a new kernel just installed)'
+         if will_reboot else 'no reboot needed' }}, wait for Ready, uncordon,
+      then wait for pods + Longhorn to settle. Re-run with -e dry_run=false to
+      actually do this.
+  when: dry_run | bool
+
+- name: "[{{ k3s_node_name }}] End dry run"
+  ansible.builtin.meta: end_host
+  when: dry_run | bool
+
+# ---------------------------------------------------------------------------
+# 2. Real run — everything below only runs when dry_run=false AND something
+#    is actually pending. One cordon/drain/uncordon cycle covers both OS and
+#    k3s. On any failure, the rescue block uncordons the node again so a
+#    stuck drain doesn't leave it stranded out of the scheduler.
+# ---------------------------------------------------------------------------
+
+- name: "[{{ k3s_node_name }}] Refuse to proceed if storage is already degraded"
+  ansible.builtin.fail:
+    msg: >-
+      Refusing to touch {{ k3s_node_name }}: Longhorn already reports unhealthy
+      volumes ({{ longhorn_unhealthy.stdout_lines | join(', ') }}). Fix storage
+      health before draining any more nodes.
+  when: longhorn_unhealthy.stdout_lines | length > 0
+
+- name: "[{{ k3s_node_name }}] Refuse to proceed if bare/unmanaged pods are present without force_drain"
+  # --disable-eviction bypasses the Eviction API entirely, which is what used
+  # to make drain refuse a bare pod on its own. This is now the ONLY thing
+  # standing between a bare pod and a silent, permanent deletion.
+  ansible.builtin.fail:
+    msg: >-
+      Refusing to touch {{ k3s_node_name }}: bare/unmanaged pod(s)
+      {{ bare_pods.stdout_lines }} have no controller to recreate them, and
+      --disable-eviction will delete them for good with no warning. Either
+      give them a controller, or re-run with -e force_drain=true if that's
+      genuinely fine.
+  when:
+    - bare_pods.stdout_lines | length > 0
+    - not (force_drain | bool)
+
+- block:
+    - name: "[{{ k3s_node_name }}] Cordon node"
+      ansible.builtin.command: "kubectl --context {{ kubectl_context }} cordon {{ k3s_node_name }}"
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
+    - name: "[{{ k3s_node_name }}] Enable CNPG nodeMaintenanceWindow for pinned single-instance clusters"
+      # Not about bypassing CNPG's PDB (drain's --disable-eviction already
+      # does that for everything) — this tells CNPG's own reconciliation to
+      # reuse the existing PVC when it notices the primary pod is gone,
+      # rather than treating it as a failure needing a fresh bootstrap.
+      ansible.builtin.command: >
+        kubectl --context {{ kubectl_context }} patch cluster.postgresql.cnpg.io
+        {{ item.split('/')[1] }} -n {{ item.split('/')[0] }} --type merge
+        -p '{"spec":{"nodeMaintenanceWindow":{"inProgress":true,"reusePVC":true}}}'
+      loop: "{{ cnpg_pinned_singletons.stdout_lines }}"
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
+    - name: "[{{ k3s_node_name }}] Grace period for CNPG to observe the maintenance window before draining"
+      ansible.builtin.pause:
+        seconds: "{{ longhorn_eviction_grace }}"
+      when: cnpg_pinned_singletons.stdout_lines | length > 0
+
+    - name: "[{{ k3s_node_name }}] Drain node (ignore daemonsets, evict emptyDir pods, bypass PDBs directly)"
+      # --disable-eviction: skip the Eviction API and delete pods directly,
+      # bypassing every PDB (Longhorn instance-manager, CNPG, anything else)
+      # instead of negotiating with them. Safe here ONLY because "Refuse to
+      # proceed if storage is already degraded" above already guarantees
+      # every volume has full healthy replica redundancy elsewhere — losing
+      # one replica for this node's downtime is a non-event, not a risk.
+      # This also means we no longer need Longhorn's own
+      # allowScheduling/evictionRequested dance at all: that used to exist
+      # solely to get its PDB to release, and a full replica migration is
+      # overkill for a short reboot anyway (the same data reattaches when
+      # the node comes back, instead of a needless rebuild-elsewhere-and-back).
+      ansible.builtin.command: >
+        kubectl --context {{ kubectl_context }} drain {{ k3s_node_name }}
+        --ignore-daemonsets --delete-emptydir-data --disable-eviction --timeout={{ drain_timeout }}s
+        {{ '--force' if (force_drain | bool) else '' }}
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
+    - name: "[{{ k3s_node_name }}] Record running kernel before upgrade"
+      ansible.builtin.command: uname -r
+      changed_when: false
+      register: kernel_before
+
+    - name: "[{{ k3s_node_name }}] Apply dist-upgrade + autoremove + autoclean"
+      ansible.builtin.apt:
+        upgrade: dist
+        autoremove: true
+        autoclean: true
+      become: true
+      when: will_patch_os
+
+    - name: "[{{ k3s_node_name }}] Download target k3s binary"
+      ansible.builtin.include_role:
+        name: k3s_pre
+        tasks_from: download
+      vars:
+        k3s_pre_version: "{{ k3s_target_version }}"
+      when: will_upgrade_k3s
+
+    - name: "[{{ k3s_node_name }}] Check whether a reboot is now required"
+      # NOT /var/run/reboot-required: that flag is only ever created by
+      # update-notifier-common's kernel postinst hook, which isn't installed
+      # on this minimal preseeded Debian (confirmed empty
+      # /etc/kernel/postinst.d/ apart from initramfs-tools/update-grub) --
+      # so that file NEVER appears here, even right after installing a
+      # brand-new kernel. Confirmed live: worker-blue had 6.1.0-52 fully
+      # installed (dpkg ii) while still running 6.1.0-49, uptime 35+ days,
+      # and this check kept reporting "no reboot needed" the whole time.
+      # Compare the running kernel against the newest *installed* kernel
+      # package instead -- reliable with just dpkg+uname, no notifier needed.
+      ansible.builtin.shell: >
+        set -o pipefail &&
+        running="$(uname -r)";
+        latest="$(dpkg -l 'linux-image-*' 2>/dev/null | awk '$1=="ii" && $2 ~ /^linux-image-[0-9]/ {print $2}' | sed 's/^linux-image-//' | sort -V | tail -1)";
+        if [ -f /var/run/reboot-required ] || [ -n "$latest" ] && [ "$running" != "$latest" ]; then echo true; else echo false; fi
+      args:
+        executable: /bin/bash
+      register: reboot_check
+      changed_when: false
+
+    - name: "[{{ k3s_node_name }}] Reboot and wait for the node to come back up (also starts k3s fresh on the new binary)"
+      ansible.builtin.reboot:
+        reboot_timeout: "{{ reboot_timeout }}"
+        post_reboot_delay: 15
+        test_command: uptime
+      become: true
+      when: reboot_check.stdout == "true"
+
+    - name: "[{{ k3s_node_name }}] Restart {{ k3s_service_name }}.service to pick up new k3s binary (no reboot needed)"
+      ansible.builtin.systemd:
+        name: "{{ k3s_service_name }}"
+        state: restarted
+        daemon_reload: true
+      become: true
+      when:
+        - will_upgrade_k3s
+        - reboot_check.stdout != "true"
+
+    - name: "[{{ k3s_node_name }}] Wait for node to report Ready again"
+      # NOTE: the jsonpath value MUST be quoted as one shell token. Without
+      # the outer quotes, ansible.builtin.command's shlex parsing treats the
+      # embedded =="Ready" double-quotes as its own quoting and STRIPS them,
+      # silently producing =={.type==Ready} (no quotes around Ready) --
+      # which kubectl then rejects outright ("unrecognized identifier Ready"),
+      # so this failed on literally every attempt until fixed. Confirmed live:
+      # this is what was actually behind node updates repeatedly "failing"
+      # after the real OS/kernel/k3s work had already succeeded.
+      ansible.builtin.command: >
+        kubectl --context {{ kubectl_context }} get node {{ k3s_node_name }}
+        -o 'jsonpath={.status.conditions[?(@.type=="Ready")].status}'
+      delegate_to: localhost
+      become: false
+      register: node_ready_check
+      until: node_ready_check.stdout == "True"
+      retries: "{{ (node_ready_timeout | int / 10) | round(0, 'ceil') | int }}"
+      delay: 10
+      changed_when: false
+
+    - name: "[{{ k3s_node_name }}] Wait for kubelet to report the target k3s version"
+      ansible.builtin.command: >
+        kubectl --context {{ kubectl_context }} get node {{ k3s_node_name }}
+        -o 'jsonpath={.status.nodeInfo.kubeletVersion}'
+      delegate_to: localhost
+      become: false
+      register: kubelet_version_check
+      until: k3s_target_version.split('+')[0] in kubelet_version_check.stdout
+      retries: "{{ (node_ready_timeout | int / 10) | round(0, 'ceil') | int }}"
+      delay: 10
+      changed_when: false
+      when: will_upgrade_k3s
+
+    - name: "[{{ k3s_node_name }}] Uncordon node"
+      ansible.builtin.command: "kubectl --context {{ kubectl_context }} uncordon {{ k3s_node_name }}"
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
+    - name: "[{{ k3s_node_name }}] Wait for cluster to settle before moving on"
+      ansible.builtin.include_role:
+        name: cluster_wait_stable
+
+    - name: "[{{ k3s_node_name }}] Update summary"
+      ansible.builtin.debug:
+        msg: >-
+          {{ k3s_node_name }}: kernel {{ kernel_before.stdout }} ->
+          {{ 'rebooted onto new kernel' if reboot_check.stdout == "true"
+             else ('k3s service restarted on new binary' if will_upgrade_k3s else 'no reboot needed') }}.
+          Uncordoned and stable.
+
+  rescue:
+    - name: "[{{ k3s_node_name }}] Update failed — gather diagnostics on remaining pods"
+      ansible.builtin.command: >
+        kubectl --context {{ kubectl_context }} get pods -A -o wide
+        --field-selector spec.nodeName={{ k3s_node_name }}
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      failed_when: false
+      register: failure_pods
+
+    - name: "[{{ k3s_node_name }}] Roll back: uncordon so the node isn't stranded out of scheduling"
+      ansible.builtin.command: "kubectl --context {{ kubectl_context }} uncordon {{ k3s_node_name }}"
+      delegate_to: localhost
+      become: false
+      changed_when: true
+      failed_when: false
+
+    - name: "[{{ k3s_node_name }}] Abort with diagnostics"
+      ansible.builtin.fail:
+        msg: >-
+          Update failed on {{ k3s_node_name }} and was rolled back (node
+          uncordoned again, any CNPG maintenance windows reverted). Pods
+          still on the node:
+          {{ failure_pods.stdout_lines | default(['(could not list)']) }}.
+          Likely cause: drain itself timed out (--disable-eviction bypasses
+          PDBs, so this would be something else entirely stalling it), or
+          CNPG failover just needed longer than {{ drain_timeout }}s +
+          {{ longhorn_eviction_grace }}s grace. Fix the root cause, then
+          re-run with --limit {{ inventory_hostname }}.
+
+  always:
+    - name: "[{{ k3s_node_name }}] Revert CNPG nodeMaintenanceWindow for pinned single-instance clusters"
+      ansible.builtin.command: >
+        kubectl --context {{ kubectl_context }} patch cluster.postgresql.cnpg.io
+        {{ item.split('/')[1] }} -n {{ item.split('/')[0] }} --type merge
+        -p '{"spec":{"nodeMaintenanceWindow":{"inProgress":false}}}'
+      loop: "{{ cnpg_pinned_singletons.stdout_lines }}"
+      delegate_to: localhost
+      become: false
+      changed_when: true
+      failed_when: false
