@@ -64,7 +64,8 @@ node-feature-discovery:
 descheduler:
   fullnameOverride: descheduler
   kind: Deployment
-  deschedulingInterval: 1m
+  # Was 1m -- gives evictions time to register in metrics-server before re-evaluating.
+  deschedulingInterval: 2m
   cmdOptions:
     v: 3
   deschedulerPolicy:
@@ -108,7 +109,9 @@ descheduler:
             args:
               metricsUtilization:
                 source: KubernetesMetrics  # classify nodes by real CPU usage, not requests
-              numberOfNodes: 1
+              # Was 1 -- required 2+ idle nodes to act, disabling balancing whenever
+              # exactly 1 node was idle (normal during maintenance). 0 = plugin default.
+              numberOfNodes: 0
               evictionLimits:
                 node: 2
               evictableNamespaces:
@@ -168,7 +171,9 @@ descheduler:
             args:
               metricsUtilization:
                 source: KubernetesMetrics  # classify nodes by real CPU usage, not requests
-              numberOfNodes: 1
+              # Was 1 -- required 2+ idle nodes to act, disabling balancing whenever
+              # exactly 1 node was idle (normal during maintenance). 0 = plugin default.
+              numberOfNodes: 0
               evictionLimits:
                 node: 2
               evictableNamespaces:
