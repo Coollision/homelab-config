@@ -1,0 +1,42 @@
+# ──────────────────────────────────────────────────────────────────────────
+# Allow Prometheus to scrape longhorn-manager metrics
+#
+# The upstream Longhorn chart's `networkPolicies.restrictInternalTraffic`
+# defaults to true (independently of the `networkPolicies.enabled` master
+# switch, which is false — confusing, but that's upstream's design) and
+# ships 6 NetworkPolicies locking down cross-component traffic. None of them
+# carry a namespaceSelector, only podSelector — which restricts ingress to
+# pods in the SAME namespace only. Prometheus lives in `monitoring`, so it
+# was unconditionally blocked from scraping :9500/metrics on longhorn-manager
+# (job=longhorn-backend), which silently broke the Longhorn Grafana dashboard
+# for at least 7 days (0/19 hourly `up` samples) before this was caught.
+#
+# NetworkPolicy ingress rules are additive across all policies selecting a
+# pod, so this is a small, non-invasive addition alongside the vendored
+# chart's own longhorn-manager policy — it survives Longhorn upgrades
+# untouched rather than patching the chart's generated output.
+#
+# Scoped to exactly what's needed today: only the manager metrics port, only
+# from the monitoring namespace. The other 5 upstream policies (webhook,
+# recovery-backend, backing-image-*) aren't scraped by Prometheus and are
+# left alone.
+# ──────────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: longhorn-manager-allow-monitoring
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: longhorn-manager
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9500

@@ -12,14 +12,14 @@
     {
       "id": 1,
       "title": "Awake / Asleep history",
-      "description": "One row per app. Green = awake (at least one active session), gray = asleep (scaled to zero). This is the \"time awake\" view — hover any segment to see when it started and how long it lasted.",
+      "description": "One row per app. Green = awake (at least one active session), gray = asleep (scaled to zero). This is the \"time awake\" view — hover any segment to see when it started and how long it lasted. Uses max by (group) rather than the bare metric: every Sablier pod restart (e.g. descheduler evictions) creates a new instance/pod label on the same logical group, and without the aggregation each restart left behind an extra duplicate row for the same app.",
       "type": "state-timeline",
       "gridPos": { "h": 9, "w": 24, "x": 0, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sablier_group_locked",
+          "expr": "max by (group) (sablier_group_locked)",
           "legendFormat": "{{group}}",
           "refId": "A"
         }
@@ -43,14 +43,14 @@
     {
       "id": 2,
       "title": "Time remaining until sleep",
-      "description": "sablier_session_expires_at_timestamp_seconds - time(), per active session. Counts down to zero, then the line disappears (session expired, instance stopped). Only appears for currently-awake apps.",
+      "description": "max by (group) (sablier_session_expires_at_timestamp_seconds) - time(), per active session. Counts down to zero, then the line disappears (session expired, instance stopped). Only appears for currently-awake apps. The max-by aggregation collapses duplicate series left behind by Sablier pod restarts (same group, different instance/pod label) into one line per app.",
       "type": "timeseries",
       "gridPos": { "h": 9, "w": 16, "x": 0, "y": 9 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sablier_session_expires_at_timestamp_seconds - time()",
+          "expr": "max by (group) (sablier_session_expires_at_timestamp_seconds) - time()",
           "legendFormat": "{{group}}",
           "refId": "A"
         }
