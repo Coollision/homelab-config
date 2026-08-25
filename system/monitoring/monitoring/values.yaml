@@ -17,12 +17,23 @@ promstack:
         - sourceLabels: [__name__]
           regex: "go_.*|process_.*|promhttp_.*|controller_runtime_reconcile_time_seconds_bucket|rest_client_request_duration_seconds_bucket|workqueue_(queue_duration_seconds_bucket|work_duration_seconds_bucket|unfinished_work_seconds|longest_running_processor_seconds)"
           action: drop
+  # ── k3s control-plane scrapes: apiserver only ───────────────────────────────
+  # On k3s the apiserver, scheduler, controller-manager and kube-proxy are all the
+  # SAME `k3s server` process behind different ports, so these four jobs returned
+  # byte-identical data: apiserver_request_total summed to ~393-397k under every one
+  # of them, and 617 of kube-proxy's 617 metric names were shared with apiserver with
+  # ZERO unique. That was ~55,878 series of pure duplication.
+  #
+  # kubeApiServer stays enabled and owns these metrics. The three below are disabled
+  # but left configured so this is a one-flag revert if we ever move off k3s.
+  # Their rule groups are disabled in defaultRules too — otherwise KubeSchedulerDown /
+  # KubeControllerManagerDown / KubeProxyDown fire forever once their `up` series go.
   kubeControllerManager:
     endpoints:
       - <secret:kv/data/config/master~ip-0>
       # - <secret:kv/data/config/master~ip-1>
       # - <secret:kv/data/config/master~ip-2>
-    enabled: true
+    enabled: false  # duplicate of kubeApiServer on k3s — see note above
     service:
       enabled: true
       port: 10257
@@ -41,7 +52,7 @@ promstack:
       - <secret:kv/data/config/master~ip-0>
       # - <secret:kv/data/config/master~ip-1>
       # - <secret:kv/data/config/master~ip-2>
-    enabled: true
+    enabled: false  # duplicate of kubeApiServer on k3s — see note above
     service:
       enabled: true
       port: 10259
@@ -57,7 +68,7 @@ promstack:
       - <secret:kv/data/config/master~ip-0>
       # - <secret:kv/data/config/master~ip-1>
       # - <secret:kv/data/config/master~ip-2>
-    enabled: true
+    enabled: false  # duplicate of kubeApiServer on k3s — see note above
     service:
       enabled: true
       port: 10249
@@ -387,6 +398,19 @@ promstack:
     serviceMonitor:
       cAdvisorInterval: 30s
       metricRelabelings:
+        # k3s runs the apiserver, etcd, scheduler and controller-manager inside the
+        # SAME process as the kubelet, so scraping :10250/metrics on a server node
+        # returns that whole registry — not just kubelet metrics. This made job=kubelet
+        # 106,840 of 265,237 series (40% of the TSDB), with master-green's kubelet alone
+        # returning 83,099 series against ~8,885 on a worker.
+        #
+        # These families are unambiguously NOT kubelet metrics; they are already scraped
+        # properly under job=apiserver. Note this deliberately does NOT drop workqueue_*
+        # or storage_operation_* — the kubelet emits those legitimately, and the rules
+        # below already trim their bucket variants.
+        - sourceLabels: [__name__]
+          regex: "apiserver_.*|etcd_.*|scheduler_.*|authentication_.*|authorization_.*|kubernetes_feature_enabled|cardinality_enforcement_.*|field_validation_.*|watch_cache_.*|apiextensions_.*|aggregator_.*"
+          action: drop
         # Reduce bucket cardinality of kubelet storage operations.
         - sourceLabels: [__name__, le]
           regex: "(csi_operations|storage_operation_duration)_seconds_bucket;(0.25|2.5|15|25|120|600)(\\.0)?"
@@ -449,6 +473,27 @@ promstack:
   defaultRules:
     rules:
       etcd: false
+      # Rule groups for the three control-plane scrapes disabled above. Without these
+      # their *Down alerts would fire permanently once the `up` series disappear.
+      kubeControllerManager: false
+      kubeProxy: false
+      kubeSchedulerAlerting: false
+      kubeSchedulerRecording: false
+      # These groups were already dead, silently: they need
+      # apiserver_request_sli_duration_seconds_bucket, which the metricRelabelings drop
+      # at ingest. apiserver_request:burnrate5m evaluated to 0 series while every rule
+      # reported health: ok — in PromQL an empty result is a *successful* query, so
+      # nothing surfaced it and KubeAPIErrorBudgetBurn could never fire.
+      #
+      # Dropping rather than restoring: nothing consumes them (zero dashboards reference
+      # these metrics) and error-budget burn rate is an SRE construct for services with a
+      # formal SLA. apiserver_request_total is still ingested with its `code` labels, so
+      # API error rate stays queryable, and KubeAPIDown / KubeAPITerminatedRequests /
+      # KubeAggregatedAPIDown in kubernetes-system-apiserver are unaffected.
+      kubeApiserverAvailability: false
+      kubeApiserverBurnrate: false
+      kubeApiserverHistogram: false
+      kubeApiserverSlos: false
   kubeEtcd:
     enabled: false
 
