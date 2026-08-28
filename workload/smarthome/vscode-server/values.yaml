@@ -1,0 +1,101 @@
+# smarthome namespace is load-bearing: PVCs are namespace-scoped, so the mounts
+# below only work because this lives alongside the apps that own them.
+fullnameOverride: vscode-server
+
+deployment:
+  image:
+    repository: lscr.io/linuxserver/code-server
+    tag: "4.134.0"
+  ports:
+    web: 8443
+
+  # postStart, not initContainer (separate filesystem, can't install anything this
+  # container would see). Reinstalls PKGS every start — a sablier wake is a fresh container.
+  lifecycle:
+    postStart:
+      exec:
+        command:
+          - sh
+          - -c
+          - |
+            set -u
+            PKGS="git build-essential python3 python3-pip python3-venv curl jq ripgrep"
+            ( apt-get update -qq && apt-get install -y --no-install-recommends $PKGS ) \
+              || echo "WARNING: baseline apt package install failed, continuing without it"
+
+            mkdir -p /config/workspace
+            cat > /config/workspace.code-workspace <<'WSEOF'
+            {
+              "folders": [
+                { "name": "scratch", "path": "/config/workspace" },
+                { "name": "home-assistant", "path": "/workspaces/homeassistant" },
+                { "name": "esphome", "path": "/workspaces/esphome" },
+                { "name": "zigbee2mqtt", "path": "/workspaces/zigbee2mqtt" }
+              ]
+            }
+            WSEOF
+
+config:
+  # Root, matching the mounted volumes (homeassistant/esphome/zigbee2mqtt all run as root).
+  PUID: "0"
+  PGID: "0"
+  TZ: Europe/Brussels
+  # No PASSWORD/HASHED_PASSWORD — internal-only ingress is the trust boundary.
+  DEFAULT_WORKSPACE: /config/workspace.code-workspace
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 1536Mi
+
+storage:
+  - mountPath: /config
+    type: longhorn
+    size: 5Gi
+    protect: true
+
+  # Existing PVCs, already longhorn-shared/RWX — no new PVC/Volume created here.
+  - mountPath: /workspaces/homeassistant
+    type: existingClaim
+    claimName: homeassistant-config
+    nameSuffix: ha
+  - mountPath: /workspaces/esphome
+    type: existingClaim
+    claimName: esphome
+    nameSuffix: esphome
+  - mountPath: /workspaces/zigbee2mqtt
+    type: existingClaim
+    claimName: zigbee2mqtt
+    nameSuffix: z2m
+
+ingress_internal_secure:
+  host: vscode.<secret:kv/data/domains~domain>
+  port: web
+
+probes:
+  readiness:
+    httpGet:
+      path: /
+      port: web
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+  liveness:
+    httpGet:
+      path: /
+      port: web
+    initialDelaySeconds: 30
+    periodSeconds: 20
+    timeoutSeconds: 5
+    failureThreshold: 5
+
+labels:
+  app.kubernetes.io/component: vscode-server
+
+scaleToZero:
+  enabled: true
+  sessionDuration: 1h

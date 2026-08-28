@@ -68,6 +68,12 @@ spec:
             - /spec/replicas
         - group: apps
           kind: Deployment
+          name: vscode-server
+          namespace: smarthome
+          jsonPointers:
+            - /spec/replicas
+        - group: apps
+          kind: Deployment
           name: echo
           namespace: testing
           jsonPointers:
