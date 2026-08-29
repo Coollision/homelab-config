@@ -5,7 +5,7 @@ fullnameOverride: vscode-server
 deployment:
   image:
     repository: lscr.io/linuxserver/code-server
-    tag: "4.134.0"
+    tag: "4.135.0"
   ports:
     web: 8443
 
