@@ -32,11 +32,22 @@ patches:
             configMap:
               name: nut-config
       # Wrap the stock entrypoint with an in-container driver watchdog. The
-      # BX1600MI spontaneously drops USB comms ~every 2h and usbhid-ups never
-      # self-recovers. Recovery only needs a fresh driver *process* (new libusb
-      # init) -- NOT a pod restart. So we restart just usbhid-ups in-place:
-      # upsd + upsmon (and the NAS's TCP connection) stay up, and the pod restart
-      # count stops climbing. The pod only restarts if upsmon itself dies.
+      # BX1600MI spontaneously stalls its HID comms (confirmed: an upstream
+      # firmware quirk on this exact model, NUT #2347/#2805 -- "once or twice
+      # an hour" even on git HEAD, matching what we see live: ~1/hour, and only
+      # ONE real kernel-level USB re-enumeration in 2 days, so it's an
+      # application-layer stall, not a physical/electrical one). usbhid-ups
+      # never self-recovers from it. Recovery only needs a fresh driver
+      # *process* (new libusb init) -- NOT a pod restart. So we restart just
+      # usbhid-ups in-place: upsd + upsmon (and the NAS's TCP connection) stay
+      # up, and the pod restart count stops climbing. The pod only restarts if
+      # upsmon itself dies.
+      #
+      # Detection loop: 15s checks, act after 1 failed check (~15-30s to
+      # detect, vs. the original 30s/2-fail = ~60s) -- halves the stale-data
+      # window from ~76s to ~40s. Safe to be this aggressive because observed
+      # wedges are full stalls lasting minutes, not sub-15s blips, so there's
+      # no real fast-flapping case this would misfire on.
       - op: add
         path: /spec/template/spec/containers/0/command
         value:
@@ -44,7 +55,7 @@ patches:
           - -c
           - |
             # All watchdog events are tagged "NUT-WATCHDOG" with an event keyword
-            # (STARTED / WARN / RESTART / RECOVERED / FATAL) and an ISO-8601 UTC
+            # (STARTED / RESTART / RECOVERED / FATAL) and an ISO-8601 UTC
             # timestamp, so they are easy to query in Loki/Grafana and link to
             # incidents, e.g.  {namespace="nut"} |= "NUT-WATCHDOG"  or  |= "RESTART".
             log() { echo "NUT-WATCHDOG $(date -u +%Y-%m-%dT%H:%M:%SZ) $*"; }
@@ -52,34 +63,28 @@ patches:
             ENTRY=$!
             log "STARTED in-place driver watchdog (60s startup grace)"
             sleep 60
-            fails=0
             down=0
             while kill -0 "$ENTRY" 2>/dev/null; do
               if upsc ups ups.status >/dev/null 2>&1; then
                 [ "$down" = 1 ] && log "RECOVERED driver responding again"
-                fails=0
                 down=0
               else
-                fails=$((fails+1))
-                log "WARN driver unresponsive ($fails/2)"
-                if [ "$fails" -ge 2 ]; then
-                  down=1
-                  log "RESTART usbhid-ups wedged - restarting driver in-place (pod stays up)"
-                  upsdrvctl stop 2>/dev/null || true
-                  sleep 2
-                  upsdrvctl -u root start 2>/dev/null || true
-                  sleep 8
-                  fails=0
-                fi
+                log "RESTART usbhid-ups wedged - restarting driver in-place (pod stays up)"
+                down=1
+                upsdrvctl stop 2>/dev/null || true
+                sleep 2
+                upsdrvctl -u root start 2>/dev/null || true
+                sleep 8
               fi
-              sleep 30
+              sleep 15
             done
             log "FATAL upsmon exited - exiting so Kubernetes recycles the pod"
             exit 1
       # Last-resort backstop: only fires if the in-container watchdog can't
       # recover the driver for 150s straight (5 x 30s). With the watchdog acting
-      # at ~60s this should essentially never trip -- it's defense in depth so a
-      # totally hung pod still gets recycled rather than silently going stale.
+      # within ~15-30s this should essentially never trip -- it's defense in
+      # depth so a totally hung pod still gets recycled rather than silently
+      # going stale.
       - op: add
         path: /spec/template/spec/containers/0/livenessProbe
         value:

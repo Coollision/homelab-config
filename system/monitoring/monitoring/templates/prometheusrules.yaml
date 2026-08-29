@@ -159,3 +159,49 @@ spec:
           annotations:
             summary: "Longhorn volume {{`{{ $labels.volume }}`}} is faulted"
             description: "Longhorn reports volume {{`{{ $labels.volume }}`}} as faulted for more than 5 minutes. No healthy replica is currently available for this volume."
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # NUT / UPS alerts (system/nut) — APC Back-UPS BX1600MI
+    #
+    # The BX1600MI has a well-known upstream firmware quirk (NUT #2347/#2805)
+    # that makes usbhid-ups stall for ~15-40s roughly once an hour; an
+    # in-container watchdog (system/nut/nut/kustomization.yaml) already
+    # recovers that in place, so these alerts deliberately do NOT fire on
+    # brief staleness — the `for:` windows below are sized well above that
+    # known noise floor so they only page on a genuine mains-power event.
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: nut.alerts
+      interval: 1m
+      rules:
+        - alert: UpsOnBattery
+          expr: >-
+            network_ups_tools_ups_status{flag="OB"} == 1
+          for: 3m
+          labels:
+            severity: critical
+            category: power
+          annotations:
+            summary: "UPS is running on battery"
+            description: "The APC BX1600MI (NUT) has reported On Battery for more than 3 minutes — mains power is out. See system/nut/disabled-automation/README.md for the (not yet built) graceful-shutdown plan."
+
+        - alert: UpsBatteryLow
+          expr: >-
+            network_ups_tools_ups_status{flag="LB"} == 1
+          for: 1m
+          labels:
+            severity: critical
+            category: power
+          annotations:
+            summary: "UPS battery is low"
+            description: "The APC BX1600MI (NUT) has reported Low Battery for more than 1 minute. Shutdown is imminent — connected NAS/hosts should already be shedding load."
+
+        - alert: NutExporterMetricsMissing
+          expr: >-
+            absent(up{job="nut-exporter"} == 1)
+          for: 15m
+          labels:
+            severity: warning
+            category: power
+          annotations:
+            summary: "NUT exporter metrics missing"
+            description: "No successful scrape of the nut-exporter target for 15 minutes — the UPS pod, its node, or the ServiceMonitor may be down. This is a real gap, not the known short driver stalls (which don't take the exporter itself down)."

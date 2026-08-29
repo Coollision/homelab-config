@@ -36,6 +36,13 @@ single NUT server over the standard NUT protocol on TCP **3493**.
   another node and (after updating the hostname pin in [`nut/values.yaml`](nut/values.yaml)) the pod
   follows it; the descheduler's `hw-enforcement` profile evicts it if it ever lands on the wrong node.
 
+### The BX1600MI stalls — in-container driver watchdog
+The BX1600MI has a well-known firmware quirk (upstream NUT [#2347](https://github.com/networkupstools/nut/issues/2347)/[#2805](https://github.com/networkupstools/nut/issues/2805)): `usbhid-ups` polls fine, then silently stalls — "once or twice an hour" per upstream, confirmed live here too (~1/hour), even with every documented driver-tuning flag applied (see `ups.conf` below). Kernel logs show almost none of these correlate with a real USB re-enumeration (1 in 2 days vs. ~25 stalls/day) — it's an application-layer stall in the driver, not an electrical/USB-layer one, so there's no config or hardware fix left to chase; this is accepted upstream behavior for this exact model.
+
+Recovery only needs a fresh `usbhid-ups` **process** (new libusb init), not a pod restart — so the container's entrypoint ([`kustomization.yaml`](nut/kustomization.yaml)) is wrapped in a small watchdog loop: every 15s it runs `upsc ups ups.status`, and on the first failed check it bounces just the driver in place via `upsdrvctl`. `upsd`/`upsmon` (and the NAS's TCP session) never go down, so the pod's restart count stays at 0 — this replaced an earlier design that restarted the whole pod (61 restarts in 1.5h before the fix). A 150s liveness probe stays as a last-resort backstop in case the watchdog itself ever can't recover the driver.
+
+Each stall is now a ~15-40s window of stale data on `ups` rather than a pod bounce. Watchdog events are tagged `NUT-WATCHDOG` in the container logs (`STARTED`/`RESTART`/`RECOVERED`/`FATAL`) — queryable in Loki as `{namespace="nut"} |= "NUT-WATCHDOG"`.
+
 ### USB passthrough — why the whole `/dev/bus/usb` is mounted
 The Zigbee/Thread sticks are serial (tty) devices with a stable `/dev/...` node, so they use a udev
 `SYMLINK` + a single-node `CharDevice` hostPath. The APC is a **USB-HID** device driven via
@@ -89,6 +96,13 @@ now has an "APC BX1600MI — NUT" row (`network_ups_tools_*`) next to the legacy
 Useful PromQL: `network_ups_tools_battery_charge`, `network_ups_tools_battery_runtime`,
 `network_ups_tools_ups_load`, `network_ups_tools_input_voltage`,
 `network_ups_tools_ups_status{flag="OB"}` (1 = on battery).
+
+Until then, dashboard-only visibility meant a real outage wouldn't page anyone. Three alerts now
+live in [`../monitoring/monitoring/templates/prometheusrules.yaml`](../monitoring/monitoring/templates/prometheusrules.yaml)
+(`nut.alerts` group): `UpsOnBattery`/`UpsBatteryLow` on the real status flags, and
+`NutExporterMetricsMissing` for a full metrics blackout (pod/node down). All three use `for:` windows
+sized above the known driver-stall noise floor (see above) so they only fire on a genuine event, not
+the routine watchdog recoveries.
 
 ## Future: graceful shutdown automation
 
