@@ -1069,7 +1069,7 @@
             },
             "showPoints": "auto",
             "showValues": false,
-            "spanNulls": 120000,
+            "spanNulls": true,
             "stacking": {
               "group": "A",
               "mode": "none"
@@ -1170,7 +1170,7 @@
             },
             "showPoints": "auto",
             "showValues": false,
-            "spanNulls": 120000,
+            "spanNulls": true,
             "stacking": {
               "group": "A",
               "mode": "none"
@@ -1282,7 +1282,7 @@
             },
             "showPoints": "auto",
             "showValues": false,
-            "spanNulls": 120000,
+            "spanNulls": true,
             "stacking": {
               "group": "A",
               "mode": "none"
@@ -1484,7 +1484,7 @@
             },
             "showPoints": "auto",
             "showValues": false,
-            "spanNulls": 120000,
+            "spanNulls": true,
             "stacking": {
               "group": "A",
               "mode": "none"
