@@ -2,7 +2,7 @@ fullnameOverride: whisper
 statefulset:
   image:
     repository: rhasspy/wyoming-whisper
-    tag: 3.6.0
+    tag: 3.7.0
   ports:
     whisper: 10300
   args:
