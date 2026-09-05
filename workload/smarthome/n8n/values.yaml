@@ -71,6 +71,13 @@ config:
   # 256 MiB (the upcoming default) is a guard that can actually fire.
   N8N_COMPRESSION_NODE_MAX_DECOMPRESSED_SIZE_BYTES: "268435456"
 
+  # Without this, V8 sizes the old-space heap off total system RAM, not the 640Mi
+  # cgroup limit, so it grows until the kernel OOM-kills the container outright
+  # (SIGABRT, exitCode 134 - no graceful GC/error, just a hard crash-restart loop).
+  # Capping old-space at 384 MiB leaves headroom under the 640Mi limit for
+  # non-heap memory (native buffers, task broker, worker threads, RSS overhead).
+  NODE_OPTIONS: "--max-old-space-size=384"
+
 resources:
   requests:
     cpu: 20m
