@@ -1,0 +1,109 @@
+fullnameOverride: ke-wedding-geocache
+
+# The image runs as a non-root user baked in at build time (Dockerfile
+# `adduser -S uke-wedding-geocache`, uid 100 / gid 101) — that chown only
+# covers /app inside the image itself, not the PVC Kubernetes mounts at
+# /data at runtime, which Longhorn/kubelet otherwise hand over owned by
+# root:root. Without fsGroup here the container can never create the
+# sqlite file: modernc.org/sqlite surfaces that permission failure as the
+# misleading "unable to open database file: out of memory (14)".
+podSecurityContext:
+  fsGroup: 101
+
+statefulset:
+  image:
+    repository: ghcr.io/coollision/ke-wedding-geocache
+    tag: latest
+    imagePullPolicy: Always
+  ports:
+    http: 4000
+
+# Actively developed — poll ghcr for a new `latest` digest every 5 min and
+# force-restart to pick it up (tag doesn't change, only the digest does).
+keel:
+  policy: force
+  pollSchedule: "@every 5m"
+
+config:
+  LOG_LEVEL: INFO
+
+  DB_DRIVER: sqlite
+  DB_PATH: /data/ke-wedding-geocache.sqlite
+  # Seeding is tracked the same way migrations are (once-only, by name+hash —
+  # internal/db/migrator.go's dbSeed), so this is safe to leave set: it only
+  # ever runs once regardless of how many times the pod restarts. Needed once
+  # to get the very first admin user into an otherwise-empty prod DB — see
+  # internal/db/sql-db-seed/db-seed.sql for exactly what it inserts (also a
+  # demo "user" account and demo todos, both cleaned up by hand right after).
+  DB_SEED: "true"
+
+  API_PORT: "4000"
+  API_ENV: prod
+  API_CORS_ALLOWED_ORIGINS: https://ke-wedding-geocache.<secret:kv/data/domains~domain>
+
+  # Basic (username/password) auth; OAuth is on by default upstream so it must
+  # be explicitly disabled since we have no Google/Facebook client configured.
+  API_AUTH_ENABLE_BASIC: "true"
+  API_AUTH_ENABLE_OAUTH: "false"
+  # openssl rand -base64 32 — store in Vault, never commit.
+  API_AUTH_TOKEN_SECRET: <secret:kv/data/apps/ke-wedding-geocache~token-secret>
+  API_AUTH_COOKIE_SECURE: "true"
+
+  HUNT_PUBLIC_BASE_URL: https://ke-wedding-geocache.<secret:kv/data/domains~domain>
+  HUNT_TIMEZONE: Europe/Brussels
+
+  HUNT_MEDIA_DIR: /data/media
+
+  # No Slack integration yet — flip on later:
+  HUNT_SLACK_ENABLED: "true"
+  HUNT_SLACK_WEBHOOK_URL: <secret:kv/data/apps/ke-wedding-geocache~slack-webhook-url>
+  HUNT_SLACK_ADMIN_BASE_URL: https://ke-wedding-geocache.<secret:kv/data/domains~domain>
+
+resources:
+  requests:
+    cpu: 20m
+    memory: 96Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# No probes were configured before this — a hung or wedged process (not a
+# crash, which restartPolicy already handles on its own) would have sat
+# there indefinitely, still "Running", never recycled. A startupProbe
+# suspends liveness/readiness until it first succeeds, so a slow boot (DB
+# connect + migrations) can't get killed mid-startup by the liveness probe:
+# up to 60s to come up before liveness/readiness are even evaluated, both of
+# which then poll every 10-15s once started.
+probes:
+  startup:
+    httpGet:
+      path: /health
+      port: http
+    periodSeconds: 2
+    failureThreshold: 30
+  liveness:
+    httpGet:
+      path: /health
+      port: http
+    periodSeconds: 15
+    timeoutSeconds: 3
+    failureThreshold: 3
+  readiness:
+    httpGet:
+      path: /health
+      port: http
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+ingress_internal_secure:
+  host: ke-wedding-geocache.<secret:kv/data/domains~domain>
+  port: http
+ingress_external_secure:
+  host: ke-wedding-geocache.<secret:kv/data/domains~domain>
+  port: http
+
+storage:
+  - mountPath: /data
+    size: 5Gi
+    type: longhorn
