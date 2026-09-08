@@ -1,0 +1,11 @@
+apiVersion: v2
+name: ke-wedding-geocache
+description: A Helm chart for K&E's wedding geocache hunt app
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies:
+  - name: shared-lib
+    version: 0.1.0
+    repository: file://../../../lib/shared-lib
