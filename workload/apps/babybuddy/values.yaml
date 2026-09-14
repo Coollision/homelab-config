@@ -3,13 +3,13 @@ fullnameOverride: babybuddy
 statefulset:
   image:
     repository: lscr.io/linuxserver/babybuddy
-    tag: 2.10.0
+    tag: 2.10.1
   ports:
     http: 8000
 
 initContainers:
   - name: nginx-gzip-patch
-    image: lscr.io/linuxserver/babybuddy:2.10.0
+    image: lscr.io/linuxserver/babybuddy:2.10.1
     command:
       - /bin/sh
       - -c
