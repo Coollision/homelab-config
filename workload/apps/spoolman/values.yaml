@@ -1,0 +1,33 @@
+fullnameOverride: spoolman
+
+podSecurityContext:
+  fsGroup: 1000
+
+statefulset:
+  image:
+    repository: ghcr.io/donkie/spoolman
+    tag: "0.26.1"
+  ports:
+    http: 7912
+
+config:
+  TZ: Europe/Brussels
+  SPOOLMAN_DB_TYPE: sqlite
+  SPOOLMAN_DB_PATH: /home/app/.local/share/spoolman/spoolman.db
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+ingress_internal_secure:
+  host: spoolman.<secret:kv/data/domains~domain>
+  port: http
+
+storage:
+  - mountPath: /home/app/.local/share/spoolman
+    size: 1Gi
+    type: longhorn
