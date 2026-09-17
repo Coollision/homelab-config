@@ -1,0 +1,11 @@
+apiVersion: v2
+name: spoolman
+description: A Helm chart for Spoolman — 3D printer filament spool manager
+type: application
+version: 0.1.0
+appVersion: "0.26.1"
+
+dependencies:
+  - name: shared-lib
+    version: 0.1.0
+    repository: file://../../../lib/shared-lib
