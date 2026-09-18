@@ -225,6 +225,8 @@ jobs:
           name: manager-linux-${{ matrix.arch }}
           path: aws-tunnels-operator/dist/manager-linux-${{ matrix.arch }}
           if-no-files-found: error
+          # Intermediate hand-off to the build job in this same run; do not keep for 90d.
+          retention-days: 1
 
   build-tunnel-runner-binaries:
     name: Build Tunnel Runner Binaries
@@ -259,6 +261,8 @@ jobs:
           name: tunnel-runner-linux-${{ matrix.arch }}
           path: aws-tunnels-operator/dist/tunnel-runner-linux-${{ matrix.arch }}
           if-no-files-found: error
+          # Intermediate hand-off to the build job in this same run; do not keep for 90d.
+          retention-days: 1
 
   build:
     name: Build & Push
