@@ -1,0 +1,81 @@
+fullnameOverride: orcaslicer
+
+# linuxserver only publishes multi-arch "latest" plus per-release tags that bake in
+# their own build number (ls39 = their 39th build of the OrcaSlicer 2.4.2 image).
+# Pinning to that exact tag avoids silently picking up an unannounced rebuild.
+deployment:
+  image:
+    repository: lscr.io/linuxserver/orcaslicer
+    tag: v2.4.2-ls39
+  ports:
+    http: 3000
+
+# NB: this image ships with NO authentication by default and runs as root
+# internally (it drops to PUID/PGID via s6-overlay, but the base user is root).
+# CUSTOM_USER/PASSWORD add HTTP basic auth in front of the streamed desktop, but
+# this must still only ever be reachable via the internal ingress, never exposed
+# externally.
+config:
+  PUID: "1000"
+  PGID: "1000"
+  TZ: Europe/Brussels
+  CUSTOM_USER: <secret:kv/data/apps/orcaslicer~user>
+  PASSWORD: <secret:kv/data/apps/orcaslicer~password>
+
+# Slicing a large model is the CPU/memory spike; idling with the GUI open is cheap.
+# Requests are sized for the idle desktop, limits for an actual slice job.
+resources:
+  requests:
+    cpu: 200m
+    memory: 1Gi
+  limits:
+    cpu: 4
+    memory: 6Gi
+
+podSecurityContext:
+  fsGroup: 1000
+  # No runAsNonRoot here on purpose: linuxserver images start as root under
+  # s6-overlay and drop privileges themselves via PUID/PGID — forcing
+  # runAsNonRoot would prevent the container from starting at all.
+
+# It's a streamed desktop (Selkies/noVNC-style), not a JSON API, so a plain TCP
+# check on the http port is the safest signal of "the server is up" — an HTTP
+# probe could easily misread the basic-auth challenge or a slow-loading canvas
+# as unhealthy.
+probes:
+  startup:
+    tcpSocket:
+      port: http
+    periodSeconds: 5
+    # The full desktop + OrcaSlicer can take a while to boot the first time
+    # presets are generated; give it several minutes before giving up.
+    failureThreshold: 60
+  readiness:
+    tcpSocket:
+      port: http
+    periodSeconds: 10
+  liveness:
+    tcpSocket:
+      port: http
+    periodSeconds: 20
+    failureThreshold: 3
+
+ingress_internal_secure:
+  host: orca.<secret:kv/data/domains~domain>
+  port: http
+
+storage:
+  # Persists the whole container home, including OrcaSlicer's own settings/presets,
+  # so printer profiles and filament presets survive a pod restart.
+  - mountPath: /config
+    size: 20Gi
+    type: longhorn
+    volumeName: orcaslicer-config
+    nameSuffix: config
+  # The streamed browser/renderer needs a much bigger /dev/shm than Kubernetes'
+  # tiny default (64Mi) or Chromium/the GL renderer crashes. Backed by RAM, not disk.
+  - mountPath: /dev/shm
+    type: emptyDir
+    medium: Memory
+    sizeLimit: 1Gi
+    nameSuffix: dshm
