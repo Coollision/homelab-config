@@ -1,0 +1,45 @@
+# TEMPORARY WORKAROUND for https://github.com/xiao-villamor/PrintStash/pull/183
+# (session-cookie auth on the import routes). Remove this patch entry, its
+# ConfigMap, and this file once that PR merges and values.yaml's image digest
+# moves past it. See browser-device-auth-patch-configmap.yaml for details.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: printstash
+spec:
+  template:
+    spec:
+      volumes:
+        - name: app-core-patched
+          emptyDir: {}
+        - name: browser-device-auth-patch
+          configMap:
+            name: printstash-browser-device-auth-patch
+      initContainers:
+        - name: patch-browser-device-auth
+          image: ghcr.io/xiao-villamor/printstash@sha256:43e70cb95cf74487858396333cc2818804bcf2c08d5cc7031c042b7f2996058b
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              src=/app/app/core/browser_device_auth.py
+              expected=$(cat /patch/expected_original_sha256)
+              actual=$(sha256sum "$src" | cut -d' ' -f1)
+              if [ "$actual" != "$expected" ]; then
+                echo "WARNING: browser_device_auth.py no longer matches the hash this workaround expects."
+                echo "WARNING: upstream PR #183 may already be merged/released — check and remove this kustomize patch."
+              fi
+              cp -a /app/app/core/. /workspace/
+              cp /patch/browser_device_auth.py /workspace/browser_device_auth.py
+              echo "patched browser_device_auth.py in place (temporary — see PR #183)"
+          volumeMounts:
+            - name: app-core-patched
+              mountPath: /workspace
+            - name: browser-device-auth-patch
+              mountPath: /patch
+      containers:
+        - name: printstash
+          volumeMounts:
+            - name: app-core-patched
+              mountPath: /app/app/core

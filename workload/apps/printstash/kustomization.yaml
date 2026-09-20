@@ -1,0 +1,28 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# TEMPORARY — cookie-auth hotfix for xiao-villamor/PrintStash#183, see
+# browser_device_auth.py and browser-device-auth-patch.yaml. Remove this
+# generator, the patch below, and the two source files once that PR merges
+# and values.yaml's pinned digest moves past it.
+#
+# configMapGenerator (not a plain resource) so the ConfigMap name gets a
+# content hash suffix that changes whenever browser_device_auth.py or the
+# expected hash literal changes below — kustomize rewrites every reference
+# to the new name, which changes the Deployment's pod template and forces
+# an actual rollout. A plain ConfigMap resource would silently update its
+# data in place with no pod restart, leaving a stale patch running.
+configMapGenerator:
+  - name: printstash-browser-device-auth-patch
+    files:
+      - browser_device_auth.py
+    literals:
+      - expected_original_sha256=743736ed0fce0bfecb1a75c7f03b2324d86a0f5a163aa1c22fdfcfa1f40d22cb
+
+patches:
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: printstash
+    path: browser-device-auth-patch.yaml
