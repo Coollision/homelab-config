@@ -2,7 +2,7 @@ fullnameOverride: bazarr
 statefulset:
   image:
     repository: linuxserver/bazarr
-    tag: 1.6.0
+    tag: 1.6.1
     imagePullPolicy: Always
   ports:
     web: 6767
