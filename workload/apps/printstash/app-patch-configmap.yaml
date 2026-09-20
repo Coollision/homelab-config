@@ -126,10 +126,16 @@ data:
 
     from __future__ import annotations
 
+    import asyncio
+    import json
+    import os
+    import uuid
     from dataclasses import dataclass
     from time import monotonic
     from typing import Any, Optional
     from urllib.parse import urlsplit, urlunsplit
+
+    import httpx
 
     from printstash_core.imports import (
         CaptureContractError,
@@ -725,6 +731,152 @@ data:
 
 
     # --------------------------------------------------------------------------- #
+    # MakerWorld: on-demand k8s Job, synchronous resolve (this function blocks
+    # until the Job finishes -- fine, since resolve_page_url already runs
+    # inside a background task, never on the request/response path)
+    # --------------------------------------------------------------------------- #
+    # MakerWorld's download-link API is Cloudflare-challenged hard enough that a
+    # static cookie replay fails (confirmed manually: works fine on the metadata
+    # endpoint, 403s "Just a moment..." on the download-link one) -- resolving it
+    # needs a live, real headless-Chromium challenge solve, which does not belong
+    # inside this always-running web process. So this creates a one-shot k8s Job
+    # (ghcr.io/coollision/printstash-makerworld-importer) that does ONLY that
+    # challenge-solve and prints the resolved download URL to its own stdout --
+    # it never talks to PrintStash's API. This function polls the Job to
+    # completion, reads its pod's logs for that URL, and returns it exactly like
+    # any other resolved provider link, so PrintStash's own download/stage/import
+    # pipeline (importer.download_to_staging, already SSRF-guarded) handles the
+    # rest as a single normal inbox item.
+    #
+    # (Earlier version had the Job push the file to /inbox/browser-upload
+    # itself and this function fire-and-forget. That produced a confusing
+    # two-item UX: an immediate failed "queued" placeholder -- PrintStash's
+    # own _fail_item() unconditionally marks any resolve failure retryable,
+    # regardless of error code -- plus a separate successful item later. This
+    # version fixes that.)
+    #
+    # See RUNBOOK.md's "MakerWorld import" section for the full architecture
+    # and the credential-rotation playbook.
+    _K8S_API = "https://kubernetes.default.svc"
+    _K8S_NAMESPACE = "apps"
+    _MAKERWORLD_IMPORTER_IMAGE = (
+        "ghcr.io/coollision/printstash-makerworld-importer:sha-a3dafb7ea9c4"
+    )
+    _MAKERWORLD_JOB_SECRET = "printstash-makerworld-job-creds"
+    _MAKERWORLD_JOB_POLL_TIMEOUT_S = 90
+    _MAKERWORLD_JOB_POLL_INTERVAL_S = 2
+
+    def _makerworld_k8s_client() -> tuple[httpx.AsyncClient, str]:
+        # NOT the default auto-mounted SA token path -- neither it nor an
+        # explicit defaultMode-0644 projected volume works here (Kubernetes
+        # clamps projected-volume file modes to 0640/fsGroup-only when
+        # fsGroup is set, and this image's entrypoint separately clears the
+        # process's supplementary groups). See app-source-patch.yaml's
+        # printstash-sa-token-src/-copy volumes and its init container's
+        # chown-to-uid-10001 copy step for why this explicit path exists.
+        token_path = "/var/run/secrets/printstash-makerworld/token"
+        ca_path = "/var/run/secrets/printstash-makerworld/ca.crt"
+        with open(token_path) as f:
+            sa_token = f.read().strip()
+        client = httpx.AsyncClient(
+            verify=ca_path,
+            timeout=10.0,
+            headers={"Authorization": f"Bearer {sa_token}"},
+        )
+        return client, sa_token
+
+    async def _resolve_makerworld_via_job(url: str) -> Optional[str]:
+        client, _ = _makerworld_k8s_client()
+        async with client:
+            job_name = f"makerworld-import-{uuid.uuid4().hex[:8]}"
+            env_from_secret = [
+                {"name": key, "valueFrom": {"secretKeyRef": {"name": _MAKERWORLD_JOB_SECRET, "key": key}}}
+                for key in ("MW_LOGIN_COOKIE", "MW_EDGE_COOKIE_A", "MW_EDGE_COOKIE_B")
+            ]
+            job_manifest = {
+                "apiVersion": "batch/v1",
+                "kind": "Job",
+                "metadata": {"name": job_name, "namespace": _K8S_NAMESPACE},
+                "spec": {
+                    "backoffLimit": 1,
+                    "ttlSecondsAfterFinished": 3600,
+                    "template": {
+                        "spec": {
+                            "restartPolicy": "Never",
+                            "containers": [
+                                {
+                                    "name": "importer",
+                                    "image": _MAKERWORLD_IMPORTER_IMAGE,
+                                    "env": [{"name": "MAKERWORLD_URL", "value": url}] + env_from_secret,
+                                }
+                            ],
+                        }
+                    },
+                },
+            }
+
+            resp = await client.post(
+                f"{_K8S_API}/apis/batch/v1/namespaces/{_K8S_NAMESPACE}/jobs",
+                headers={"Content-Type": "application/json"},
+                content=json.dumps(job_manifest),
+            )
+            resp.raise_for_status()
+            logger.info("created MakerWorld resolve job %s for %s", job_name, redact_url(url))
+
+            # Job.status.failed counts failed POD attempts, not job outcome --
+            # with backoffLimit: 1 a single transient pod failure still shows
+            # failed: 1 even though the retry then succeeds (verified: a real
+            # run took 67s across one failed + one successful attempt). Only
+            # `succeeded` or a terminal `Failed` *condition* (backoffLimit
+            # exhausted) mean the job is actually done.
+            deadline = monotonic() + _MAKERWORLD_JOB_POLL_TIMEOUT_S
+            status_obj: dict = {}
+            while monotonic() < deadline:
+                await asyncio.sleep(_MAKERWORLD_JOB_POLL_INTERVAL_S)
+                status_resp = await client.get(
+                    f"{_K8S_API}/apis/batch/v1/namespaces/{_K8S_NAMESPACE}/jobs/{job_name}"
+                )
+                status_resp.raise_for_status()
+                status_obj = status_resp.json().get("status", {})
+                if status_obj.get("succeeded"):
+                    break
+                conditions = status_obj.get("conditions") or []
+                if any(c.get("type") == "Failed" and c.get("status") == "True" for c in conditions):
+                    break
+            else:
+                logger.warning("MakerWorld resolve job %s timed out waiting for completion", job_name)
+                return None
+
+            # With backoffLimit: 1, a job that failed once then retried
+            # successfully has TWO pods matching this label selector -- pick
+            # the one that actually succeeded, not just the first returned
+            # (which could be the earlier failed attempt).
+            pods_resp = await client.get(
+                f"{_K8S_API}/api/v1/namespaces/{_K8S_NAMESPACE}/pods",
+                params={"labelSelector": f"job-name={job_name}"},
+            )
+            pods_resp.raise_for_status()
+            pod_items = pods_resp.json().get("items", [])
+            if not pod_items:
+                logger.warning("MakerWorld resolve job %s finished but no pod found", job_name)
+                return None
+            succeeded_pods = [p for p in pod_items if p.get("status", {}).get("phase") == "Succeeded"]
+            pod_name = (succeeded_pods or pod_items)[0]["metadata"]["name"]
+
+            logs_resp = await client.get(
+                f"{_K8S_API}/api/v1/namespaces/{_K8S_NAMESPACE}/pods/{pod_name}/log"
+            )
+            logs_resp.raise_for_status()
+            for line in logs_resp.text.splitlines():
+                if line.startswith("RESOLVED_URL:"):
+                    return line[len("RESOLVED_URL:"):].strip()
+
+            if not status_obj.get("succeeded"):
+                logger.warning("MakerWorld resolve job %s failed: %s", job_name, logs_resp.text[-500:])
+            return None
+
+
+    # --------------------------------------------------------------------------- #
     # Public entry point
     # --------------------------------------------------------------------------- #
     async def resolve_page_url(
@@ -742,7 +894,7 @@ data:
             if kind == "printables":
                 resolved = await _resolve_printables(url)
             elif kind == "makerworld":
-                raise ImportError_("makerworld_extension_required")
+                resolved = await _resolve_makerworld_via_job(url)
             else:
                 # Thingiverse metadata and file choices are browser-visible only.
                 # Do not request its page or its legacy per-thing ZIP endpoint;
