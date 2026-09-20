@@ -63,9 +63,11 @@ ingress_internal_secure:
 storage:
   # The compose file's five volumes (files, thumbs, db, staging, backups) are
   # all subdirectories under /data, so a single PVC mounted at /data covers
-  # all of them — no need for five separate Longhorn volumes.
+  # all of them — no need for five separate Longhorn volumes. 15Gi is a
+  # library-and-thumbnails budget for a hobby/homelab print queue, not a NAS;
+  # bump it if the model library grows into the many-GB range.
   - mountPath: /data
-    size: 50Gi
+    size: 15Gi
     type: longhorn
     volumeName: printstash-data
     nameSuffix: data

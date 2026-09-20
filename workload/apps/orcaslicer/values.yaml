@@ -66,9 +66,12 @@ ingress_internal_secure:
 
 storage:
   # Persists the whole container home, including OrcaSlicer's own settings/presets,
-  # so printer profiles and filament presets survive a pod restart.
+  # so printer profiles and filament presets survive a pod restart. This is
+  # config only (JSON presets, desktop-session cache) — a fresh container home
+  # measured ~35MB before OrcaSlicer was ever opened, so 5Gi is already a wide
+  # margin, not a project-files store.
   - mountPath: /config
-    size: 20Gi
+    size: 5Gi
     type: longhorn
     volumeName: orcaslicer-config
     nameSuffix: config
