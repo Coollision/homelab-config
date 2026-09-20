@@ -1,0 +1,11 @@
+apiVersion: v2
+name: printstash
+description: A Helm chart for PrintStash — 3D print library + printer fleet manager
+type: application
+version: 0.1.0
+appVersion: "0.13.0"
+
+dependencies:
+  - name: shared-lib
+    version: 0.1.0
+    repository: file://../../../lib/shared-lib
