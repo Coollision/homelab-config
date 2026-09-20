@@ -1,23 +1,24 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# TEMPORARY — cookie-auth hotfix for xiao-villamor/PrintStash#183, see
-# browser_device_auth.py and browser-device-auth-patch.yaml. Remove this
-# generator, the patch below, and the two source files once that PR merges
-# and values.yaml's pinned digest moves past it.
+# TEMPORARY — hotfixes for two open upstream PrintStash PRs not yet in a
+# released image, see app-source-patch.yaml for details:
+#   - browser_device_auth.py   -> PR #183 (session-cookie auth)
+#   - import_resolvers.py      -> PR #185 (Printables GraphQL schema drift)
+# Remove this ConfigMap, the patch below, and the patched .py files once both
+# PRs merge and values.yaml's pinned digest moves past them.
 #
-# configMapGenerator (not a plain resource) so the ConfigMap name gets a
-# content hash suffix that changes whenever browser_device_auth.py or the
-# expected hash literal changes below — kustomize rewrites every reference
-# to the new name, which changes the Deployment's pod template and forces
-# an actual rollout. A plain ConfigMap resource would silently update its
-# data in place with no pod restart, leaving a stale patch running.
-configMapGenerator:
-  - name: printstash-browser-device-auth-patch
-    files:
-      - browser_device_auth.py
-    literals:
-      - expected_original_sha256=743736ed0fce0bfecb1a75c7f03b2324d86a0f5a163aa1c22fdfcfa1f40d22cb
+# A plain (fixed-name) ConfigMap, not configMapGenerator: kustomize's
+# name-reference rewriting doesn't reliably follow a reference introduced
+# through a `patches:` block in this pipeline's kustomize version — the
+# generated hash-suffixed ConfigMap was created correctly, but the Deployment
+# volume kept pointing at the old unsuffixed name and failed to mount. Instead
+# app-source-patch.yaml carries a manual checksum annotation on the pod
+# template (the standard Helm checksum/config idiom) computed from these two
+# files — update it by hand whenever either file's content changes, so the
+# pod template actually differs and Kubernetes rolls a new pod.
+resources:
+  - app-patch-configmap.yaml
 
 patches:
   - target:
@@ -25,4 +26,4 @@ patches:
       version: v1
       kind: Deployment
       name: printstash
-    path: browser-device-auth-patch.yaml
+    path: app-source-patch.yaml
