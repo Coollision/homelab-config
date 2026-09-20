@@ -64,6 +64,17 @@ ingress_internal_secure:
   host: orca.<secret:kv/data/domains~domain>
   port: http
 
+# Used rarely (occasional slicing sessions), idles otherwise while still
+# reserving requests/limits — scale to zero and let Sablier wake it on demand.
+# "dynamic" (an auto-refreshing status page) rather than "blocking": the full
+# desktop can take several minutes to boot (see the startup probe above), and
+# a blocking wait that long tends to just time out in the browser/proxy first.
+scaleToZero:
+  enabled: true
+  strategy: dynamic
+  sessionDuration: 30m
+  refreshFrequency: 5s
+
 storage:
   # Persists the whole container home, including OrcaSlicer's own settings/presets,
   # so printer profiles and filament presets survive a pod restart. This is
