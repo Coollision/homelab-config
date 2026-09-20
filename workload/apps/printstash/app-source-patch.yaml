@@ -1,0 +1,111 @@
+# TEMPORARY WORKAROUNDS for two open upstream PrintStash fixes not yet in a
+# released image:
+#   - https://github.com/xiao-villamor/PrintStash/pull/183 (session-cookie
+#     auth on the import routes) -> app/core/browser_device_auth.py
+#   - https://github.com/xiao-villamor/PrintStash/pull/185 (Printables
+#     GraphQL schema drift)                -> app/modules/ingestion/import_resolvers.py
+# Mounts a shared emptyDir over the whole /app/app source tree (~3.2M, cheap
+# to copy) rather than one mount per file, so adding/removing a patched file
+# here only touches app-patch-configmap.yaml and this init container's copy
+# list. Remove the patched files, the ConfigMap, and this patch once both PRs
+# merge and values.yaml's image digest moves past them — check each
+# independently, they may land in different releases.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: printstash
+spec:
+  template:
+    metadata:
+      annotations:
+        # Fixed ConfigMap name (see kustomization.yaml for why, instead of a
+        # hash-suffixed configMapGenerator), so this checksum is what actually
+        # forces a rollout when app-patch-configmap.yaml's content changes.
+        # Bump it to any different value whenever that file's data changes —
+        # it doesn't need to be a real hash of anything, only to differ.
+        printstash.workload/app-patch-checksum: "d1f9e7b8a4cd2853796af219f2d8a7c0d5678ecf4a3b9c0d2e4f7a8b9c0e1fd"
+    spec:
+      serviceAccountName: printstash
+      volumes:
+        - name: app-patched
+          emptyDir: {}
+        - name: app-patch-files
+          configMap:
+            name: printstash-app-patch
+        # Both the auto-injected SA-token volume AND an explicit projected
+        # one with defaultMode 0644 end up mode 0640 (rw owner, r group, ---
+        # other) on the actual files -- Kubernetes clamps projected-volume
+        # permissions to fsGroup-only-readable whenever fsGroup is set,
+        # overriding defaultMode (confirmed via `stat` on the live file).
+        # This image's entrypoint also drops privileges in a way that clears
+        # the running process's supplementary groups (confirmed: an empty
+        # Groups: line in /proc/<pid>/status despite podSecurityContext.fsGroup:
+        # 1000), so group-based read doesn't work either -- the app is
+        # neither the owning user nor in the owning group, full stop.
+        # Fix: mount this projected volume into the INIT container only
+        # (root, bypasses all permission checks) and have it copy+chmod the
+        # token/ca.crt into a plain emptyDir the main container can read
+        # regardless of its own uid/gid. Tradeoff: it's a point-in-time copy,
+        # not kubelet's live-refreshed original, so expirationSeconds is set
+        # generously long (30 days) rather than the usual short-lived
+        # default -- see RUNBOOK.md for what happens if the pod outlives it.
+        - name: printstash-sa-token-src
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 2592000
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
+        - name: printstash-sa-token-copy
+          emptyDir: {}
+      initContainers:
+        - name: patch-app-source
+          image: ghcr.io/xiao-villamor/printstash@sha256:43e70cb95cf74487858396333cc2818804bcf2c08d5cc7031c042b7f2996058b
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              check() {
+                src="$1"; expected="$2"; note="$3"
+                actual=$(sha256sum "$src" | cut -d' ' -f1)
+                if [ "$actual" != "$expected" ]; then
+                  echo "WARNING: $src no longer matches the hash this workaround expects."
+                  echo "WARNING: $note"
+                fi
+              }
+              check /app/app/core/browser_device_auth.py "$(cat /patch/browser_device_auth.py.sha256)" "upstream PR #183 may already be merged/released -- check and remove that part of this kustomize patch."
+              check /app/app/modules/ingestion/import_resolvers.py "$(cat /patch/import_resolvers.py.sha256)" "upstream PR #185 may already be merged/released -- check and remove that part of this kustomize patch."
+              check /app/app/modules/ingestion/ingestion.py "$(cat /patch/ingestion.py.sha256)" "this is the bespoke auto-slice hook (no upstream PR) -- the base image changed this file for some other reason, re-check the patch still applies cleanly."
+              cp -a /app/app/. /workspace/
+              cp /patch/browser_device_auth.py /workspace/core/browser_device_auth.py
+              cp /patch/import_resolvers.py /workspace/modules/ingestion/import_resolvers.py
+              cp /patch/ingestion.py /workspace/modules/ingestion/ingestion.py
+              echo "patched browser_device_auth.py (PR #183), import_resolvers.py (PR #185), and ingestion.py (auto-slice hook) in place"
+              cp /sa-token-src/token /sa-token-dst/token
+              cp /sa-token-src/ca.crt /sa-token-dst/ca.crt
+              chown 10001:10001 /sa-token-dst/token /sa-token-dst/ca.crt
+              chmod 600 /sa-token-dst/token /sa-token-dst/ca.crt
+              echo "copied service-account token/ca.crt, scoped to uid 10001 only (see app-source-patch.yaml comment for why)"
+          volumeMounts:
+            - name: app-patched
+              mountPath: /workspace
+            - name: app-patch-files
+              mountPath: /patch
+            - name: printstash-sa-token-src
+              mountPath: /sa-token-src
+              readOnly: true
+            - name: printstash-sa-token-copy
+              mountPath: /sa-token-dst
+      containers:
+        - name: printstash
+          volumeMounts:
+            - name: app-patched
+              mountPath: /app/app
+            - name: printstash-sa-token-copy
+              mountPath: /var/run/secrets/printstash-makerworld
+              readOnly: true

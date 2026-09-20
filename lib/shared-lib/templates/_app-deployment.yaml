@@ -82,6 +82,14 @@ spec:
           {{- if eq .type "secret" }}
           secret:
             secretName: {{ .secretName }}
+          {{- else if eq .type "emptyDir" }}
+          emptyDir:
+            {{- with .medium }}
+            medium: {{ . }}
+            {{- end }}
+            {{- with .sizeLimit }}
+            sizeLimit: {{ . }}
+            {{- end }}
           {{- else }}
           persistentVolumeClaim:
             {{- if eq .type "existingClaim" }}
