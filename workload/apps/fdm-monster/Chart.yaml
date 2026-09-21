@@ -1,0 +1,11 @@
+apiVersion: v2
+name: fdm-monster
+description: A Helm chart for FDM Monster — 3D printer fleet manager (Moonraker/OctoPrint/PrusaLink/Bambu)
+type: application
+version: 0.1.0
+appVersion: "2.1.1"
+
+dependencies:
+  - name: shared-lib
+    version: 0.1.0
+    repository: file://../../../lib/shared-lib

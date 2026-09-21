@@ -1,0 +1,9 @@
+{{ $redisv := deepCopy . }}
+{{ $_ := unset $redisv ".Values" }}
+{{ $_ := set $redisv "Values" .Values.redis }}
+{{ include "shared-lib.all" $redisv }}
+---
+{{ $appv := deepCopy . }}
+{{ $_ := unset $appv ".Values" }}
+{{ $_ := set $appv "Values" .Values.app }}
+{{ include "shared-lib.all" $appv }}

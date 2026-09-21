@@ -1,0 +1,34 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: apps-db-pg
+  namespace: apps
+spec:
+  instances: 1
+  storage:
+    pvcTemplate:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 5Gi
+      storageClassName: longhorn
+      volumeName: apps-db-pg-data
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+  bootstrap:
+    initdb: {}
+
+  managed:
+    roles:
+      - name: manyfold_user
+        ensure: present
+        login: true
+        passwordSecret:
+          name: pgrole-manyfold
