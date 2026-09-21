@@ -1,0 +1,73 @@
+fullnameOverride: printstash
+
+podSecurityContext:
+  fsGroup: 1000
+
+deployment:
+  image:
+    repository: ghcr.io/xiao-villamor/printstash
+    # The unified single-container image (web UI + full API + SQLite) is only
+    # published as GHCR ":latest" upstream — it hasn't been cut into a tagged
+    # release yet (v0.13.0 is the latest tagged release, but that release only
+    # publishes the split -frontend/-api images, not this unified one). Pinning
+    # by digest instead of the ":latest" tag still gets us an explicit,
+    # non-moving reference; bump it manually when upstream cuts a real
+    # unified-image release/tag.
+    digest: 43e70cb95cf74487858396333cc2818804bcf2c08d5cc7031c042b7f2996058b
+  ports:
+    http: 3000
+
+config:
+  TZ: Europe/Brussels
+  # trusted_network skips the interactive first-run setup wizard/token exchange
+  # since this is only reachable from inside the cluster network.
+  VAULT_SETUP_MODE: trusted_network
+  # Lets the app request its own container restart (e.g. after a Settings
+  # change) — safe because the Deployment's restart policy brings it back up.
+  VAULT_RESTART_ENABLED: "true"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 256Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+
+probes:
+  # Confirmed against upstream: the unified image's own Dockerfile HEALTHCHECK
+  # is `curl -fsS http://127.0.0.1:3000/api/v1/health` (backend/unified/Dockerfile
+  # on main), and nginx proxies /api/v1 straight through to the FastAPI app on
+  # 3000 — same path the split -api image's compose healthcheck uses on 8000.
+  readiness:
+    httpGet:
+      path: /api/v1/health
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  liveness:
+    httpGet:
+      path: /api/v1/health
+      port: http
+    initialDelaySeconds: 30
+    periodSeconds: 20
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+ingress_internal_secure:
+  host: printstash.<secret:kv/data/domains~domain>
+  port: http
+
+storage:
+  # The compose file's five volumes (files, thumbs, db, staging, backups) are
+  # all subdirectories under /data, so a single PVC mounted at /data covers
+  # all of them — no need for five separate Longhorn volumes. 15Gi is a
+  # library-and-thumbnails budget for a hobby/homelab print queue, not a NAS;
+  # bump it if the model library grows into the many-GB range.
+  - mountPath: /data
+    size: 15Gi
+    type: longhorn
+    volumeName: printstash-data
+    nameSuffix: data

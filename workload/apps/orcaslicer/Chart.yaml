@@ -1,0 +1,11 @@
+apiVersion: v2
+name: orcaslicer
+description: A Helm chart for OrcaSlicer — full desktop GUI streamed to the browser via Selkies
+type: application
+version: 0.1.0
+appVersion: "2.4.2"
+
+dependencies:
+  - name: shared-lib
+    version: 0.1.0
+    repository: file://../../../lib/shared-lib
