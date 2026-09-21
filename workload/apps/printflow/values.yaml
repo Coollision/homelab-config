@@ -1,0 +1,56 @@
+fullnameOverride: printflow
+
+deployment:
+  image:
+    repository: ghcr.io/coollision/printflow
+    tag: latest
+    # :latest is rebuilt in place by CI, so a restart must re-pull it.
+    imagePullPolicy: Always
+  ports:
+    http: 8080
+
+config:
+  TZ: Europe/Brussels
+  PRINTFLOW_DATA: /config
+  SPOOLMAN_URL: https://spoolman.<secret:kv/data/domains~domain>
+  PRINTSTASH_URL: http://printstash-service:3000
+  PRINTSTASH_UI_URL: https://printstash.<secret:kv/data/domains~domain>
+  PRINTSTASH_USERNAME: <secret:kv/data/apps/printflow~printstash_username>
+  PRINTSTASH_API_KEY: <secret:kv/data/apps/printflow~printstash_api_key>
+
+storage:
+  # Saved printer profiles and the writable preset overlay. The presets that
+  # ship in the image stay read-only; edits are shadowed here.
+  - mountPath: /config
+    size: 1Gi
+    type: longhorn
+    volumeName: printflow-config
+    nameSuffix: config
+
+resources:
+  requests:
+    cpu: "1"
+    memory: 512Mi
+  limits:
+    cpu: "4"
+    memory: 4Gi
+
+probes:
+  readiness:
+    httpGet:
+      path: /healthz
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  liveness:
+    httpGet:
+      path: /healthz
+      port: http
+    initialDelaySeconds: 20
+    periodSeconds: 20
+
+ingress_internal_secure:
+  host: printflow.<secret:kv/data/domains~domain>
+  port: http
+
+syncWave: -5

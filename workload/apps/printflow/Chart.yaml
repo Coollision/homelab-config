@@ -1,9 +1,9 @@
 apiVersion: v2
-name: orcaslicer
-description: A Helm chart for OrcaSlicer — full desktop GUI streamed to the browser via Selkies
+name: printflow
+description: Server-side slicing for PrintStash — retarget a 3MF to a real printer, gates and colours
 type: application
 version: 0.1.0
-appVersion: "2.4.2"
+appVersion: "0.1.0"
 
 dependencies:
   - name: shared-lib
