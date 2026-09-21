@@ -19,11 +19,6 @@ kind: Kustomization
 # pod template actually differs and Kubernetes rolls a new pod.
 resources:
   - app-patch-configmap.yaml
-  - makerworld-job-rbac.yaml
-  - makerworld-job-secret.yaml
-  - slicer-presets-configmap.yaml
-  - slicer-job-script-configmap.yaml
-  - slicer-job-secret.yaml
 
 patches:
   - target:
