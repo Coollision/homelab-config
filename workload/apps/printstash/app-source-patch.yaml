@@ -23,7 +23,7 @@ spec:
         # forces a rollout when app-patch-configmap.yaml's content changes.
         # Bump it to any different value whenever that file's data changes —
         # it doesn't need to be a real hash of anything, only to differ.
-        printstash.workload/app-patch-checksum: "c0e8d6a7f3be1742685f309b12e9b8f0b4567dbe3f2a8b9c1d3f6a7b8c9d0ec"
+        printstash.workload/app-patch-checksum: "d1f9e7b8a4cd2853796af219f2d8a7c0d5678ecf4a3b9c0d2e4f7a8b9c0e1fd"
     spec:
       serviceAccountName: printstash
       volumes:

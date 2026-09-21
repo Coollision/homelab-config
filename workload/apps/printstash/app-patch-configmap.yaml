@@ -761,7 +761,7 @@ data:
     _K8S_API = "https://kubernetes.default.svc"
     _K8S_NAMESPACE = "apps"
     _MAKERWORLD_IMPORTER_IMAGE = (
-        "ghcr.io/coollision/printstash-makerworld-importer:sha-a3dafb7ea9c4"
+        "ghcr.io/coollision/printstash-makerworld-importer:sha-231a78c1181f"
     )
     _MAKERWORLD_JOB_SECRET = "printstash-makerworld-job-creds"
     _MAKERWORLD_JOB_POLL_TIMEOUT_S = 90
