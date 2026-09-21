@@ -1,0 +1,208 @@
+# The slicing Job's entrypoint script (Phase 2). Runs on the existing
+# lscr.io/linuxserver/orcaslicer image via a command override -- verified
+# no display server needed. See slice_and_push.py's own docstring and
+# RUNBOOK.md/AUTO-SLICING-PLAN.md for the full design.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: printstash-slicer-job-script
+data:
+  slice_and_push.py: |
+    #!/usr/bin/env python3
+    """One-shot slicing Job: fetch a model's mesh from PrintStash, slice it with
+    headless OrcaSlicer for one or more printer/preset targets, push each result
+    back as a gcode revision.
+    
+    Runs on the existing lscr.io/linuxserver/orcaslicer image via a command
+    override -- no display server needed, verified working directly against
+    /opt/orcaslicer/AppRun. Presets are pre-flattened (inherits fully resolved)
+    and mounted from the printstash-slicer-presets ConfigMap at /presets --
+    --load-settings/--load-filaments do NOT resolve inherits themselves (an
+    unflattened ABS preset silently sliced as PLA in testing), so never point
+    this at a raw vendor/user preset file directly.
+    
+    Design rule: stdlib only, no pip install at Job startup -- this image has no
+    httpx/requests, and installing one on every Job run would slow every slice
+    for no benefit. Multipart body building mirrors upstream's own
+    printstash_orca_push.py for the same reason.
+    
+    See workload/apps/printstash/RUNBOOK.md and AUTO-SLICING-PLAN.md for the
+    full architecture and known gaps (no gcode thumbnails from this path, fixed
+    orientation / no manual supports).
+    """
+    
+    from __future__ import annotations
+    
+    import json
+    import mimetypes
+    import os
+    import subprocess
+    import sys
+    import uuid
+    from pathlib import Path
+    from typing import Any
+    from urllib import request as urlrequest
+    from urllib.error import HTTPError
+    
+    _ORCA = "/opt/orcaslicer/AppRun"
+    _PRESETS_DIR = "/presets"
+    _TIMEOUT = 60.0
+    
+    
+    def env(name: str, *, required: bool = True) -> str:
+        value = os.environ.get(name, "")
+        if required and not value:
+            print(f"ERROR: missing required env var {name}", file=sys.stderr)
+            sys.exit(1)
+        return value
+    
+    
+    def _request(method: str, url: str, *, headers: dict | None = None, body: bytes | None = None, timeout: float = _TIMEOUT) -> tuple[int, bytes, dict]:
+        req = urlrequest.Request(url, data=body, headers=headers or {}, method=method)
+        try:
+            with urlrequest.urlopen(req, timeout=timeout) as resp:
+                return resp.status, resp.read(), dict(resp.headers)
+        except HTTPError as exc:
+            return exc.code, exc.read(), dict(exc.headers or {})
+    
+    
+    def login() -> str:
+        body = json.dumps({
+            "username": env("PRINTSTASH_USERNAME"),
+            "api_key": env("PRINTSTASH_API_KEY"),
+        }).encode()
+        status, data, _ = _request(
+            "POST",
+            f"{env('PRINTSTASH_URL')}/api/v1/auth/login",
+            headers={"Content-Type": "application/json"},
+            body=body,
+        )
+        if status >= 400:
+            print(f"ERROR: login failed: {status} {data[:500]!r}", file=sys.stderr)
+            sys.exit(1)
+        return json.loads(data)["access_token"]
+    
+    
+    def download_mesh(token: str, file_id: str) -> Path:
+        status, data, headers = _request(
+            "GET",
+            f"{env('PRINTSTASH_URL')}/api/v1/files/{file_id}/download",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=120.0,
+        )
+        if status >= 400:
+            print(f"ERROR: mesh download failed: {status}", file=sys.stderr)
+            sys.exit(1)
+        disposition = headers.get("Content-Disposition", "") or headers.get("content-disposition", "")
+        filename = "input.stl"
+        if "filename=" in disposition:
+            filename = disposition.split("filename=", 1)[1].strip('"; ')
+        suffix = Path(filename).suffix or ".stl"
+        dest = Path(f"/tmp/mesh{suffix}")
+        dest.write_bytes(data)
+        return dest
+    
+    
+    def slice_one(mesh_path: Path, target: dict[str, Any], index: int) -> Path | None:
+        machine = os.path.join(_PRESETS_DIR, target["machine"])
+        process = os.path.join(_PRESETS_DIR, target["process"])
+        filament = os.path.join(_PRESETS_DIR, target["filament"])
+        datadir = f"/tmp/dd_{index}"
+        outdir = f"/tmp/out_{index}"
+        os.makedirs(datadir, exist_ok=True)
+        os.makedirs(outdir, exist_ok=True)
+    
+        cmd = [
+            _ORCA,
+            "--datadir", datadir,
+            "--load-settings", f"{machine};{process}",
+            "--load-filaments", filament,
+            "--slice", "0",
+            "--outputdir", outdir,
+            str(mesh_path),
+        ]
+        env_no_display = dict(os.environ)
+        env_no_display.pop("DISPLAY", None)
+        env_no_display.pop("WAYLAND_DISPLAY", None)
+    
+        result = subprocess.run(cmd, env=env_no_display, capture_output=True, text=True, timeout=600)
+        if result.returncode != 0:
+            print(f"ERROR: slice failed for {target['revision_label']!r}: exit {result.returncode}", file=sys.stderr)
+            print(result.stdout[-2000:], file=sys.stderr)
+            print(result.stderr[-2000:], file=sys.stderr)
+            return None
+    
+        for fn in os.listdir(outdir):
+            if fn.endswith(".gcode"):
+                return Path(outdir) / fn
+        print(f"ERROR: slice reported success for {target['revision_label']!r} but no .gcode found in {outdir}", file=sys.stderr)
+        return None
+    
+    
+    def _multipart_body(fields: dict, file_path: Path) -> tuple[bytes, str]:
+        boundary = f"----PrintStashSlicer{uuid.uuid4().hex}"
+        crlf = "\r\n"
+        body = bytearray()
+        for key, value in fields.items():
+            body += f"--{boundary}{crlf}".encode()
+            body += f'Content-Disposition: form-data; name="{key}"{crlf}{crlf}{value}{crlf}'.encode()
+        mime = mimetypes.guess_type(file_path.name)[0] or "text/plain"
+        body += f"--{boundary}{crlf}".encode()
+        body += (
+            f'Content-Disposition: form-data; name="file"; filename="{file_path.name}"{crlf}'
+            f"Content-Type: {mime}{crlf}{crlf}"
+        ).encode()
+        body += file_path.read_bytes()
+        body += crlf.encode()
+        body += f"--{boundary}--{crlf}".encode()
+        return bytes(body), f"multipart/form-data; boundary={boundary}"
+    
+    
+    def push_revision(token: str, model_id: str, gcode_path: Path, target: dict[str, Any]) -> bool:
+        body, content_type = _multipart_body(
+            {
+                "revision_label": target["revision_label"],
+                "is_recommended": "true" if target.get("is_recommended") else "false",
+            },
+            gcode_path,
+        )
+        status, data, _ = _request(
+            "POST",
+            f"{env('PRINTSTASH_URL')}/api/v1/models/{model_id}/gcode-revisions",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": content_type},
+            body=body,
+            timeout=120.0,
+        )
+        if status >= 400:
+            print(f"ERROR: pushing revision {target['revision_label']!r} failed: {status} {data[:500]!r}", file=sys.stderr)
+            return False
+        print(f"pushed revision: {target['revision_label']!r}")
+        return True
+    
+    
+    def main() -> int:
+        model_id = env("MODEL_ID")
+        file_id = env("FILE_ID")
+        targets = json.loads(env("SLICE_TARGETS"))
+    
+        token = login()
+        mesh_path = download_mesh(token, file_id)
+    
+        succeeded = 0
+        for i, target in enumerate(targets):
+            gcode_path = slice_one(mesh_path, target, i)
+            if gcode_path is None:
+                continue
+            if push_revision(token, model_id, gcode_path, target):
+                succeeded += 1
+    
+        if succeeded == 0:
+            print("ERROR: no targets succeeded", file=sys.stderr)
+            return 1
+        print(f"done: {succeeded}/{len(targets)} targets succeeded")
+        return 0
+    
+    
+    if __name__ == "__main__":
+        sys.exit(main())
+    
