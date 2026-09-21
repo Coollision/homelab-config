@@ -51,7 +51,7 @@ app:
     port: http
   storage:
     - mountPath: /models
-      size: 100Gi
+      size: 10Gi
       type: longhorn
       volumeName: manyfold-models
       nameSuffix: models
