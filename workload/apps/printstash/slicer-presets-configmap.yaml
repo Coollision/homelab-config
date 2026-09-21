@@ -1,28 +1,41 @@
 # Flattened OrcaSlicer presets for headless slicing Jobs (Phase 2).
 # Exported from the OrcaSlicer PVC and flattened (inherits chain fully
-# resolved) via /tmp/flatten_presets.py -- see AUTO-SLICING-PLAN.md and
-# RUNBOOK.md for why flattening is mandatory (--load-settings/--load-filaments
-# does not resolve inherits, so an unflattened ABS preset silently sliced as
-# PLA). ConfigMap keys are sanitized filenames (Kubernetes keys can't contain
-# spaces/parens); the original preset name lives inside each file's own
-# "name" field, unaffected by the key/filename.
+# resolved for VALUES) via flatten_presets2.py -- see AUTO-SLICING-PLAN.md
+# and RUNBOOK.md for why flattening is mandatory (--load-settings/
+# --load-filaments does not resolve inherits itself, so an unflattened ABS
+# preset silently sliced as PLA). ConfigMap keys are sanitized filenames
+# (Kubernetes keys can't contain spaces/parens); the original preset name
+# lives inside each file's own "name" field, unaffected by the key/filename.
+#
+# v3: machine presets keep a populated "inherits" field (set to the vendor
+# parent name, e.g. "Anycubic Kobra S1 0.4 nozzle") even though all its
+# VALUES are already fully resolved -- confirmed by direct testing that
+# OrcaSlicer's compatibility CHECK (not the value loader) requires this to
+# be non-empty for a "from": "User" machine preset, separately from the
+# value-resolution problem the flattening itself fixes. Dropping it produces
+# exit -17 ("not compatible with the process preset") even when every value
+# is otherwise correct. Process/filament presets do not have this
+# requirement and have inherits removed as before. Also: machine presets'
+# "name" is the vendor parent's name (compatible_printers on process/
+# filament presets is a literal string check against it, not the user's own
+# custom rename).
 #
 # Mapping (key = original path):
-# machine__Creality_K1C_0.4_nozzle_-_Copy.json = machine/Creality K1C 0.4 nozzle - Copy.json (preset name: Creality K1C 0.4 nozzle - Copy)
-# machine__Creality_K1C_0.4_nozzle_-_improved.json = machine/Creality K1C 0.4 nozzle - improved.json (preset name: Creality K1C 0.4 nozzle - improved)
-# machine__Kobra_S1_0.4.json = machine/Kobra S1 0.4.json (preset name: Kobra S1 0.4)
-# process__0.12mm_Fine__Creality_K1C_-_Copy.json = process/0.12mm Fine @Creality K1C - Copy.json (preset name: 0.12mm Fine @Creality K1C - Copy)
-# process__0.12mm_Fine__Kobra_S1.json = process/0.12mm Fine @Kobra S1.json (preset name: 0.12mm Fine @Kobra S1)
-# process__0.16mm_Quality__Kobra_S1.json = process/0.16mm Quality @Kobra S1.json (preset name: 0.16mm Quality @Kobra S1)
-# process__0.20mm_Standard__Kobra_S1.json = process/0.20mm Standard @Kobra S1.json (preset name: 0.20mm Standard @Kobra S1)
-# process__0.20mm_Standard_K1C.json = process/0.20mm Standard K1C.json (preset name: 0.20mm Standard K1C)
-# process__0.20mm_Standard_S1__slice_flush_.json = process/0.20mm Standard S1 (slice flush).json (preset name: 0.20mm Standard S1 (slice flush))
-# process__0.25mm_Standard_K1C.json = process/0.25mm Standard K1C.json (preset name: 0.25mm Standard K1C)
-# process__0.28mm_Draft__Kobra_S1.json = process/0.28mm Draft @Kobra S1.json (preset name: 0.28mm Draft @Kobra S1)
-# process__0.30mm_Standard_K1C.json = process/0.30mm Standard K1C.json (preset name: 0.30mm Standard K1C)
-# filament__Generic_ABS.json = filament/Generic ABS.json (preset name: Generic ABS)
-# filament__burnt_titanium_ABS.json = filament/burnt titanium ABS.json (preset name: burnt titanium ABS)
-# filament__techbears_ABS__Kobra_S1.json = filament/techbears ABS @Kobra S1.json (preset name: techbears ABS @Kobra S1)
+# machine__Creality_K1C_0.4_nozzle_-_Copy.json = machine/Creality K1C 0.4 nozzle - Copy.json (preset name: Creality K1C 0.4 nozzle, inherits: Creality K1C 0.4 nozzle)
+# machine__Creality_K1C_0.4_nozzle_-_improved.json = machine/Creality K1C 0.4 nozzle - improved.json (preset name: Creality K1C 0.4 nozzle, inherits: Creality K1C 0.4 nozzle)
+# machine__Kobra_S1_0.4.json = machine/Kobra S1 0.4.json (preset name: Anycubic Kobra S1 0.4 nozzle, inherits: Anycubic Kobra S1 0.4 nozzle)
+# process__0.12mm_Fine__Creality_K1C_-_Copy.json = process/0.12mm Fine @Creality K1C - Copy.json (preset name: 0.12mm Fine @Creality K1C - Copy, inherits: None)
+# process__0.12mm_Fine__Kobra_S1.json = process/0.12mm Fine @Kobra S1.json (preset name: 0.12mm Fine @Kobra S1, inherits: None)
+# process__0.16mm_Quality__Kobra_S1.json = process/0.16mm Quality @Kobra S1.json (preset name: 0.16mm Quality @Kobra S1, inherits: None)
+# process__0.20mm_Standard__Kobra_S1.json = process/0.20mm Standard @Kobra S1.json (preset name: 0.20mm Standard @Kobra S1, inherits: None)
+# process__0.20mm_Standard_K1C.json = process/0.20mm Standard K1C.json (preset name: 0.20mm Standard K1C, inherits: None)
+# process__0.20mm_Standard_S1__slice_flush_.json = process/0.20mm Standard S1 (slice flush).json (preset name: 0.20mm Standard S1 (slice flush), inherits: None)
+# process__0.25mm_Standard_K1C.json = process/0.25mm Standard K1C.json (preset name: 0.25mm Standard K1C, inherits: None)
+# process__0.28mm_Draft__Kobra_S1.json = process/0.28mm Draft @Kobra S1.json (preset name: 0.28mm Draft @Kobra S1, inherits: None)
+# process__0.30mm_Standard_K1C.json = process/0.30mm Standard K1C.json (preset name: 0.30mm Standard K1C, inherits: None)
+# filament__Generic_ABS.json = filament/Generic ABS.json (preset name: Generic ABS, inherits: None)
+# filament__burnt_titanium_ABS.json = filament/burnt titanium ABS.json (preset name: burnt titanium ABS, inherits: None)
+# filament__techbears_ABS__Kobra_S1.json = filament/techbears ABS @Kobra S1.json (preset name: techbears ABS @Kobra S1, inherits: None)
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -31,7 +44,7 @@ data:
   machine__Creality_K1C_0.4_nozzle_-_Copy.json: |
     {
       "type": "machine",
-      "name": "Creality K1C 0.4 nozzle - Copy",
+      "name": "Creality K1C 0.4 nozzle",
       "from": "User",
       "instantiation": "true",
       "gcode_flavor": "klipper",
@@ -149,6 +162,7 @@ data:
       "machine_pause_gcode": "PAUSE",
       "wipe": "1",
       "z_hop_types": "Auto Lift",
+      "inherits": "Creality K1C 0.4 nozzle",
       "default_filament_profile": [
         "Creality Generic PLA @K1-all"
       ],
@@ -227,7 +241,7 @@ data:
   machine__Creality_K1C_0.4_nozzle_-_improved.json: |
     {
       "type": "machine",
-      "name": "Creality K1C 0.4 nozzle - improved",
+      "name": "Creality K1C 0.4 nozzle",
       "from": "User",
       "instantiation": "true",
       "gcode_flavor": "klipper",
@@ -345,6 +359,7 @@ data:
       "machine_pause_gcode": "PAUSE",
       "wipe": "1",
       "z_hop_types": "Auto Lift",
+      "inherits": "Creality K1C 0.4 nozzle",
       "default_filament_profile": [
         "Creality Generic PLA @K1-all"
       ],
@@ -423,7 +438,7 @@ data:
   machine__Kobra_S1_0.4.json: |
     {
       "type": "machine",
-      "name": "Kobra S1 0.4",
+      "name": "Anycubic Kobra S1 0.4 nozzle",
       "from": "User",
       "instantiation": "true",
       "gcode_flavor": "klipper",
@@ -561,6 +576,7 @@ data:
       "z_hop_types": [
         "Slope Lift"
       ],
+      "inherits": "Anycubic Kobra S1 0.4 nozzle",
       "setting_id": "IfuZplbodKgggoSZ",
       "printer_model": "Anycubic Kobra S1",
       "default_print_profile": "0.20mm Standard @Anycubic Kobra S1 0.4 nozzle",
