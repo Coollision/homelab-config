@@ -5,15 +5,12 @@ podSecurityContext:
 
 deployment:
   image:
-    repository: ghcr.io/xiao-villamor/printstash
-    # The unified single-container image (web UI + full API + SQLite) is only
-    # published as GHCR ":latest" upstream — it hasn't been cut into a tagged
-    # release yet (v0.13.0 is the latest tagged release, but that release only
-    # publishes the split -frontend/-api images, not this unified one). Pinning
-    # by digest instead of the ":latest" tag still gets us an explicit,
-    # non-moving reference; bump it manually when upstream cuts a real
-    # unified-image release/tag.
-    digest: 43e70cb95cf74487858396333cc2818804bcf2c08d5cc7031c042b7f2996058b
+    # Our fork of the unified image: identical to upstream except the
+    # open-in-slicer menu gains a PrintFlow entry (upstream hardcodes the list
+    # and the frontend is a prebuilt bundle, so it must be a build-time change).
+    # Source: github.com/Coollision/PrintStash, branch feat/external-web-slicer.
+    repository: ghcr.io/coollision/printstash-unified
+    tag: latest
   ports:
     http: 3000
 
@@ -32,7 +29,15 @@ resources:
     memory: 256Mi
   limits:
     cpu: "2"
-    memory: 2Gi
+    # The RAM-aware mesh cap (backend/app/modules/media/mesh_processing.py)
+    # derives its triangle ceiling from this cgroup limit: budget = limit *
+    # mesh_memory_budget_fraction (0.5) / max_render_jobs (1), then triangles
+    # = budget / 3600 bytes for a 3MF. At 2Gi that capped out at ~298k
+    # triangles and 3D-preview/STL conversion 500'd on anything bigger
+    # (model 55's dragon is ~364k). 4Gi raises the cap to ~596k triangles;
+    # actual RSS usage stays low (~250Mi observed), this is a ceiling not a
+    # reservation.
+    memory: 4Gi
 
 probes:
   # Confirmed against upstream: the unified image's own Dockerfile HEALTHCHECK
