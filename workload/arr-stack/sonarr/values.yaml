@@ -2,7 +2,7 @@ fullnameOverride: sonarr
 statefulset:
   image:
     repository: linuxserver/sonarr
-    tag: 4.0.19
+    tag: 4.0.20
     imagePullPolicy: Always
   ports:
     web: 8989
