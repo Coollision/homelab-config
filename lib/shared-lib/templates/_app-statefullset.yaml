@@ -81,6 +81,9 @@ spec:
           {{- if eq .type "secret" }}
           secret:
             secretName: {{ .secretName }}
+          {{- else if eq .type "configMap" }}
+          configMap:
+            name: {{ .configMapName }}
           {{- else if eq .type "emptyDir" }}
           emptyDir:
             {{- with .medium }}
