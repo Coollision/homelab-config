@@ -22,6 +22,8 @@ spec:
       name: "{{.path.basename}}"
       annotations:
         argocd.argoproj.io/manifest-generate-paths: "/{{.path.path}};/lib/shared-lib;/lib/longhorn-storage-lib;/lib/arr-lib"
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
     spec:
       project: workloads
       source:
