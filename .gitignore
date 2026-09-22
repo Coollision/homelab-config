@@ -21,3 +21,4 @@ tmp/*
 .claude/settings.local.json
 
 .claude/
+docs/printflow-printstash-handoff.md
