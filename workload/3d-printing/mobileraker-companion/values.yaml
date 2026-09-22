@@ -1,0 +1,52 @@
+fullnameOverride: mobileraker-companion
+
+deployment:
+  image:
+    repository: ghcr.io/clon1998/mobileraker_companion
+    tag: latest
+    # No semver-pinned releases published upstream — keel force-polls the
+    # digest daily and rolls the deployment instead of relying on Always-pull.
+
+keel:
+  policy: force
+  pollSchedule: "@midnight"
+
+# Mobileraker Companion takes no env config — everything lives in
+# mobileraker.conf. It has no HTTP server, so it needs no ports/ingress/probes.
+configMaps:
+  - name: mobileraker-companion-config
+    data:
+      mobileraker.conf: |
+        [general]
+        timezone: Europe/Brussels
+        include_snapshot: False
+
+        [printer Kobra S1]
+        moonraker_uri: <secret:kv/data/3d-printer/printers~kobra_s1_moonraker_uri>
+        moonraker_api_key: False
+
+        [printer K1C]
+        moonraker_uri: <secret:kv/data/3d-printer/printers~k1c_moonraker_uri>
+        moonraker_api_key: False
+
+storage:
+  # ConfigMap, not Longhorn: nothing else is written here (logs go to
+  # printer_dir/logs, notification state lives in Moonraker's own database),
+  # so there's nothing worth persisting or backing up — the printer list
+  # just needs to stay GitOps-declared instead of drifting.
+  - mountPath: /opt/printer_data/config
+    type: configMap
+    configMapName: mobileraker-companion-config
+    nameSuffix: config
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+syncWave: -5
+
+disableService: true

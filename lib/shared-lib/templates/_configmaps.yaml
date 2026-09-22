@@ -1,0 +1,22 @@
+{{- define "shared-lib.configmaps" }}
+{{- $root := . }}
+{{- range $configMap := .Values.configMaps }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $configMap.name }}
+  namespace: {{ $root.Release.Namespace }}
+  labels:
+    {{- include "helm.labels" $root | nindent 4 }}
+  annotations:
+    {{ if $root.Values.syncWave }}
+    argocd.argoproj.io/sync-wave: {{ $root.Values.syncWave | default 0 | quote }}
+    {{- end }}
+data:
+  {{- range $key, $value := $configMap.data }}
+  {{ $key }}: |
+    {{- $value | nindent 4 }}
+  {{- end }}
+---
+{{- end }}
+{{- end }}
