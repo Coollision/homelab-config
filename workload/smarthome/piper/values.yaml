@@ -2,7 +2,7 @@ fullnameOverride: piper
 deployment:
   image:
     repository: rhasspy/wyoming-piper
-    tag: 2.4.3
+    tag: 2.5.2
   ports:
     piper-port: 10200
   args:
