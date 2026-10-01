@@ -342,11 +342,16 @@ argo-cd:
     extraContainers:
       - name: avp
         command: [ /var/run/argocd/argocd-cmp-server ]
-        image: ghcr.io/crumbhole/lovely-vault-ver:1.2.5
+        image: ghcr.io/crumbhole/lovely-vault-ver:v2.0.0
         envFrom:
           - secretRef:
               name: argocd-vault-replacer-credentials
         env:
+          # lovely v2 defaults to Helm 4, which ignores null/empty overrides of
+          # subchart defaults (e.g. keel `resources:` would gain the chart's
+          # 128Mi limit). Stay on the bundled Helm 3 until charts are audited.
+          - name: LOVELY_HELM_PATH
+            value: /usr/local/bin/helm3
           # Bounds the lovely-plugin's own Go heap below the cgroup limit (512Mi).
           # The real peak is the helm subprocess (separate process, not governed
           # by this): now that the Bitnami classic-index dep moved to OCI, the
