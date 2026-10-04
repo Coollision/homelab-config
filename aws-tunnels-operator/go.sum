@@ -272,6 +272,8 @@ github.com/aws/aws-sdk-go-v2/service/ec2 v1.335.0 h1:F4FgmFpQEuf1cb74G5nZvcjt4Y8
 github.com/aws/aws-sdk-go-v2/service/ec2 v1.335.0/go.mod h1:2o5yJcnWuaBOsnNqlO1reYs1OQffFkqf2xJ2mmMWNH4=
 github.com/aws/aws-sdk-go-v2/service/ec2 v1.336.1 h1:qiuU5+MtLJV2CAxLZYA/GPuvrsScBIk2am+QNAoHmMM=
 github.com/aws/aws-sdk-go-v2/service/ec2 v1.336.1/go.mod h1:d0e0acsyS3WnFCFJiByGwnUgPpn2wAk97PTIksHN2NI=
+github.com/aws/aws-sdk-go-v2/service/ec2 v1.338.1 h1:sfwX4gbR9CGsMgBsOQNFMGigRjiZeIG0CF4BlWP/LBQ=
+github.com/aws/aws-sdk-go-v2/service/ec2 v1.338.1/go.mod h1:d0e0acsyS3WnFCFJiByGwnUgPpn2wAk97PTIksHN2NI=
 github.com/aws/aws-sdk-go-v2/service/ec2instanceconnect v1.35.4 h1:1QIGVzvLyQQXVaJcTNqG09J9J8ufymuCIKETo7V6HD0=
 github.com/aws/aws-sdk-go-v2/service/ec2instanceconnect v1.35.4/go.mod h1:bhkEjuciWaNVmk6IfKqlSVsEKfmr3wIZxvRvzdxOPqs=
 github.com/aws/aws-sdk-go-v2/service/ec2instanceconnect v1.35.6 h1:lI5GKBn2wlW6sno1xOT/kWM5fwYjPFk8LrAgFR62koI=
@@ -368,6 +370,8 @@ github.com/aws/aws-sdk-go-v2/service/rds v1.129.0 h1:rfqkLgq6+N4R2+03T8VS6B7yU4l
 github.com/aws/aws-sdk-go-v2/service/rds v1.129.0/go.mod h1:UKCSI4ZmISkI7H6ndDvwB64cwzbxJssyHe2wrmX60LU=
 github.com/aws/aws-sdk-go-v2/service/rds v1.129.1 h1:tLLKlVNRH6YIWCIq/9a8b6LMamBsIDCOQ5hdlhYl3qk=
 github.com/aws/aws-sdk-go-v2/service/rds v1.129.1/go.mod h1:ISB8224E71TShRfUITcXvgbjlq0MVx/KWpvF0jbiFmg=
+github.com/aws/aws-sdk-go-v2/service/rds v1.130.0 h1:d6xg7OOvlly1HOTXoAqDnttPaEB37KEsmMk5dVz+V8U=
+github.com/aws/aws-sdk-go-v2/service/rds v1.130.0/go.mod h1:ISB8224E71TShRfUITcXvgbjlq0MVx/KWpvF0jbiFmg=
 github.com/aws/aws-sdk-go-v2/service/signin v1.0.10 h1:a1Fq/KXn75wSzoJaPQTgZO0wHGqE9mjFnylnqEPTchA=
 github.com/aws/aws-sdk-go-v2/service/signin v1.0.10/go.mod h1:p6+MXNxW7IA6dMgHfTAzljuwSKD0NCm/4lbS4t6+7vI=
 github.com/aws/aws-sdk-go-v2/service/signin v1.0.11 h1:TdJ+HdzOBhU8+iVAOGUTU63VXopcumCOF1paFulHWZc=
@@ -901,6 +905,8 @@ sigs.k8s.io/controller-runtime v0.25.0 h1:44KgRUPew331KSJpNu8zJow3iTR5W0p/SfrHdw
 sigs.k8s.io/controller-runtime v0.25.0/go.mod h1:4QqLdT6z/L6Olj8JJCtvztid4/fnIiYsfaTFScegctc=
 sigs.k8s.io/controller-runtime v0.25.1 h1:BKgU9OeE8xv8EbbM8cY0NVzTQs35rokkdq1jh12fMb4=
 sigs.k8s.io/controller-runtime v0.25.1/go.mod h1:4QqLdT6z/L6Olj8JJCtvztid4/fnIiYsfaTFScegctc=
+sigs.k8s.io/controller-runtime v0.25.2 h1:bEkK3PVOIVK9X8QWLGVhJgmFc++47vfT6wakSzAOLsQ=
+sigs.k8s.io/controller-runtime v0.25.2/go.mod h1:4QqLdT6z/L6Olj8JJCtvztid4/fnIiYsfaTFScegctc=
 sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd h1:EDPBXCAspyGV4jQlpZSudPeMmr1bNJefnuqLsRAsHZo=
 sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd/go.mod h1:B8JuhiUyNFVKdsE8h686QcCxMaH6HrOAZj4vswFpcB0=
 sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 h1:IpInykpT6ceI+QxKBbEflcR5EXP7sU1kvOlxwZh5txg=
