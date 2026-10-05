@@ -19,6 +19,7 @@ arrXmlPostgres:
   passwordKey: prowlarr_password
   mainDbKey: prowlarr_database
   logDbKey: prowlarr_database_logs
+  authenticationMethod: External
 
 resources:
   requests:
