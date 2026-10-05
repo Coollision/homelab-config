@@ -62,3 +62,18 @@ storage:
 scaleToZero:
   enabled: true
   sessionDuration: 3h  # longer than default — a batch of firmware compiles/OTA can run a while
+
+# Without a readiness probe the pod counts as Ready the moment the container
+# starts, so Sablier hands the request to Traefik before the dashboard (slow
+# ~200Mi catalog load at boot) is listening → 502 instead of the page. Gate
+# readiness on the web port actually accepting connections.
+probes:
+  startup:
+    tcpSocket:
+      port: web
+    periodSeconds: 2
+    failureThreshold: 60
+  readiness:
+    tcpSocket:
+      port: web
+    periodSeconds: 5
