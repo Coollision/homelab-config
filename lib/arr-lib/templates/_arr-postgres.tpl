@@ -98,6 +98,9 @@
       upsert PostgresHost "$POSTGRES_HOST"
       upsert PostgresMainDb "$POSTGRES_MAIN_DB"
       upsert PostgresLogDb "$POSTGRES_LOG_DB"
+      {{- if .Values.arrXmlPostgres.authenticationMethod }}
+      upsert AuthenticationMethod "{{ .Values.arrXmlPostgres.authenticationMethod }}"
+      {{- end }}
   env:
     - name: POSTGRES_USER
       valueFrom:

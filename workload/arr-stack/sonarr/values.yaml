@@ -19,6 +19,7 @@ arrXmlPostgres:
   passwordKey: sonarr_password
   mainDbKey: sonarr_database
   logDbKey: sonarr_database_logs
+  authenticationMethod: External
 
 probes:
   readiness:

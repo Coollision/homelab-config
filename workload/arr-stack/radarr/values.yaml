@@ -19,6 +19,7 @@ arrXmlPostgres:
   passwordKey: radarr_password
   mainDbKey: radarr_database
   logDbKey: radarr_database_logs
+  authenticationMethod: External
 
 probes:
   readiness:
