@@ -22,3 +22,4 @@ tmp/*
 
 .claude/
 docs/printflow-printstash-handoff.md
+.env

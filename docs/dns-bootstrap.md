@@ -308,6 +308,153 @@ its old interface still holds the lease.
 
 ---
 
+## 9. DNS enforcement — making clients actually use these resolvers
+
+DHCP-supplied DNS is **advisory**. A device is free to ignore it, and plenty do: smart TVs
+and IoT firmware routinely hardcode a public resolver, and browsers ship DNS-over-HTTPS on
+by default. Without enforcement the ad-blocking in §4 and every internal zone above are
+simply bypassed by whichever client feels like it. Three layers close that, in descending
+order of usefulness.
+
+### 9.1 Layer 1 — transparent redirect (UniFi Destination NAT)
+
+The important layer. A DNAT rule rewrites the destination of any port-53 packet to the
+primary resolver, so a device hardcoded to a public resolver is **silently answered by the
+cluster** and never notices. This is strictly better than blocking: nothing breaks, it just
+stops working the way the device intended.
+
+Configured under Settings → Policy Engine → NAT. The API is the internal v2 endpoint —
+**not** the documented integration API, which has no NAT paths at any version:
+
+```http
+POST /proxy/network/v2/api/site/default/nat
+{
+  "type": "DNAT",  "protocol": "udp",  "ip_version": "IPV4",
+  "in_interface": "<network _id of the client VLAN>",
+  "ip_address":   "<primary resolver VLAN30 MACVLAN IP>",   # the translated destination
+  "rule_index": <unique int>,  "enabled": true, "exclude": false,
+  "is_predefined": false, "logging": false, "pppoe_use_base_interface": false,
+  "setting_preference": "manual",
+  "source_filter":      { "filter_type": "NONE", "firewall_group_ids": [],
+                          "invert_address": false, "invert_port": false },
+  "destination_filter": { "filter_type": "ADDRESS_AND_PORT", "firewall_group_ids": [],
+                          "invert_address": false, "invert_port": false, "port": "53" }
+}
+```
+
+Field names are not guessable and the endpoint returns a bare **HTTP 500 with no message**
+for anything malformed, so do not brute-force it — create one rule in the UI and `GET` the
+endpoint to read the exact shape. Notable traps:
+
+- The translated address is **`ip_address`**, not `translated_ip`. There is no translated-port
+  field; the destination port is preserved.
+- It is **`rule_index`** (not `index`) and it must be **unique across all NAT rules** —
+  a collision is rejected with `api.err.NatRuleInvalidParameters: duplicate rule_index`.
+- It is **`is_predefined`**, not `predefined` as on firewall policies.
+- `in_interface` takes a **network `_id`**, so rules are per-**network**, not per-zone.
+  Grouping VLANs into one firewall zone does *not* give them a shared NAT rule — each
+  network needs its own.
+- **UDP and TCP need separate rules.** DNS falls back to TCP for large responses; a
+  UDP-only rule leaks those silently.
+
+Because each rule is bound to one client network, **no exclusion rule is needed** for the
+resolver VLAN — a rule scoped to a client interface can never capture the resolvers' own
+upstream queries, so the self-redirect loop that guides warn about cannot occur. Only add an
+`exclude: true` rule if a rule is ever applied network-wide.
+
+No SNAT/masquerade is required either: clients and resolvers sit on different VLANs, so
+replies already transit the gateway and are un-NATted back to the address the client
+expected. Adding masquerade here would only hide the real client IP from the query log.
+
+**Deliberately excluded:** the resolver VLAN itself, and the **IPTV networks** — carrier IPTV
+commonly depends on the ISP's own resolver, and redirecting it is a well-known way to break
+live TV. Those VLANs keep their ISP-supplied DNS on purpose.
+
+### 9.2 Layer 2 — block what cannot be redirected
+
+Encrypted DNS can't be transparently rewritten, so it is blocked outright with zone-based
+firewall policies (`BLOCK`, `logging: true`, source = each client zone, destination =
+external):
+
+| Target | Mechanism |
+|---|---|
+| DoT / DoQ | port group `853, 784, 8853` |
+| Hardcoded-IP DoH | address group of well-known public resolver IPs, **all ports** |
+
+Blocking the resolver IPs on every port (rather than just 443) also catches plain port-53
+traffic to them, which is a useful backstop wherever a DNAT rule does not apply.
+
+> **DoH cannot be fully solved.** It is port 443 to ordinary web addresses and is
+> indistinguishable from browsing without TLS interception. Blocking known providers raises
+> the cost; it is not a guarantee. Treat this layer as defence in depth, not a boundary.
+
+### 9.3 Layer 3 — resolver-side (the cheapest win)
+
+Because `blockingType=NxDomain` is already set (§4), the manual block zone doubles as DoH
+suppression. Add via `POST /api/blocked/add?domain=<domain>`; entries propagate to every
+cluster node:
+
+- **`use-application-dns.net`** — the Firefox canary. NXDOMAIN here makes Firefox **disable
+  DoH by itself**, with no client configuration. Highest value single entry on the list.
+- The **DoH bootstrap hostnames** of the major providers (Google, Cloudflare incl. their
+  `security`/`family`/`chrome` variants and `one.one.one.one`, Quad9, OpenDNS, AdGuard,
+  NextDNS, CleanBrowsing, dns.sb). Kills any DoH profile configured by hostname rather than
+  by IP, including Android Private DNS in strict mode.
+
+Chromium-family browsers only auto-upgrade to DoH when the configured resolver appears on a
+known-provider list; a self-hosted resolver does not, so they stay on plaintext by default.
+
+### 9.4 Verifying it works
+
+Do **not** verify by checking that a public resolver is unreachable — that only proves the
+firewall layer. Prove the *redirect* with a query whose answer differs between resolvers:
+
+```bash
+# from a client VLAN, aimed at a public resolver:
+dig @<any public resolver> use-application-dns.net     # expect NXDOMAIN, in ~1ms
+```
+
+A public resolver returns `NOERROR` for that name; only a resolver with the canary blocked
+returns `NXDOMAIN`. LAN-scale latency on a query supposedly crossing the internet is the
+second tell. Run the same query from the excluded resolver VLAN as a control — it should
+return `NOERROR` from the real public resolver, which confirms the rules are scoped and not
+global.
+
+Test **both** transports (`dig +tcp`), and confirm ordinary browsing and internal zones are
+unaffected afterwards.
+
+### 9.5 IPv6 — every layer needs its own rules
+
+**Nothing above is dual-stack by default.** NAT rules carry `ip_version: IPV4`, and an
+address-based firewall rule only matches the family of the literals in it. A dual-stack
+client that reaches a public resolver over IPv6 bypasses all three layers while the IPv4
+side looks perfectly enforced. Verify over IPv6 explicitly — this is the single easiest
+thing to miss.
+
+**IPv6 is blocked, not redirected — deliberately.** DNAT rewrites only the *destination*.
+A client picks a **GUA source** when the destination is a public GUA, so a redirected packet
+arrives at the resolver with a GUA source and is answered `REFUSED` by the ULA-only
+`recursionNetworkACL` (§5). Making DNAT work on IPv6 would mean re-adding a delegated GUA
+prefix to that ACL — the rotation hazard that caused a previous outage. Blocking instead
+costs nothing: clients fall back to the RA-supplied ULA resolver, which is already correct.
+
+| Layer | IPv4 | IPv6 |
+|---|---|---|
+| Redirect (DNAT) | ✅ per network, UDP + TCP | ❌ **by design** — see above |
+| Public resolver block | address group, all ports | separate rule, `group_type: ipv6-address-group` |
+| DoT / DoQ port block | — | one rule, `ip_version: BOTH`, covers both families |
+
+Only the port-based rule can serve both families from a single policy; anything matching on
+addresses needs a per-family rule with `ip_version` set accordingly.
+
+> **Trap when testing IPv6.** Binding the probe to a **ULA** source and aiming at a public
+> resolver always times out — ULAs are not globally routable, so the result says nothing
+> about your rules. Bind to the **GUA**, or test from a real dual-stack client. A pod whose
+> default route is the IPv4 overlay is equally useless as a probe. Confirm the harness works
+> *before* the rules exist, or a false "already blocked" reading will hide the gap.
+
+---
+
 ## Gotchas
 
 - **k3s node-name NXDOMAIN noise:** the k3s node names (`worker-<x>`/`master-<x>`) differ
