@@ -9,6 +9,12 @@
   },
   "packageRules": [
     {
+      "description": "MariaDB - stay on the 12.3 LTS line (13.0 is a short-lived rolling release; auto-upgrade makes downgrade unsupported). Revisit at 13.3 LTS.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["mariadb"],
+      "allowedVersions": "<13"
+    },
+    {
       "description": "System & ArgoCD - automerge patch and minor",
       "matchBaseBranches": ["master"],
       "matchFileNames": ["system/**", "argocd/**"],
