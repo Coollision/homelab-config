@@ -31,7 +31,7 @@ stable; neither is optional on a new attachment.
                    <vlan> = the VLAN tag, written as-is (05, 40)
                    <app>  = one id per workload, SHARED across its VLANs
                             61 mdns-reflector  63 matter-server  64 thread-border-router
-                            65 homeassistant   66 esphome
+                            65 homeassistant   66 esphome  67 music-assistant
                  The DNS cluster predates this and uses its own 02:53:00:00:00:<n>.
 
   dhcpHostname:  _stub_<workload>-<iot|lan>   sent as DHCP option 12 (host-name)

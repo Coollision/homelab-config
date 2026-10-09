@@ -65,6 +65,14 @@ a "PV reclaimed" alert.
 
 ## Practical notes
 
+- **The Music share has two PV/PVC pairs on the same NFS path**: a read-only one in `smarthome` for Music
+  Assistant and a read-write one in `arr-stack` (`arr-stack-music`, in `shared/_storage.yaml`) for the intake, which
+  files new albums into it.
+- **Music shares are mounted read-only, with a `subPath`.** `workload/smarthome/music-assistant/templates/storage.yaml`
+  defines its own PV/PVC pairs on the Music and Downloads NFS paths (a PV binds one PVC and PVCs are
+  namespaced, so the arr-stack ones cannot be reused), and `shared-lib` storage entries accept optional
+  `subPath` and `readOnly`. A `subPath` folder must exist on the share before a read-only mount of it can
+  start. See [Music](../03-media-stack/music.md).
 - **You cannot shrink a Longhorn PVC in place.** Downsizing means: pause the app, scale
   to zero, `rsync` data to a scratch PVC, delete the old PVC/PV/Volume, recreate smaller,
   `rsync` back. This exact procedure — and its sharp edges (a finished copy Job's PVC
