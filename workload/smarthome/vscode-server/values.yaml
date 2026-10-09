@@ -56,6 +56,7 @@ storage:
     type: longhorn
     size: 5Gi
     protect: true
+    snapshots: false  # workspace churn; 2h snapshots pinned ~7GB (24 snapshots). Daily backup stays
 
   # Existing PVCs, already longhorn-shared/RWX — no new PVC/Volume created here.
   - mountPath: /workspaces/homeassistant

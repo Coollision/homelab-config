@@ -9,7 +9,11 @@
 {{- if ne .storage.backup false -}}
   {{- $_ := set $labels "backup-type" "daily" -}}
   {{- $_ := set $labels "recurring-job.longhorn.io/backup-daily" "enabled" -}}
-  {{- $_ := set $labels "recurring-job.longhorn.io/snapshot-2h" "enabled" -}}
+  {{/* snapshots: false skips the 2-hourly snapshot job (high-churn volumes where
+       every snapshot pins changed blocks); daily backups still run */}}
+  {{- if ne .storage.snapshots false -}}
+    {{- $_ := set $labels "recurring-job.longhorn.io/snapshot-2h" "enabled" -}}
+  {{- end -}}
   {{- $_ := set $labels "recurring-job-group.longhorn.io/default" "enabled" -}}
 {{- end -}}
 {{- if .storage.labels -}}

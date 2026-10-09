@@ -25,6 +25,6 @@ vlan_trunk_interfaces:
     interface_name: vlan5
 
 k3s_node_annotations:
-  node.longhorn.io/default-disks-config: '[{"path":"/mnt/longhorn","allowScheduling":true,"tags":["fast"]}]'
+  node.longhorn.io/default-disks-config: '[{"path":"/mnt/longhorn","allowScheduling":true,"tags":["fast"],"storageReserved":53687091200}]'
 
 longhorn_disk_device: /dev/nvme0n1p3
