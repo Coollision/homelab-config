@@ -18,7 +18,9 @@ radio playing across all devices, legacy library scanned (116 albums, 31 album a
 
 - [ ] Confirm the permanent VLAN 5 route survives a restart (`setup-vlan5-route` init container): after the
       pod restarts, grouping a Sonos with the web player on a radio stream still holds.
-- [ ] ReplayGain pass (`cleanup.py --replaygain --resume`), then a manual Music Assistant sync so it picks up the tags.
+- [x] ReplayGain pass finished (2026-10-10): all 4014 files are ID3v2.4 with ReplayGain tags, 31 album artists, a library
+      sync was triggered afterwards. Only 3 files still carry an ID3v1 block.
+- [x] (old entry) ReplayGain pass, then a manual Music Assistant sync so it picks up the tags.
 - [x] Spotify added (2026-10-09, librespot backend). Its first library sync imported the followed artists and
       saved albums (the album-artist list grew by ~60 entries and one album); not a tag problem.
 - [ ] Home Assistant integration connects (ClusterIP service on 8095); phone playback works.

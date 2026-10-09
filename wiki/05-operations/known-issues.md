@@ -224,7 +224,11 @@ The Roam is far slower to start an AirPlay 2 stream than the wired or mains-powe
 time, `device could not be audible`), so Music Assistant keeps cold-restarting it. Fix: stop playback, ungroup
 (`players/cmd/ungroup_many`) so the active output protocol clears when the players are idle, then regroup the
 Sonos players **natively** (`players/cmd/set_members` on the leader). Keep the web player out of Sonos groups (or
-at least the Roam). Music Assistant also auto-registers every AirPlay receiver it finds, for example a Mac, and
+at least the Roam). A phone or browser player (Sendspin) can join such a group, but the picker only lists it on its own device while its
+setting **Hide this player in the user interface** is on (the default, together with `private`): turn that off in the
+player's settings to see it from every device. Joining a Sonos group makes Music Assistant bridge **all** members
+(and it re-adds the Roam if you remove it), so a group with a phone is the case where the Roam drops. Music Assistant
+also auto-registers every AirPlay receiver it finds, for example a Mac, and
 retries to join it with `403` errors in the log; disable such entries under the player settings.
 
 ### Music Assistant on Kubernetes: Sonos plays nothing unless the published IP is pinned {#music-assistant-published-ip}
