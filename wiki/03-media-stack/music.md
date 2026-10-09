@@ -74,6 +74,20 @@ Hence the one manual setting after the first start:
 Give that stub a UniFi alias and a fixed IP first, otherwise the published address drifts with the DHCP
 lease. (Done for this stub: alias `_stub_music-assistant-lan` and a reservation on the Intern VLAN.)
 
+**The URL it hands out for itself.** Music Assistant has two *separate* addresses, and both default to the
+primary IP, which in this pod is the cluster IP:
+
+| Setting (Settings → System → Webserver / Core → Streams, both "advanced") | Used for | Value here |
+|---|---|---|
+| **Published IP address** (Streams, `publish_ip`) | The audio stream the players pull on port 8097 | the `net1` address |
+| **Internal URL** (Webserver, `base_url`, default "auto") | The address in its server info (what Home Assistant and apps see), cover-art/proxy URLs given to clients, OAuth and setup-flow callbacks, guest links | the internal secure ingress hostname |
+| External URL (Webserver, `external_url`) | A reachable-from-outside address | left empty (no external ingress) |
+
+The Internal URL is the "running behind a reverse proxy" setting the docs describe. Both take effect
+immediately (no reload). **Neither lives in git**: they are stored in `/data`, so they have to be set again
+(Settings, or the `config/core/save` API) if that volume is ever recreated, along with the admin user,
+the providers and the Spotify login.
+
 **A second, easy-to-miss routing problem.** The `sbr` plugin keeps `net1`'s routes out of the main table, so
 the pod by default talks *to* the players from its cluster IP, NAT'd out through the node. That is enough
 for native Sonos control and for the stream the players pull from the published IP, but not for grouping a
