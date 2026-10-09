@@ -2,9 +2,11 @@
 
 [← Back to Home](../Home.md) · How it works: [Music](../03-media-stack/music.md) · Related: [Storage](../01-platform/storage.md) · [Networking](../01-platform/networking.md)
 
-> **Status (2026-10-09):** deployed and verified: both apps are healthy, Sonos and the web player work
-> (including grouped radio), the legacy library is cleaned and scanned, Radio Browser is added. Still to do:
-> the ReplayGain pass, Spotify, and the checks below. This page is the checklist for what is left and for
+> **Status (2026-10-09):** deployed and verified: Music Assistant and slskd are healthy, Sonos works (group
+> Sonos players natively, see the Roam entry in known issues), the legacy library is cleaned and scanned, Radio
+> Browser and Spotify are added, Music Assistant has no access to Downloads any more. The intake is deployed
+> but not yet verified with a real download. Still to do: the intake checks, the ReplayGain pass (about 4 hours
+> from 16:15, runs on its own) and the checks below. This page is the checklist for what is left and for
 > what is deliberately not built. Delete it (and fold the leftovers into [Music](../03-media-stack/music.md))
 > once the rollout checks below are done.
 
@@ -24,6 +26,15 @@ radio playing across all devices, legacy library scanned (116 albums, 31 album a
 - [ ] Check the Music Assistant version still matches the research it was built on (the stable line was 2.10.x).
 - [ ] Six files still carry an ID3v1 block after the rewrite: find them (`tail -c 128` starts with `TAG`).
 - [ ] Optional: Picard on the ~40 single-artist albums for MusicBrainz IDs.
+
+## Intake (music-intake)
+
+- [ ] Image `latest` pulled, pod Ready, UI reachable on its internal ingress, status strip shows slskd reachable
+      and Music Assistant configured.
+- [ ] First real run: download one album through slskd, watch it go waiting -> ready/needs_review -> imported,
+      the folder appear in the Music share with the right tags, the inbox empty, and Music Assistant show it.
+- [ ] Review flow with a compilation from an uploader with poor tags (edit, approve).
+- [ ] Decide whether the Python tagger should be ported to Go later.
 
 ## Slskd trial (one week, started 2026-10-09)
 

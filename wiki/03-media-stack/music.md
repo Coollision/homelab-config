@@ -23,6 +23,7 @@ music fetched by **slskd** (Soulseek). The pieces:
 |---|---|---|
 | Music Assistant | `workload/smarthome/music-assistant/` | StatefulSet, Longhorn `/data`, Multus leg on VLAN 5, internal ingress only |
 | slskd | `workload/arr-stack/slskd/` | StatefulSet, Longhorn `/app`, internal ingress only, no inbound port |
+| music-intake | `workload/arr-stack/music-intake/` (code in its own repository) | Tags and files finished downloads into the library, review UI on an internal ingress, see [Intake](#intake-music-intake) |
 | Tag cleanup scripts | `scripts/music/` | One-off transform for the legacy library, see [below](#the-legacy-library-and-its-tag-cleanup) |
 | NFS paths | Vault `kv/storage/nfs` (`music-path`, `downloads-path`) | Same secret as the other NFS paths |
 
@@ -181,9 +182,47 @@ Image `slskd/slskd`, pinned to the newest stable tag (ignore `canary` and the ro
 - **Directories:** slskd does not create overridden directories itself; the kubelet creates the `subPath`
   folders on the Downloads share on first start.
 - **Health:** `/health` is unauthenticated and is the probe.
-- Downloads are **not** played as delivered: they sit in the inbox until the intake tags and files them
-  (a file without an artist tag would otherwise get the part of its filename before the first ` - ` as
-  artist, which for `NN - Title - Artist.mp3` is the track number).
+- Downloads are **not** played as delivered: they sit in the inbox until the [intake](#intake-music-intake) tags
+  and files them (a file without an artist tag would otherwise get the part of its filename before the first
+  ` - ` as artist, which for `NN - Title - Artist.mp3` is the track number).
+
+## Intake (music-intake)
+
+slskd's finished albums are an **inbox**; nothing reaches the library, and so Music Assistant, until the intake
+has tagged and filed it. It is a small Go + React service in its own (private) repository, built into a
+multi-arch image on GHCR (Keel polls `latest`, like the other self-built apps), with the Python tagger from
+the cleanup inside the image. The chart here only wires it up.
+
+```
+slskd -> Downloads/slskd (inbox) -> settle + slskd finished? -> analyse -> confident -> tag, file, clean ----> Music/<album>
+                                                              \-> unsure -> review UI (edit, approve) -/        (Music Assistant sync triggered)
+```
+
+- **Settling.** A folder only counts as finished when it has been unchanged for a few minutes **and** slskd
+  reports no unfinished transfers for it (a stalled peer leaves a half album with an unchanged timestamp).
+- **Auto vs review.** Auto-filed: every track has artist, title, album and track number, at least three tracks,
+  nothing had to be guessed from file names, and the target folder name is free. Everything else, notably
+  compilations from uploaders with sloppy tags, an existing folder with that name, or untagged files, waits in
+  the UI: edit album, album artist (one click sets `Various Artists` and the compilation flag), year, folder
+  name, per-track artist/title/number, then approve. Editing an item always means it waits for a click.
+- **Layout.** Flat like the legacy library: `Music/<Artist - Album>` for artist albums, `Music/<Album>` for
+  compilations. Multi-disc albums keep their disc subfolders. An existing folder is never overwritten or merged.
+- **What it writes.** The same tag rules as the cleanup (`Various Artists` + compilation flag, ID3v2.4/UTF-8
+  without ID3v1, `CD1`/`CD2` merged with disc numbers, ReplayGain, `cover.jpg`), now for mp3, m4a and flac.
+- **Safety.** Tagged in the inbox, copied into a hidden `.<name>.partial` folder in the library, renamed into place
+  (the library never shows half an album), then the inbox files are removed and leftovers (nfo, scans) deleted so
+  the inbox ends up empty. If tagging fails for any file nothing moves; a restart in the middle marks the item
+  `failed` for a retry.
+- **Storage.** `/inbox` is the claim radarr and sonarr also use, with `subPath: slskd` (read-write, because it is
+  cleaned out). `/library` is the Music share through its own PV/PVC in `arr-stack` (read-write here, while Music
+  Assistant mounts the same path read-only). The SQLite job state is on a small Longhorn volume.
+- **Wiring.** It asks slskd (same namespace) which transfers are unfinished, using slskd's API key, and triggers
+  a library sync in Music Assistant after each import with a token from Vault (`kv/apps/music-intake`).
+- **Env names** follow the config library: the config path without dots, upper-cased
+  (`INTAKE_INBOXDIR`, `INTAKE_SLSKD_URL`, `DB_PATH`).
+- **No login of its own** and no external ingress: internal secure ingress only.
+- The tagger is Python (mutagen) on purpose for now, because it is the one mature library that writes all three
+  formats including ReplayGain; a Go port (ffprobe/ffmpeg) is a possible later step.
 
 ## The legacy library and its tag cleanup
 

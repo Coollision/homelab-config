@@ -65,6 +65,9 @@ a "PV reclaimed" alert.
 
 ## Practical notes
 
+- **The Music share has two PV/PVC pairs on the same NFS path**: a read-only one in `smarthome` for Music
+  Assistant and a read-write one in `arr-stack` (`arr-stack-music`, in `shared/_storage.yaml`) for the intake, which
+  files new albums into it.
 - **Music shares are mounted read-only, with a `subPath`.** `workload/smarthome/music-assistant/templates/storage.yaml`
   defines its own PV/PVC pairs on the Music and Downloads NFS paths (a PV binds one PVC and PVCs are
   namespaced, so the arr-stack ones cannot be reused), and `shared-lib` storage entries accept optional

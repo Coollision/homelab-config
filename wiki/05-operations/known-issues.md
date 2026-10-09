@@ -214,6 +214,19 @@ and caused an OOMKill on startup that presented in the browser as "WebSocket not
 connected" with no obvious cause. Check for an OOMKill first if this symptom recurs after
 a version bump.
 
+### The Sonos Roam keeps dropping out of a group {#roam-drops-in-bridged-groups}
+
+Symptom: audio stops for a moment every few seconds on the Roam while the group plays. The Roam's Wi-Fi is fine
+(5 GHz, strong signal, days of uptime) and it never goes `unavailable`. Cause: once a group was formed with a
+non-Sonos player (the web player), Music Assistant drives **every** Sonos in it through its AirPlay/Sendspin
+bridge, and that output stays selected for as long as the players stay grouped, even after the web player left.
+The Roam is far slower to start an AirPlay 2 stream than the wired or mains-powered Sonos (it lags 1.4-3 s every
+time, `device could not be audible`), so Music Assistant keeps cold-restarting it. Fix: stop playback, ungroup
+(`players/cmd/ungroup_many`) so the active output protocol clears when the players are idle, then regroup the
+Sonos players **natively** (`players/cmd/set_members` on the leader). Keep the web player out of Sonos groups (or
+at least the Roam). Music Assistant also auto-registers every AirPlay receiver it finds, for example a Mac, and
+retries to join it with `403` errors in the log; disable such entries under the player settings.
+
 ### Music Assistant on Kubernetes: Sonos plays nothing unless the published IP is pinned {#music-assistant-published-ip}
 
 Music Assistant officially requires host networking and lists Kubernetes as unsupported. In this cluster
