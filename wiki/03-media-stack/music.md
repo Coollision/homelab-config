@@ -72,7 +72,19 @@ Hence the one manual setting after the first start:
 > **Settings → Core → Streams (advanced) → Published IP address** = the address of the `net1` leg.
 
 Give that stub a UniFi alias and a fixed IP first, otherwise the published address drifts with the DHCP
-lease. The stub's MAC follows the scheme in `lib/shared-lib/templates/_multus.yaml`
+lease. (Done for this stub: alias `_stub_music-assistant-lan` and a reservation on the Intern VLAN.)
+
+**A second, easy-to-miss routing problem.** The `sbr` plugin keeps `net1`'s routes out of the main table, so
+the pod by default talks *to* the players from its cluster IP, NAT'd out through the node. That is enough
+for native Sonos control and for the stream the players pull from the published IP, but not for grouping a
+Sonos with a non-Sonos player (for example the web player): Music Assistant then bridges the Sonos over
+AirPlay/Sendspin, and the speaker has to connect **back** to the address Music Assistant announces, which is
+the unreachable cluster IP. Symptom: `cliairplay did not connect to <player>`, and the Sonos is dropped from
+the group after 30 seconds. The chart therefore has an init container (`setup-vlan5-route`, same pattern
+as matter-server) that adds an on-link route for the VLAN 5 subnet via `net1`, so every connection to the
+players originates from the `net1` address. If you ever add that route to a *running* pod, expect every
+existing Sonos connection to drop once and Music Assistant to reconnect (the pod's old connections used the
+cluster address). The stub's MAC follows the scheme in `lib/shared-lib/templates/_multus.yaml`
 (`02:05:67:9d:64:67`, workload id 67). The Sonos Roam is portable: it withdraws its mDNS announcement
 when it sleeps and Music Assistant reconnects when it announces again, so it depends on mDNS working
 on that VLAN (mDNS is on for the VLAN; IGMP snooping is deliberately off, see the TV note in
@@ -86,6 +98,11 @@ on that VLAN (mDNS is on for the VLAN; IGMP snooping is deliberately off, see th
 - **Sonos:** discovered over mDNS (`_sonos._tcp`). Manual IPs exist as a fallback only.
 - **Home Assistant:** the HA integration connects to Music Assistant on 8095; a ClusterIP service is
   enough, and Music Assistant controls Sonos directly and does not need Home Assistant.
+- **Radio:** the **Radio Browser** provider (a free community directory, no account) is enabled, with
+  *Qmusic Belgium* in the library. Radio Browser lists several Qmusic entries, mostly Dutch; pick the one with
+  country BE. The Belgian station only publishes **HE-AAC 96 kbps** and **MP3 128 kbps** (probed with ffprobe;
+  other mount names just fall back to the MP3 stream), so there is no higher-quality stream to switch to and
+  the "LQ" badge is simply the bitrate. Both variants are in the library to compare by ear.
 - **Spotify:** needs Premium. The account here is older than December 2024, so the librespot backend works
   (newer accounts need the official Soloist backend). The "Use the Spotify app" pairing advertises the
   wrong IP in a two-interface pod, so use the **browser login**, which redirects to a loopback address:
@@ -156,6 +173,14 @@ The library was audited read-only (tags parsed on the NAS itself, nothing copied
   ID3v1 block; 131 artist names differ only by letter case; some guest artists are glued on without a
   separator (`Black Eyed PeasJustin Timberlake`).
 
+Result of the real run (2026-10-09): 119 albums in 3998 files rewritten to ID3v2.4/UTF-8, ID3v1 removed;
+77 compilations (3260 files) under `Various Artists` with the compilation flag; the album artists dropped
+from ~150 fake entries to 31 real ones. After the first scan Music Assistant shows 116 albums (a few merge,
+because they differ only in case), 31 album artists, 74 compilations, no fake artists and no case duplicates.
+The run was done in two passes from a throwaway read-write pod on a quiet node (not over SMB): **pass 1** the
+tag fixes (a few minutes), **pass 2** the ReplayGain loudness tags (hours, because every file is decoded
+twice; run at the lowest priority and resumable, so it does not starve the node's other workloads).
+
 What Music Assistant expects, which the cleanup produces:
 
 | Tag | Rule |
@@ -167,19 +192,17 @@ What Music Assistant expects, which the cleanup produces:
 | Encoding | ID3v2.4, UTF-8, ID3v1 removed |
 | ReplayGain | `REPLAYGAIN_*` tags are read and preferred over Music Assistant's own measurement (reference −18 LUFS) |
 
-`scripts/music/cleanup.py` does this (see its README): **dry-run by default**, per-folder overrides, a
-review flag for ambiguous folders, `--apply` to write, `--replaygain` to add loudness tags in the same pass
-(so every file is modified once), `--folder-covers` to write `cover.jpg` from embedded art. The rules
-(compilation = no artist above 60% of the tracks and at least 6 artists; dominant artist otherwise) were
-trialled on a header-only copy of 12 folders before being committed. The first real run still needs:
+`scripts/music/cleanup.py` does this (see its README): **dry-run by default**, per-folder and per-artist
+overrides, a review flag for ambiguous folders, `--apply` to write, `--replaygain` for loudness tags (with
+`--jobs` for parallel decodes and `--resume` to skip finished albums), `--folder-covers` to write `cover.jpg`
+from embedded art. The rules (compilation = no artist above 60% of the tracks and at least 6 artists;
+dominant artist otherwise) were trialled on a header-only copy of 12 folders, then dry-run over the whole
+library with nothing flagged for review, before the real run. The files are backed up on the NAS; no
+snapshot was taken because nothing else depends on the old convention.
 
-1. the dry-run over the whole library, reviewed by hand (the review list, `KnuffelRock` with its 15 albums
-   in one folder, `Z_Singels` with 400 loose singles);
-2. the trial on a copy in a throwaway Music Assistant;
-3. the real run **before** the real provider is added, so the first scan sees clean tags. The files are
-   backed up on the NAS; no snapshot was taken because nothing else depends on the old convention.
-
-Run it on the NAS itself (ReplayGain reads every file, ~19 GB), not over SMB.
+Run it next to the data, not over SMB: a pod that mounts the Music share read-write (the export allows it).
+ReplayGain peaks above +12 dBFS are clamped, because a single corrupt MP3 frame can report +27 dBFS and would
+permanently cap that album's gain in players (loud, clipped 128 kbps MP3s normally decode to +2..+4 dBFS).
 
 ## Decisions and why
 

@@ -17,13 +17,16 @@ Rules (all derived from the 2026-10 audit of the library):
   * Year is only filled when the album name itself contains one (e.g. "Top Hits 1999-1").
   * Folders starting with _ . # @ are ignored (Music Assistant ignores them too).
 
-Per-folder manual fixes go in an overrides JSON file:
-  {"Folder name": {"albumartist": "Tracy Chapman", "compilation": false}}
+Manual fixes go in an overrides JSON file: per folder, plus an "_artists" map that renames an artist
+everywhere (all case variants of the key are renamed):
+  {"Folder name": {"albumartist": "Tracy Chapman", "compilation": false},
+   "_artists": {"Sita-Happy": "Sita"}}
 
 Needs: pip install mutagen
 """
 import argparse
 import collections
+import concurrent.futures
 import json
 import os
 import re
@@ -95,7 +98,7 @@ def load_tracks(root, only):
     return albums
 
 
-def build_artist_map(albums):
+def build_artist_map(albums, renames=None):
     """norm(name) -> canonical spelling, and fold 'Artist' + 'ArtistGuest' into 'Artist'."""
     counts = collections.Counter()
     for tracks in albums.values():
@@ -111,6 +114,8 @@ def build_artist_map(albums):
         return sorted(variants.items(), key=lambda kv: (-kv[1], kv[0].islower() or kv[0].isupper(), kv[0]))[0][0]
 
     canon = {key: best(v) for key, v in by_norm.items()}
+    for src, dst in (renames or {}).items():
+        canon[norm(src)] = dst
     return canon
 
 
@@ -170,23 +175,27 @@ def measure(ffmpeg, args):
     peak = re.search(r"Peak:\s+(-?[\d.]+) dBFS", summary)
     if not lufs or not peak:
         raise RuntimeError("could not measure loudness: " + out[-300:])
-    return float(lufs.group(1)), 10 ** (float(peak.group(1)) / 20)
+    # Loud, clipped MP3s decode to a few dB over full scale (+2..+4 dBFS is normal here). A single corrupt
+    # frame can report +27 dBFS, which would permanently cap that album's gain in players: treat anything above
+    # +12 dBFS as a decode glitch.
+    return float(lufs.group(1)), min(10 ** (float(peak.group(1)) / 20), 4.0)
 
 
-def replaygain(ffmpeg, tracks):
+def replaygain(ffmpeg, tracks, jobs=1):
     """-> ({file: (gain_db, peak)}, (album_gain_db, album_peak)); album = all tracks concatenated."""
-    per_track = {}
-    for t in tracks:
-        lufs, peak = measure(ffmpeg, ["-i", t["file"]])
-        per_track[t["file"]] = (RG_REFERENCE_LUFS - lufs, peak)
     with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as lst:
         for t in tracks:
             lst.write("file '%s'\n" % os.path.abspath(t["file"]).replace("'", "'\\''"))
     try:
-        lufs, peak = measure(ffmpeg, ["-f", "concat", "-safe", "0", "-i", lst.name])
+        # ffmpeg is the bottleneck (every file is decoded twice), so run the decodes side by side
+        with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+            album = pool.submit(measure, ffmpeg, ["-f", "concat", "-safe", "0", "-i", lst.name])
+            results = list(pool.map(lambda t: measure(ffmpeg, ["-i", t["file"]]), tracks))
+            album_lufs, _ = album.result()
     finally:
         os.unlink(lst.name)
-    return per_track, (RG_REFERENCE_LUFS - lufs, max(p for _, p in per_track.values()))
+    per_track = {t["file"]: (RG_REFERENCE_LUFS - lufs, peak) for t, (lufs, peak) in zip(tracks, results)}
+    return per_track, (RG_REFERENCE_LUFS - album_lufs, max(p for _, p in per_track.values()))
 
 
 def set_rg(tags, name, gain, peak):
@@ -194,8 +203,14 @@ def set_rg(tags, name, gain, peak):
     tags.setall(f"TXXX:REPLAYGAIN_{name}_PEAK", [TXXX(encoding=3, desc=f"REPLAYGAIN_{name}_PEAK", text=[f"{peak:.6f}"])])
 
 
-def apply_album(plan, tracks, canon, write_cover, ffmpeg=None):
-    rg_tracks, rg_album = replaygain(ffmpeg, tracks) if ffmpeg else ({}, None)
+def already_done(tracks, ffmpeg):
+    """True when every file is ID3v2.4 and (if ReplayGain is wanted) already has album gain: lets a run resume."""
+    return all(t["tags"].version == (2, 4, 0) and (not ffmpeg or "TXXX:REPLAYGAIN_ALBUM_GAIN" in t["tags"])
+               and t["tags"].get("TPE2") is not None for t in tracks)
+
+
+def apply_album(plan, tracks, canon, write_cover, ffmpeg=None, jobs=1):
+    rg_tracks, rg_album = replaygain(ffmpeg, tracks, jobs) if ffmpeg else ({}, None)
     dominant = plan["dominant"]
     for t in tracks:
         tags = t["tags"]
@@ -257,12 +272,15 @@ def main():
     ap.add_argument("--replaygain", action="store_true",
                     help="also measure loudness (ffmpeg ebur128) and write REPLAYGAIN_* tags; slow, read-heavy")
     ap.add_argument("--ffmpeg", default="ffmpeg", help="ffmpeg binary for --replaygain")
+    ap.add_argument("--jobs", type=int, default=1, help="parallel ffmpeg decodes for --replaygain")
+    ap.add_argument("--resume", action="store_true",
+                    help="skip albums whose files are already ID3v2.4 with ReplayGain album tags")
     ap.add_argument("--folder-covers", action="store_true", help="also write cover.jpg from embedded art if missing")
     args = ap.parse_args()
 
     overrides = json.load(open(args.overrides)) if args.overrides else {}
     albums = load_tracks(args.root, set(args.only or []))
-    canon = build_artist_map(albums)
+    canon = build_artist_map(albums, overrides.get("_artists"))
     plans = [(plan_album(f, a, ts, canon, overrides), ts) for (f, a), ts in albums.items()]
 
     for plan, _ in plans:
@@ -282,8 +300,12 @@ def main():
         print("dry-run: nothing written (use --apply)")
         return
     for plan, tracks in plans:
+        ffmpeg = args.ffmpeg if args.replaygain else None
+        if args.resume and already_done(tracks, ffmpeg):
+            print(f"  skip (done) {plan['folder']} / {plan['album']}", flush=True)
+            continue
         print(f"  {plan['folder']} / {plan['album']}", flush=True)
-        apply_album(plan, tracks, canon, args.folder_covers, args.ffmpeg if args.replaygain else None)
+        apply_album(plan, tracks, canon, args.folder_covers, ffmpeg, args.jobs)
     print("applied")
 
 

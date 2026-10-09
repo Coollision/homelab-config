@@ -225,6 +225,17 @@ a UniFi alias plus fixed IP so it does not drift. The same two-interface trap br
 Spotify app" pairing (advertised on the wrong IP): use the browser login. Details:
 [Music](../03-media-stack/music.md).
 
+### Grouping a Sonos with the web player drops the Sonos: `cliairplay did not connect` {#music-assistant-airplay-bridge-routing}
+
+Playing one stream on Sonos **and** the Music Assistant web player makes Music Assistant bridge each Sonos
+over AirPlay/Sendspin. That needs the speaker to connect *back* to Music Assistant, but with the `sbr`
+chained plugin the pod reaches VLAN 5 from its cluster IP (NAT'd), so the announced address is unreachable and
+the Sonos leaves the group after about 30 seconds (`Woonkamer gave up again within 30s of being re-joined`).
+Sonos-only groups use native grouping and are unaffected, which is why it looks intermittent. The chart's
+`setup-vlan5-route` init container adds an on-link route for the VLAN 5 subnet via `net1`. Adding that route
+live to a running pod makes every existing Sonos connection drop once (all players log `Disconnected from
+player API`, and a portable like the Roam can be removed from the group); the pod recovers by itself.
+
 ### A read-only `subPath` mount waits for a folder that nothing creates {#readonly-subpath-mount-needs-folder}
 
 Music Assistant mounts only the `slskd` subfolder of the Downloads share, read-only. The kubelet cannot create a

@@ -38,6 +38,33 @@ multusNetworks:
     ipam:
       type: dhcp
 
+# The sbr plugin keeps net1's routes out of the main table, so by default the pod reaches the Sonos players
+# from its cluster IP (NAT'd through the node). That is enough for the native Sonos control and for the HTTP
+# stream the players pull from the published IP, but NOT for the AirPlay/Sendspin bridge Music Assistant uses
+# to sync a Sonos with a non-Sonos player (e.g. the web player): the player must connect BACK to the address
+# Music Assistant announces, which then is the unreachable cluster IP, so the speaker is dropped from the group
+# ("cliairplay did not connect"). An on-link route for the VLAN 5 subnet makes every connection to the players
+# originate from the net1 address. Same pattern as matter-server's route init container.
+initContainers:
+  - name: setup-vlan5-route
+    image: busybox:1.38
+    command:
+      - sh
+      - -c
+      - |
+        for i in $(seq 1 30); do
+          ip -4 addr show dev net1 2>/dev/null | grep -q 'inet ' && break
+          sleep 1
+        done
+        ip route replace 192.168.5.0/24 dev net1
+        ip route show
+    securityContext:
+      runAsUser: 0
+      runAsGroup: 0
+      capabilities:
+        add:
+          - NET_ADMIN
+
 # No official figures. A 4 GB Home Assistant Green was reported OOM-killed, and the first library sync is
 # the heavy part (16 parallel tag reads). Watch it after the first scan and tune.
 resources:
