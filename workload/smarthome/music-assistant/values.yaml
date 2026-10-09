@@ -90,18 +90,13 @@ storage:
     nameSuffix: data
     volumeName: music-assistant
     protect: true
-  # Legacy library (flat, one folder per album), read-only. PV/PVC in templates/storage.yaml.
+  # The music library (legacy folders and everything the intake files into it), read-only. Music Assistant
+  # deliberately has no access to the Downloads share: new music only appears here after the intake has
+  # tagged it and moved it in. PV/PVC in templates/storage.yaml.
   - type: existingClaim
     mountPath: /media/music
     claimName: music-assistant-library
     nameSuffix: library
-    readOnly: true
-  # New downloads: only the slskd subfolder of the Downloads share (the share also holds video downloads).
-  - type: existingClaim
-    mountPath: /media/downloads
-    claimName: music-assistant-downloads
-    nameSuffix: downloads
-    subPath: slskd
     readOnly: true
 
 probes:

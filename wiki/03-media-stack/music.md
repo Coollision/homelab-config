@@ -35,10 +35,11 @@ connections that a sleeping pod cannot answer).
 - **Legacy library:** the Music share, mounted read-only into Music Assistant at `/media/music`.
   Music Assistant only ever writes `.m3u` playlists into a library, so a read-only mount only costs it
   local-playlist editing. Covers, metadata and its database live in its own `/data`.
-- **New downloads:** slskd writes to a `slskd` subfolder of the existing Downloads share (the same
-  `arr-stack-downloads` claim radarr and sonarr use, selected with a `subPath`). Music Assistant mounts
-  the same share read-only, again with `subPath: slskd`, so it never sees the video downloads.
-  slskd's incomplete folder is a *sibling* (`slskd-incomplete`), outside what Music Assistant scans.
+- **New downloads are an inbox, not part of the library.** slskd writes to a `slskd` subfolder of the existing
+  Downloads share (the same `arr-stack-downloads` claim radarr and sonarr use, selected with a `subPath`), its
+  incomplete files to a sibling `slskd-incomplete`. **Music Assistant has no access to the Downloads share at
+  all**: a finished download only reaches the library after the intake step has tagged it and moved it into the
+  Music share.
 - **Why Music Assistant has its own PV/PVC pairs:** a PV binds to exactly one PVC and PVCs are namespaced,
   so the ones in `workload/arr-stack/shared/_storage.yaml` cannot be reused from `smarthome`. They are
   in the chart's `templates/storage.yaml` and point at the same two NFS paths.
@@ -106,9 +107,9 @@ on that VLAN (mDNS is on for the VLAN; IGMP snooping is deliberately off, see th
 
 ### Providers
 
-- **Filesystem (local), twice:** `/media/music` (legacy library) and `/media/downloads` (new downloads).
+- **Filesystem (local):** one provider on `/media/music` (the legacy folders plus everything the intake files in).
   There is no folder-layout setting: **tags are always primary**, folders are only a secondary signal.
-  Add these **before** Spotify and let each scan finish, because Spotify artwork can otherwise win.
+  Add it **before** Spotify and let the scan finish, because Spotify artwork can otherwise win.
 - **Sonos:** discovered over mDNS (`_sonos._tcp`). Manual IPs exist as a fallback only.
 - **Home Assistant:** the HA integration connects to Music Assistant on 8095; a ClusterIP service is
   enough, and Music Assistant controls Sonos directly and does not need Home Assistant.
@@ -134,8 +135,8 @@ on that VLAN (mDNS is on for the VLAN; IGMP snooping is deliberately off, see th
 - Ignored automatically: files and folders starting with `.` or `_` (so `_Doorbel` and `_Nieuw` in the
   share are invisible), `#recycle`, `@eaDir`, non-audio files, non-UTF-8 names. Other Synology internals
   starting with `@` are **not** special-cased.
-- Two sources with overlapping albums merge by name/artist/year, or by MusicBrainz ID, which this library
-  mostly lacks, so expect a few duplicates between the legacy library and new downloads.
+- Albums merge by name/artist/year, or by MusicBrainz ID, which the legacy library mostly lacks, so an album
+  imported twice under slightly different tags can show up as two entries.
 
 ### State, backup and upgrades
 
@@ -178,14 +179,11 @@ Image `slskd/slskd`, pinned to the newest stable tag (ignore `canary` and the ro
 - **If results are too thin**, the options are a forwarded port (TCP 50300 to a LoadBalancer service) or a
   VPN with port forwarding; neither is built.
 - **Directories:** slskd does not create overridden directories itself; the kubelet creates the `subPath`
-  folders on the Downloads share on first start. Music Assistant mounts `slskd` read-only with a
-  `subPath`, which **fails until that folder exists** (`CreateContainerConfigError`, retries by itself),
-  so slskd should come up first.
+  folders on the Downloads share on first start.
 - **Health:** `/health` is unauthenticated and is the probe.
-- Downloaded files are played as delivered. They are **not** tagged: a file without an artist tag gets the
-  part of its filename before the first ` - ` as artist, which for `NN - Title - Artist.mp3` is the track
-  number. Tag new downloads (Picard, or the cleanup script) before they are scanned; the intake tooling
-  (beets or Lidarr) is deliberately undecided, see [Remaining work](../06-todo/music-stack.md).
+- Downloads are **not** played as delivered: they sit in the inbox until the intake tags and files them
+  (a file without an artist tag would otherwise get the part of its filename before the first ` - ` as
+  artist, which for `NN - Title - Artist.mp3` is the track number).
 
 ## The legacy library and its tag cleanup
 
@@ -239,9 +237,10 @@ permanently cap that album's gain in players (loud, clipped 128 kbps MP3s normal
 - **Fix the tags in place** instead of keeping an untouched copy: backups exist, nothing else relies on the
   old convention (Plex and the NAS indexer only read it, Audio Station is not in use).
 - **No inbound port for Soulseek** for a one-week trial: reversible and lowest exposure.
-- **New downloads on the Downloads volume** (subPath), not a second share: no extra NFS path to manage.
-- **Intake tooling and Lidarr deferred** until slskd has proven itself. Lidarr is weak for compilations and
-  its dependencies (Prowlarr, the download client) live on the NAS, not in this cluster.
+- **New downloads are an inbox on the Downloads volume** (subPath), and Music Assistant cannot see it: the
+  library Music Assistant plays from only ever contains tagged, filed music.
+- **Lidarr deferred.** It is weak for compilations and its dependencies (Prowlarr, the download client) live
+  on the NAS, not in this cluster.
 
 ## First rollout checklist
 

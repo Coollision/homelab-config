@@ -236,12 +236,6 @@ Sonos-only groups use native grouping and are unaffected, which is why it looks 
 live to a running pod makes every existing Sonos connection drop once (all players log `Disconnected from
 player API`, and a portable like the Roam can be removed from the group); the pod recovers by itself.
 
-### A read-only `subPath` mount waits for a folder that nothing creates {#readonly-subpath-mount-needs-folder}
-
-Music Assistant mounts only the `slskd` subfolder of the Downloads share, read-only. The kubelet cannot create a
-`subPath` on a read-only volume, so until slskd (read-write) has created the folder the pod sits in
-`CreateContainerConfigError` and retries on its own. Not a fault, just ordering: bring slskd up first.
-
 ### Thread and DNS: surviving an ISP prefix rotation {#thread-and-dns-surviving-isp-prefix-rotation}
 
 Anything that hardcodes a globally-routable IPv6 address derived from the ISP's delegated
