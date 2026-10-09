@@ -1,0 +1,70 @@
+# Music Assistant needs its own PV/PVC pair per NFS path: a PV binds to exactly one PVC and PVCs are
+# namespaced, so the arr-stack ones (workload/arr-stack/shared/_storage.yaml) cannot be reused here.
+# Both are mounted read-only in the container (readOnly + subPath in values.yaml).
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: music-assistant-library
+  labels:
+    type: local
+spec:
+  capacity:
+    storage: 1Ti
+  accessModes:
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Retain
+  nfs:
+    server: <secret:kv/data/storage/nfs~server-ip>
+    path: "<secret:kv/data/storage/nfs~music-path>"
+    readOnly: true
+  mountOptions:
+    - vers=4.1
+    - hard
+    - ro
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: music-assistant-downloads
+  labels:
+    type: local
+spec:
+  capacity:
+    storage: 10Ti
+  accessModes:
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Retain
+  nfs:
+    server: <secret:kv/data/storage/nfs~server-ip>
+    path: "<secret:kv/data/storage/nfs~downloads-path>"
+    readOnly: true
+  mountOptions:
+    - vers=4.1
+    - hard
+    - ro
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: music-assistant-library
+spec:
+  resources:
+    requests:
+      storage: 1Ti
+  volumeName: music-assistant-library
+  storageClassName: ""
+  accessModes:
+    - ReadOnlyMany
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: music-assistant-downloads
+spec:
+  resources:
+    requests:
+      storage: 10Ti
+  volumeName: music-assistant-downloads
+  storageClassName: ""
+  accessModes:
+    - ReadOnlyMany

@@ -214,6 +214,23 @@ and caused an OOMKill on startup that presented in the browser as "WebSocket not
 connected" with no obvious cause. Check for an OOMKill first if this symptom recurs after
 a version bump.
 
+### Music Assistant on Kubernetes: Sonos plays nothing unless the published IP is pinned {#music-assistant-published-ip}
+
+Music Assistant officially requires host networking and lists Kubernetes as unsupported. In this cluster
+it reaches the Sonos players (VLAN 5) through a Multus macvlan leg. Its "auto" detection of the address it
+hands to players takes the source address of the **default route**, which in the pod is `eth0` (the cluster
+IP), so a player is told to fetch the stream from an address it cannot reach and playback silently fails.
+Fix: **Settings → Core → Streams (advanced) → Published IP address** = the `net1` address, and give that stub
+a UniFi alias plus fixed IP so it does not drift. The same two-interface trap breaks the Spotify "Use the
+Spotify app" pairing (advertised on the wrong IP): use the browser login. Details:
+[Music](../03-media-stack/music.md).
+
+### A read-only `subPath` mount waits for a folder that nothing creates {#readonly-subpath-mount-needs-folder}
+
+Music Assistant mounts only the `slskd` subfolder of the Downloads share, read-only. The kubelet cannot create a
+`subPath` on a read-only volume, so until slskd (read-write) has created the folder the pod sits in
+`CreateContainerConfigError` and retries on its own. Not a fault, just ordering: bring slskd up first.
+
 ### Thread and DNS: surviving an ISP prefix rotation {#thread-and-dns-surviving-isp-prefix-rotation}
 
 Anything that hardcodes a globally-routable IPv6 address derived from the ISP's delegated

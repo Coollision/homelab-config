@@ -1,0 +1,110 @@
+fullnameOverride: slskd
+
+# StatefulSet: /app (databases, slskd.yml) is a RWO volume.
+statefulset:
+  image:
+    repository: slskd/slskd
+    # Newest stable on Docker Hub (2026-10). Ignore the 'canary' and 0.26.0.65534-<sha> rolling tags.
+    tag: 0.26.0
+  ports:
+    web: 5030
+    # Soulseek listen port. Deliberately NOT forwarded on the router and not exposed through a
+    # LoadBalancer (see wiki/03-media-stack/music.md, one-week trial). It is only reachable inside the cluster.
+    soulseek: 50300
+
+podSecurityContext:
+  fsGroup: 1000
+securityContext:
+  # non-root: no PUID/PGID (setting both makes the entrypoint exit). /app must be writable, hence fsGroup.
+  runAsUser: 1000
+  runAsGroup: 1000
+
+secrets:
+  - name: slskd
+    secret_kv:
+      web_username: <secret:kv/data/apps/slskd~web_username>
+      web_password: <secret:kv/data/apps/slskd~web_password>
+      api_key: <secret:kv/data/apps/slskd~api_key>
+      jwt_key: <secret:kv/data/apps/slskd~jwt_key>
+      slsk_username: <secret:kv/data/apps/slskd~slsk_username>
+      slsk_password: <secret:kv/data/apps/slskd~slsk_password>
+
+config:
+  TZ: Europe/Brussels
+  # Behind Traefik with its own TLS: plain HTTP inside the cluster, no second self-signed listener.
+  SLSKD_NO_HTTPS: "true"
+  # The web UI defaults to slskd/slskd, always override. JWT key keeps logins valid across restarts.
+  SLSKD_USERNAME: {secretKeyRef: {name: slskd, key: web_username}}
+  SLSKD_PASSWORD: {secretKeyRef: {name: slskd, key: web_password}}
+  SLSKD_API_KEY: {secretKeyRef: {name: slskd, key: api_key}}
+  SLSKD_JWT_KEY: {secretKeyRef: {name: slskd, key: jwt_key}}
+  # Soulseek has no signup: the first login with an unused username creates the account.
+  SLSKD_SLSK_USERNAME: {secretKeyRef: {name: slskd, key: slsk_username}}
+  SLSKD_SLSK_PASSWORD: {secretKeyRef: {name: slskd, key: slsk_password}}
+  # Complete downloads land in Downloads/slskd (Music Assistant reads exactly this folder, read-only).
+  # Incomplete files live OUTSIDE it, in Downloads/slskd-incomplete, so half-finished files are never scanned.
+  # slskd does not create overridden directories itself; the kubelet creates the subPath folders.
+  SLSKD_DOWNLOADS_DIR: /downloads
+  SLSKD_INCOMPLETE_DIR: /incomplete
+  # An empty folder, so nothing from the personal library is ever shared. Putting a few files there is the
+  # owner's call after the trial (some peers refuse users that share nothing).
+  SLSKD_SHARED_DIR: /share
+  # Nothing is shared, so the distributed network is not needed (per slskd docs).
+  SLSKD_SLSK_NO_DNET: "true"
+  # The image defaults the .NET heap cap to 2GiB, above this pod's limit; cap it below the limit instead.
+  DOTNET_GCHeapHardLimit: "0x30000000"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+# Internal only (no external ingress). The UI sends the API key as a query parameter, hence HTTPS.
+ingress_internal_secure:
+  host: slskd.<secret:kv/data/domains~domain>
+  port: web
+
+storage:
+  - type: longhorn
+    mountPath: /app
+    size: 2Gi
+    nameSuffix: config
+    volumeName: arr-stack-slskd-config
+    protect: true
+  # Same existing claim as radarr/sonarr; subPath keeps slskd inside its own two folders of the share.
+  - type: existingClaim
+    mountPath: /downloads
+    claimName: arr-stack-downloads
+    nameSuffix: downloads
+    subPath: slskd
+  - type: existingClaim
+    mountPath: /incomplete
+    claimName: arr-stack-downloads
+    nameSuffix: incomplete
+    subPath: slskd-incomplete
+  - type: emptyDir
+    mountPath: /share
+    nameSuffix: share
+
+probes:
+  # /health is unauthenticated (the image's own HEALTHCHECK uses it).
+  startup:
+    httpGet:
+      path: /health
+      port: web
+    periodSeconds: 5
+    failureThreshold: 60
+  readiness:
+    httpGet:
+      path: /health
+      port: web
+    periodSeconds: 10
+  liveness:
+    httpGet:
+      path: /health
+      port: web
+    periodSeconds: 30
+    failureThreshold: 5

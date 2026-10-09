@@ -35,7 +35,8 @@ Thread, to reach IoT devices directly — gets a `net1`/`net2` MACVLAN leg defin
 follows `02:{40|05}:67:9d:64:XX` — second octet `40` = VLAN 40 (IoT), `05` = VLAN 5
 (Intern) — so you can tell which VLAN a pod's stub belongs to at a glance in the UniFi
 client list. See [Matter & Thread](../02-smarthome/matter-thread.md) and
-[ESPHome](../02-smarthome/esphome.md) for concrete users of this pattern, and
+[ESPHome](../02-smarthome/esphome.md) (and [Music Assistant](../03-media-stack/music.md), which uses a
+VLAN 5 leg to reach Sonos) for concrete users of this pattern, and
 [Known Issues](../05-operations/known-issues.md#multus-dhcphostname-is-a-dead-end) for why
 naming these stubs needs a UniFi alias, not the chart's `dhcpHostname` field.
 

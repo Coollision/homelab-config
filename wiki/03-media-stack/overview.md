@@ -9,6 +9,9 @@ Radarr/Sonarr/Prowlarr deployment the household might also use elsewhere (e.g. o
 verify by content (item counts, a known title) before acting on it. See
 [Known Issues → verify a service's actual location](../05-operations/known-issues.md#verify-where-a-service-actually-runs-before-acting-on-it).
 
+Music is a separate, smaller stack (Music Assistant in `smarthome`, slskd here): see
+[Music](music.md).
+
 ## Request flow
 
 ```
