@@ -5,8 +5,8 @@
 > **Status (2026-10-09):** deployed and verified: Music Assistant and slskd are healthy, Sonos works (group
 > Sonos players natively, see the Roam entry in known issues), the legacy library is cleaned and scanned, Radio
 > Browser and Spotify are added, Music Assistant has no access to Downloads any more. The intake is deployed
-> but not yet verified with a real download. Still to do: the intake checks, the ReplayGain pass (about 4 hours
-> from 16:15, runs on its own) and the checks below. This page is the checklist for what is left and for
+> and verified with two real downloads. Still to do: the review flow with a messy compilation, the ReplayGain pass
+> on the legacy library (runs on its own) and the checks below. This page is the checklist for what is left and for
 > what is deliberately not built. Delete it (and fold the leftovers into [Music](../03-media-stack/music.md))
 > once the rollout checks below are done.
 
@@ -29,10 +29,9 @@ radio playing across all devices, legacy library scanned (116 albums, 31 album a
 
 ## Intake (music-intake)
 
-- [ ] Image `latest` pulled, pod Ready, UI reachable on its internal ingress, status strip shows slskd reachable
-      and Music Assistant configured.
-- [ ] First real run: download one album through slskd, watch it go waiting -> ready/needs_review -> imported,
-      the folder appear in the Music share with the right tags, the inbox empty, and Music Assistant show it.
+- [x] Image pulled, pod Ready, slskd reachable, Music Assistant configured, inbox and library writable (2026-10-09).
+- [x] First real run: two slskd downloads were filed automatically with the right tags, the inbox ended empty and
+      Music Assistant showed both albums (see the music page).
 - [ ] Review flow with a compilation from an uploader with poor tags (edit, approve).
 - [ ] Decide whether the Python tagger should be ported to Go later.
 

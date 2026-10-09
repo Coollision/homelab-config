@@ -211,8 +211,15 @@ slskd -> Downloads/slskd (inbox) -> settle + slskd finished? -> analyse -> confi
   without ID3v1, `CD1`/`CD2` merged with disc numbers, ReplayGain, `cover.jpg`), now for mp3, m4a and flac.
 - **Safety.** Tagged in the inbox, copied into a hidden `.<name>.partial` folder in the library, renamed into place
   (the library never shows half an album), then the inbox files are removed and leftovers (nfo, scans) deleted so
-  the inbox ends up empty. If tagging fails for any file nothing moves; a restart in the middle marks the item
-  `failed` for a retry.
+  the inbox ends up empty. If tagging fails for any file nothing moves. A restart in the middle (Keel restarts the
+  pod on every new image) is resumed automatically: not yet in the library -> the import runs again, already
+  filed -> only the bookkeeping is finished, ambiguous -> `failed` with an explanation for a person to look at.
+- **Speed.** ReplayGain dominates the import time: about a minute and a half for a 16-track mp3 album, about ten
+  minutes for a 28-track m4a compilation on the 2-core pod. Set `INTAKE_REPLAYGAIN=false` if speed matters more
+  (Music Assistant measures loudness itself when the tags are missing).
+- **Verified 2026-10-09** with two real slskd downloads: an mp3 artist album (auto-filed as `Artist - Album`, ID3v2.4,
+  ReplayGain, no ID3v1) and an m4a compilation (filed as `Album`, `Various Artists`, compilation flag, ReplayGain),
+  the inbox left empty and both albums visible in Music Assistant after the sync the intake triggered itself.
 - **Storage.** `/inbox` is the claim radarr and sonarr also use, with `subPath: slskd` (read-write, because it is
   cleaned out). `/library` is the Music share through its own PV/PVC in `arr-stack` (read-write here, while Music
   Assistant mounts the same path read-only). The SQLite job state is on a small Longhorn volume.
