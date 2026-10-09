@@ -382,6 +382,7 @@ storage:
     replicas: 2  # logs, ephemeral — 2 replicas survive one node down
     type: longhorn
     accessMode: ReadWriteOnce
+    recurringJobs: [filesystem-trim, snapshot-cleanup]  # rebuildable metrics/logs: no backup, keep trim+cleanup
 
 storageConfig:
   prefix: "monitoring"
