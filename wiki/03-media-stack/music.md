@@ -162,6 +162,19 @@ Image `slskd/slskd`, pinned to the newest stable tag (ignore `canary` and the ro
   share nothing. The share is an empty folder on purpose, so nothing from the personal library is exposed;
   adding a few files is a decision for after the one-week trial. Egress is the normal home connection,
   and the legal side of what is downloaded is the owner's responsibility.
+- **Trial findings (day 1, 2026-10-09).** With no inbound port the setup works: searches return plenty of
+  sources (a 2006 compilation: 14 users; a popular album: 150, nearly all with a free upload slot and an empty
+  queue) and transfers run at about 2.5–3 MB/s. Two real album downloads were done through the API as a test
+  (an artist album at 320 kbps and a 2-disc compilation). Observed failure modes, all per peer:
+  - **`Banned`**: the peer refuses us (a peer that shares nothing is a common ban target). All of that peer's
+    files are rejected immediately; just pick another source.
+  - **A stalled transfer**: one file sits at 0 KB/s (ETA hours) and holds that peer's single upload slot, so the
+    rest stay "Queued, Remotely". Cancel the user's transfers and re-queue from another source.
+  - Practical source choice: free upload slot, queue length 0, a complete folder for every disc.
+  Finished albums land in `Downloads/slskd/<uploader's folder name>`; after a sync Music Assistant showed them
+  as proper albums (the artist album under its artist, the compilation under `Various Artists`), because
+  these uploaders had tagged them correctly. Compilation downloads are often m4a or FLAC, which the ID3-only
+  cleanup script does not touch.
 - **If results are too thin**, the options are a forwarded port (TCP 50300 to a LoadBalancer service) or a
   VPN with port forwarding; neither is built.
 - **Directories:** slskd does not create overridden directories itself; the kubelet creates the `subPath`
