@@ -1,0 +1,95 @@
+fullnameOverride: music-intake
+
+# Inbox -> tag -> library service (github.com/Coollision/music-intake). Albums that slskd finishes in
+# Downloads/slskd are tagged (compilations get "Various Artists", ID3v2.4, ReplayGain, cover.jpg) and filed into the
+# Music share as <Artist - Album> / <Compilation>; unsure ones wait in the review UI. Music Assistant only ever reads
+# the Music share, so nothing untagged reaches it.
+podSecurityContext:
+  # The image runs as uid/gid 1000; this makes the Longhorn /data volume writable for it.
+  fsGroup: 1000
+
+statefulset:
+  image:
+    repository: ghcr.io/coollision/music-intake
+    tag: latest
+    imagePullPolicy: Always
+  ports:
+    http: 4000
+
+# Actively developed: poll ghcr for a new `latest` digest and restart to pick it up (same as the other self-built apps).
+keel:
+  policy: force
+  pollSchedule: "@every 5m"
+
+secrets:
+  - name: music-intake
+    secret_kv:
+      ma_token: <secret:kv/data/apps/music-intake~ma_token>
+
+config:
+  TZ: Europe/Brussels
+  LOGLEVEL: INFO
+  DB_PATH: /data/intake.sqlite
+  INTAKE_INBOXDIR: /inbox
+  INTAKE_LIBRARYDIR: /library
+  # slskd finishes an album folder in one go but can stall halfway; asking slskd avoids filing half an album.
+  INTAKE_SLSKD_URL: http://slskd-service:5030
+  INTAKE_SLSKD_APIKEY: {secretKeyRef: {name: slskd, key: api_key}}
+  # A fresh library sync in Music Assistant right after an album is filed (otherwise its 12-hourly scan finds it).
+  INTAKE_MUSICASSISTANT_URL: http://music-assistant-service.smarthome:8095
+  INTAKE_MUSICASSISTANT_TOKEN: {secretKeyRef: {name: music-intake, key: ma_token}}
+  # How long a folder must be unchanged before it counts as finished.
+  INTAKE_SETTLESECONDS: "180"
+  # ReplayGain decodes every file twice: keep it gentle so it does not starve the node.
+  INTAKE_REPLAYGAINJOBS: "2"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 2000m
+    memory: 1Gi
+
+# Internal only (no external ingress, and there is no login of its own).
+ingress_internal_secure:
+  host: intake.<secret:kv/data/domains~domain>
+  port: http
+
+storage:
+  - type: longhorn
+    mountPath: /data
+    size: 1Gi
+    nameSuffix: data
+    volumeName: arr-stack-music-intake
+    protect: true
+  # Inbox: slskd's finished downloads. Read-write, because the folder is cleaned out after filing.
+  - type: existingClaim
+    mountPath: /inbox
+    claimName: arr-stack-downloads
+    nameSuffix: inbox
+    subPath: slskd
+  # Library: the Music share (shared with Music Assistant, which mounts it read-only).
+  - type: existingClaim
+    mountPath: /library
+    claimName: arr-stack-music
+    nameSuffix: library
+
+probes:
+  startup:
+    httpGet:
+      path: /health
+      port: http
+    periodSeconds: 3
+    failureThreshold: 30
+  readiness:
+    httpGet:
+      path: /health
+      port: http
+    periodSeconds: 10
+  liveness:
+    httpGet:
+      path: /health
+      port: http
+    periodSeconds: 30
+    failureThreshold: 5

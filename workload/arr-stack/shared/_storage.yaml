@@ -79,6 +79,26 @@ spec:
     - hard
 ---
 apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: arr-stack-music
+  namespace: arr-stack
+  labels:
+    type: local
+spec:
+  capacity:
+    storage: 1Ti
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  nfs:
+    server: <secret:kv/data/storage/nfs~server-ip>
+    path: "<secret:kv/data/storage/nfs~music-path>"
+  mountOptions:
+    - vers=4.1
+    - hard
+---
+apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: arr-stack-video
@@ -130,6 +150,20 @@ spec:
     requests:
       storage: 8Ti
   volumeName: arr-stack-books
+  storageClassName: ""
+  accessModes:
+    - ReadWriteMany
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: arr-stack-music
+  namespace: arr-stack
+spec:
+  resources:
+    requests:
+      storage: 1Ti
+  volumeName: arr-stack-music
   storageClassName: ""
   accessModes:
     - ReadWriteMany

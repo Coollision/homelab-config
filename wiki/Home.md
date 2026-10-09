@@ -63,6 +63,7 @@ The Radarr/Sonarr/Prowlarr automation pipeline — `workload/arr-stack/`.
 | Page | Covers |
 |---|---|
 | [Overview & topology](03-media-stack/overview.md) | Request flow, every app, the shared DB and NFS libraries |
+| [Music](03-media-stack/music.md) | Music Assistant (Sonos, Spotify), slskd, the legacy library and its tag cleanup |
 
 ### [04 · Apps](04-apps/)
 Everything else — `workload/apps/`, `workload/databases/`, `workload/secrets/`, `workload/proxies/`.
@@ -78,6 +79,12 @@ Everything else — `workload/apps/`, `workload/databases/`, `workload/secrets/`
 | [Known Issues & Troubleshooting](05-operations/known-issues.md) | Every real incident and its root cause, by symptom |
 | [Ansible cheat sheet](05-operations/ansible-cheatsheet.md) | Ad-hoc commands: uptime, reboot, facts, targeting a subset of nodes |
 | [kubectl / cluster cheat sheet](05-operations/kubectl-cheatsheet.md) | Draining nodes, restarting crashy pods, ArgoCD cache-busting, Sablier status |
+
+### [06 · TODO](06-todo/)
+Planned work that is not built yet. Pages move to their normal section once done.
+| Page | Covers |
+|---|---|
+| [Music stack](06-todo/music-stack.md) | First-rollout checklist, library cleanup run, slskd trial, deferred intake tooling |
 
 ## The one-paragraph mental model
 

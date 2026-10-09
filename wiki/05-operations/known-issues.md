@@ -214,6 +214,45 @@ and caused an OOMKill on startup that presented in the browser as "WebSocket not
 connected" with no obvious cause. Check for an OOMKill first if this symptom recurs after
 a version bump.
 
+### The Sonos Roam keeps dropping out of a group {#roam-drops-in-bridged-groups}
+
+Symptom: audio stops for a moment every few seconds on the Roam while the group plays. The Roam's Wi-Fi is fine
+(5 GHz, strong signal, days of uptime) and it never goes `unavailable`. Cause: once a group was formed with a
+non-Sonos player (the web player), Music Assistant drives **every** Sonos in it through its AirPlay/Sendspin
+bridge, and that output stays selected for as long as the players stay grouped, even after the web player left.
+The Roam is far slower to start an AirPlay 2 stream than the wired or mains-powered Sonos (it lags 1.4-3 s every
+time, `device could not be audible`), so Music Assistant keeps cold-restarting it. Fix: stop playback, ungroup
+(`players/cmd/ungroup_many`) so the active output protocol clears when the players are idle, then regroup the
+Sonos players **natively** (`players/cmd/set_members` on the leader). Keep the web player out of Sonos groups (or
+at least the Roam). A phone or browser player (Sendspin) can join such a group, but the picker only lists it on its own device while its
+setting **Hide this player in the user interface** is on (the default, together with `private`): turn that off in the
+player's settings to see it from every device. Joining a Sonos group makes Music Assistant bridge **all** members
+(and it re-adds the Roam if you remove it), so a group with a phone is the case where the Roam drops. Music Assistant
+also auto-registers every AirPlay receiver it finds, for example a Mac, and
+retries to join it with `403` errors in the log; disable such entries under the player settings.
+
+### Music Assistant on Kubernetes: Sonos plays nothing unless the published IP is pinned {#music-assistant-published-ip}
+
+Music Assistant officially requires host networking and lists Kubernetes as unsupported. In this cluster
+it reaches the Sonos players (VLAN 5) through a Multus macvlan leg. Its "auto" detection of the address it
+hands to players takes the source address of the **default route**, which in the pod is `eth0` (the cluster
+IP), so a player is told to fetch the stream from an address it cannot reach and playback silently fails.
+Fix: **Settings → Core → Streams (advanced) → Published IP address** = the `net1` address, and give that stub
+a UniFi alias plus fixed IP so it does not drift. The same two-interface trap breaks the Spotify "Use the
+Spotify app" pairing (advertised on the wrong IP): use the browser login. Details:
+[Music](../03-media-stack/music.md).
+
+### Grouping a Sonos with the web player drops the Sonos: `cliairplay did not connect` {#music-assistant-airplay-bridge-routing}
+
+Playing one stream on Sonos **and** the Music Assistant web player makes Music Assistant bridge each Sonos
+over AirPlay/Sendspin. That needs the speaker to connect *back* to Music Assistant, but with the `sbr`
+chained plugin the pod reaches VLAN 5 from its cluster IP (NAT'd), so the announced address is unreachable and
+the Sonos leaves the group after about 30 seconds (`Woonkamer gave up again within 30s of being re-joined`).
+Sonos-only groups use native grouping and are unaffected, which is why it looks intermittent. The chart's
+`setup-vlan5-route` init container adds an on-link route for the VLAN 5 subnet via `net1`. Adding that route
+live to a running pod makes every existing Sonos connection drop once (all players log `Disconnected from
+player API`, and a portable like the Roam can be removed from the group); the pod recovers by itself.
+
 ### Thread and DNS: surviving an ISP prefix rotation {#thread-and-dns-surviving-isp-prefix-rotation}
 
 Anything that hardcodes a globally-routable IPv6 address derived from the ISP's delegated

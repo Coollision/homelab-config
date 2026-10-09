@@ -1,0 +1,116 @@
+fullnameOverride: music-assistant
+
+# StatefulSet (not Deployment): /data is a RWO volume, so a rollout must never run two pods on it.
+statefulset:
+  image:
+    repository: ghcr.io/music-assistant/server
+    # Pin a stable 2.10.x tag. Beta 2.11.0b2 had a Sonos regression, and a downgrade after a database
+    # migration is unsafe: back up /data (Longhorn snapshot) before bumping, see wiki/03-media-stack/music.md.
+    tag: 2.10.6
+  ports:
+    web: 8095
+    # Stream server: plain HTTP, no auth, by design. Sonos pulls audio from it, on the VLAN 5 leg below.
+    # Never route this port through an ingress.
+    stream: 8097
+
+config:
+  TZ: Europe/Brussels
+  LOG_LEVEL: info
+
+# Not officially supported on Kubernetes (the docs require host networking for mDNS/player access), so Sonos
+# is reached through a MACVLAN leg on VLAN 5 (Intern), where the three players live.
+# The default route stays on eth0 (cluster, NFS, ingress); sbr confines net1's DHCP routes to their own table.
+# After the first start, Music Assistant must be told which address to hand to the players, otherwise it
+# advertises the eth0 pod IP and Sonos cannot reach it:
+#   Settings > Core > Streams (advanced) > Published IP address = the net1 address.
+# Give that stub a UniFi alias and a fixed IP so the address never changes.
+multusNetworks:
+  - name: music-assistant-vlan5
+    interface: net1
+    mac: 02:05:67:9d:64:67
+    dhcpHostname: _stub_music-assistant-lan
+    parentInterface: vlan5
+    nodeLabelKey: vlan5-trunk
+    type: macvlan
+    mode: bridge
+    chainedPlugins:
+      - type: sbr
+    ipam:
+      type: dhcp
+
+# The sbr plugin keeps net1's routes out of the main table, so by default the pod reaches the Sonos players
+# from its cluster IP (NAT'd through the node). That is enough for the native Sonos control and for the HTTP
+# stream the players pull from the published IP, but NOT for the AirPlay/Sendspin bridge Music Assistant uses
+# to sync a Sonos with a non-Sonos player (e.g. the web player): the player must connect BACK to the address
+# Music Assistant announces, which then is the unreachable cluster IP, so the speaker is dropped from the group
+# ("cliairplay did not connect"). An on-link route for the VLAN 5 subnet makes every connection to the players
+# originate from the net1 address. Same pattern as matter-server's route init container.
+initContainers:
+  - name: setup-vlan5-route
+    image: busybox:1.38
+    command:
+      - sh
+      - -c
+      - |
+        for i in $(seq 1 30); do
+          ip -4 addr show dev net1 2>/dev/null | grep -q 'inet ' && break
+          sleep 1
+        done
+        ip route replace 192.168.5.0/24 dev net1
+        ip route show
+    securityContext:
+      runAsUser: 0
+      runAsGroup: 0
+      capabilities:
+        add:
+          - NET_ADMIN
+
+# No official figures. A 4 GB Home Assistant Green was reported OOM-killed, and the first library sync is
+# the heavy part (16 parallel tag reads). Watch it after the first scan and tune.
+resources:
+  requests:
+    cpu: 100m
+    memory: 1Gi
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+
+# Internal only. No external ingress, and not scale-to-zero: Sonos and Home Assistant hold long-lived
+# connections that a sleeping pod cannot answer.
+ingress_internal_secure:
+  host: music.<secret:kv/data/domains~domain>
+  port: web
+
+storage:
+  # Database, settings, provider credentials (Spotify), cache. Playlists, favourites and play counts live
+  # only here, so it is protected.
+  - type: longhorn
+    mountPath: /data
+    size: 5Gi
+    nameSuffix: data
+    volumeName: music-assistant
+    protect: true
+  # The music library (legacy folders and everything the intake files into it), read-only. Music Assistant
+  # deliberately has no access to the Downloads share: new music only appears here after the intake has
+  # tagged it and moved it in. PV/PVC in templates/storage.yaml.
+  - type: existingClaim
+    mountPath: /media/music
+    claimName: music-assistant-library
+    nameSuffix: library
+    readOnly: true
+
+probes:
+  startup:
+    tcpSocket:
+      port: web
+    periodSeconds: 5
+    failureThreshold: 60
+  readiness:
+    tcpSocket:
+      port: web
+    periodSeconds: 10
+  liveness:
+    tcpSocket:
+      port: web
+    periodSeconds: 30
+    failureThreshold: 5

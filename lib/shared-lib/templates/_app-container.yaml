@@ -40,6 +40,12 @@ volumeMounts:
   {{- range .Values.storage }}
   - name: {{ printf "%s-%s" (include "helm.fullname" $root) (default "" .nameSuffix) | trunc 63 | trimSuffix "-" }}
     mountPath: {{ .mountPath }}
+    {{- with .subPath }}
+    subPath: {{ . }}
+    {{- end }}
+    {{- if .readOnly }}
+    readOnly: true
+    {{- end }}
   {{- end }}
 {{- end }}
 {{ include "shared-lib.probes" .  -}}
