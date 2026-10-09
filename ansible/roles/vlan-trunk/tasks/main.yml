@@ -95,7 +95,7 @@
     - vlan_trunk_fail_when_networkmanager_active | bool
     - "'NetworkManager.service' in ansible_facts.services"
     - ansible_facts.services['NetworkManager.service'].state == 'running'
-    - _vlan_trunk_active_network_manager != 'ifupdown'
+    - _vlan_trunk_active_network_manager not in ['ifupdown', 'NetworkManager']
 
 - name: Fail when no supported network manager is active
   ansible.builtin.fail:
@@ -103,7 +103,7 @@
   when:
     - _vlan_trunk_interfaces | length > 0
     - vlan_trunk_validate_network_manager | bool
-    - _vlan_trunk_active_network_manager not in ['ifupdown', 'systemd-networkd']
+    - _vlan_trunk_active_network_manager not in ['ifupdown', 'systemd-networkd', 'NetworkManager']
 
 - name: Ensure systemd-networkd is enabled and running
   become: true
@@ -222,6 +222,36 @@
   when:
     - _vlan_trunk_interfaces | length > 0
     - _vlan_trunk_active_network_manager == 'ifupdown'
+
+# NetworkManager branch (e.g. fresh Raspberry Pi OS / Debian 13): create the VLAN
+# sub-interfaces as NM connections with no node IP, mirroring the other branches.
+# Uses the nmcli CLI so no extra python libs are needed on the target.
+- name: Create/update VLAN connections for NetworkManager-managed hosts
+  become: true
+  ansible.builtin.shell: |
+    set -e
+    name={{ item.interface_name }}
+    if nmcli -g NAME connection show | grep -qx "$name"; then
+      cur=$(nmcli -g vlan.id,vlan.parent,ipv4.method,ipv6.method connection show "$name" | tr '\n' ' ')
+      want="{{ item.id }} {{ item.parent_interface }} disabled ignore"
+      [ "$cur" = "$want" ] && { echo unchanged; exit 0; }
+      nmcli connection delete "$name"
+    fi
+    nmcli connection add type vlan con-name "$name" ifname "$name" \
+      dev {{ item.parent_interface }} id {{ item.id }} \
+      ipv4.method disabled ipv6.method ignore connection.autoconnect yes
+    nmcli connection up "$name"
+    echo changed
+  args:
+    executable: /bin/bash
+  register: _vlan_nm_create
+  changed_when: _vlan_nm_create.stdout.strip() == 'changed'
+  loop: "{{ _vlan_trunk_interfaces }}"
+  loop_control:
+    label: "{{ item.parent_interface }} -> {{ item.interface_name }}"
+  when:
+    - _vlan_trunk_interfaces | length > 0
+    - _vlan_trunk_active_network_manager == 'NetworkManager'
 
 - name: Configure Thread IPv6 settings for Router Advertisement support
   become: true

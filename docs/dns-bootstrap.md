@@ -158,8 +158,19 @@ Scope `dnsUpdateAnsible` to the `pi` zone for RFC-2136 updates:
 
 ```http
 POST /api/zones/options/set
-  zone=pi  updateSecurityPolicies=dnsUpdateAnsible|pi|any
+  zone=pi
+  updateSecurityPolicies=dnsUpdateAnsible|*.pi|ANY|dnsUpdateAnsible|pi|ANY
+  update=UseSpecifiedNetworkACL
+  updateNetworkACL=<ansible-controller-subnet>,<server-vlan-subnet>,<pod-cidr>
 ```
+
+Both parts are required, otherwise `nsupdate` returns `REFUSED`:
+
+- The policy domain must be `*.pi` — a bare `pi` only matches the zone apex, not hosts under it.
+- The zone's `update` ACL is checked **in addition to** the TSIG policy (`update=Deny` logs
+  "request IP address is not allowed by the zone"). Allow the subnet Ansible runs from.
+
+Dynamic updates are only accepted by the cluster **primary**, so `dns_server_ip` must point at it.
 
 ---
 

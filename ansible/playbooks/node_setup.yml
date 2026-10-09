@@ -17,5 +17,6 @@
 - name: Raspberry pi specific tasks
   hosts: rpi
   gather_facts: true
+  become: true
   roles:
     - role: rpi-common

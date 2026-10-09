@@ -15,12 +15,12 @@ disable:
 tls-san:
   - {{ k3s_master_domain_name }}
 
-{% if k3s_node_label is defined %}
+{# longhorn=true on every node: Longhorn attaches volumes only via nodes running longhorn-manager,
+   so a node without it can't run any Longhorn-backed pod. Disks are opt-in via node.longhorn.io/create-default-disk. #}
 node-label:
-{% for label in k3s_node_label %}
+{% for label in (['longhorn=true'] + (k3s_node_label | default([]))) | unique %}
   - "{{ label }}"
 {% endfor %}
-{% endif %}
 
 {% if k3s_node_taint is defined %}
 node-taint:
