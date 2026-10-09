@@ -506,6 +506,7 @@ storage:
     replicas: 2  # ephemeral alert state — 2 replicas survive one node down
     type: longhorn
     accessMode: ReadWriteOnce
+    recurringJobs: [filesystem-trim, snapshot-cleanup]  # rebuildable metrics/logs: no backup, keep trim+cleanup
   - nameSuffix: prometheus
     mountPath: /data/prometheus
     storagePath: prometheus-prometheus-monitoring-promstack-0
@@ -514,6 +515,7 @@ storage:
     replicas: 2  # scraped metrics, reproducible — 2 replicas survive one node down
     type: longhorn
     accessMode: ReadWriteOnce
+    recurringJobs: [filesystem-trim, snapshot-cleanup]  # rebuildable metrics/logs: no backup, keep trim+cleanup
   - nameSuffix: grafana
     mountPath: /var/lib/grafana
     storagePath: grafana
@@ -522,6 +524,7 @@ storage:
     replicas: 2  # dashboards are GitOps-provisioned — 2 replicas survive one node down
     type: longhorn
     accessMode: ReadWriteOnce
+    recurringJobs: [filesystem-trim, snapshot-cleanup]  # rebuildable metrics/logs: no backup, keep trim+cleanup
 
 storageConfig:
   prefix: "monitoring"
