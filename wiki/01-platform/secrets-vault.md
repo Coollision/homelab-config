@@ -7,7 +7,7 @@ every secret in this repo.** No password, API key, or credential is ever committ
 Git — instead, `values.yaml` files across the whole repo are full of placeholders like:
 
 ```yaml
-password: <secret:kv/data/smarthome/n8n~password>
+password: <secret:kv/data/workload/smarthome/n8n~password>
 ```
 
 At render time, ArgoCD's `argocd-lovely-plugin` Config Management Plugin runs each
@@ -63,6 +63,41 @@ references (`vault.role: argocd-role`) to let the `avp` sidecar authenticate.
 JWT-audience incompatibility with Vault ≥1.21 — the current workaround is a Vault role
 with **no** `audience` field set, which only works cleanly with the Vault 1.20.4-era auth
 flow. Don't blindly bump Vault's major version without checking this first.
+
+## Path & key convention
+
+Vault holds one KV v2 mount, `kv`. Every secret path **mirrors the repo directory of the chart
+that owns it**, so "where does this secret live?" and "who uses it?" are answerable from the
+file tree alone:
+
+```
+kv/
+  system/<namespace>/<app>     ← repo dir system/<namespace>/<app>
+  workload/<namespace>/<app>   ← repo dir workload/<namespace>/<app>
+  shared/<topic>               ← values with no single owning chart
+```
+
+| Rule | Detail |
+|---|---|
+| Path = owning chart dir | The chart that *defines* the secret owns the path. Other charts that merely consume it (e.g. a DB role password used by a database chart) reference the owner's path rather than copying it. |
+| `disabled-` prefix dropped | `workload/apps/disabled-wishlist` uses `workload/apps/wishlist`, so re-enabling an app never changes its Vault path. |
+| `shared/` is for cross-cutting values | Currently `domains`, `network` (cross-cutting IPs), `nfs` (NAS mount details) and `iscsi`. Don't put app credentials here. |
+| Keys are kebab-case | Role goes in a suffix: `-password`, `-user`, `-api-key`, `-token`, `-ip`. Exceptions: real file names (`cert.pem`, `credentials.json`) and indexed lists (`credential-1`, `master-ip-0`). |
+| Prefix when one path holds two concerns | e.g. `db-password` next to `admin-token` in the same app path. |
+| Placeholders | `<secret:kv/data/<path>~<key>>`; add `\| base64` where the manifest needs it. |
+
+### Adding or changing a secret
+
+1. Write it: `vault kv patch -mount=kv workload/<ns>/<app> new-key=...` (use `put` only for a brand-new
+   path, since it replaces every key at that path).
+2. Reference it from the chart's `values.yaml` / template.
+3. Render locally (`helm template`) and check the placeholder resolves before pushing.
+4. Run `scripts/vault-audit.sh`. It lists, by name only, anything `MISSING` (referenced but not in
+   Vault), `UNUSED` (in Vault but referenced nowhere) and `NAMING` (violating the rules above).
+   After a clean-up it should print nothing except documentation examples.
+
+"Unused" only means unused *by this repo*; check for out-of-repo consumers before deleting. KV v2
+keeps old versions, so `vault kv delete` is recoverable with `vault kv undelete`.
 
 ## History
 

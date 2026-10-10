@@ -30,9 +30,9 @@ promstack:
   # KubeControllerManagerDown / KubeProxyDown fire forever once their `up` series go.
   kubeControllerManager:
     endpoints:
-      - <secret:kv/data/config/master~ip-0>
-      # - <secret:kv/data/config/master~ip-1>
-      # - <secret:kv/data/config/master~ip-2>
+      - <secret:kv/data/system/monitoring/monitoring~master-ip-0>
+      # - <secret:kv/data/system/monitoring/monitoring~master-ip-1>
+      # - <secret:kv/data/system/monitoring/monitoring~master-ip-2>
     enabled: false  # duplicate of kubeApiServer on k3s — see note above
     service:
       enabled: true
@@ -49,9 +49,9 @@ promstack:
           action: drop
   kubeScheduler:
     endpoints:
-      - <secret:kv/data/config/master~ip-0>
-      # - <secret:kv/data/config/master~ip-1>
-      # - <secret:kv/data/config/master~ip-2>
+      - <secret:kv/data/system/monitoring/monitoring~master-ip-0>
+      # - <secret:kv/data/system/monitoring/monitoring~master-ip-1>
+      # - <secret:kv/data/system/monitoring/monitoring~master-ip-2>
     enabled: false  # duplicate of kubeApiServer on k3s — see note above
     service:
       enabled: true
@@ -65,9 +65,9 @@ promstack:
       metricRelabelings: *drop-highcard-buckets
   kubeProxy:
     endpoints:
-      - <secret:kv/data/config/master~ip-0>
-      # - <secret:kv/data/config/master~ip-1>
-      # - <secret:kv/data/config/master~ip-2>
+      - <secret:kv/data/system/monitoring/monitoring~master-ip-0>
+      # - <secret:kv/data/system/monitoring/monitoring~master-ip-1>
+      # - <secret:kv/data/system/monitoring/monitoring~master-ip-2>
     enabled: false  # duplicate of kubeApiServer on k3s — see note above
     service:
       enabled: true
@@ -82,7 +82,7 @@ promstack:
       metricRelabelings: *drop-highcard-buckets
   alertmanager:
     alertmanagerSpec:
-      externalUrl: http://alertmanager.<secret:kv/data/domains~local>/
+      externalUrl: http://alertmanager.<secret:kv/data/shared/domains~local>/
       storage:
         volumeClaimTemplate:
           metadata:
@@ -119,7 +119,7 @@ promstack:
           regex: "go_.*|promhttp_.*|prometheus_http_request_duration_seconds_bucket|prometheus_engine_query_duration_seconds_bucket|prometheus_rule_group_duration_seconds_bucket|prometheus_target_sync_length_seconds_bucket|prometheus_tsdb_compaction_duration_seconds_bucket|prometheus_tsdb_wal_(fsync|page_flush)_duration_seconds_bucket|prometheus_remote_storage_.*"
           action: drop
     prometheusSpec:
-      externalUrl: http://prometheus.<secret:kv/data/domains~local>/
+      externalUrl: http://prometheus.<secret:kv/data/shared/domains~local>/
       retention: 90d
       retentionSize: 18GiB
       enableAdminAPI: true
@@ -272,12 +272,12 @@ promstack:
               regex: "go_.*|process_.*|apiserver_request_duration_seconds_bucket|apiserver_request_sli_duration_seconds_bucket|etcd_request_duration_seconds_bucket|apiserver_request_body_size_bytes_bucket|apiserver_watch_list_duration_seconds_bucket|apiserver_response_sizes_bucket|apiserver_watch_cache_read_wait_seconds_bucket|apiserver_watch_events_sizes_bucket|apiserver_admission_controller_admission_duration_seconds_bucket|apiserver_flowcontrol_request_execution_seconds_bucket|storage_operation_duration_seconds_bucket|workqueue_queue_duration_seconds_bucket|workqueue_work_duration_seconds_bucket"
               action: drop
   grafana:
-    externalUrl: http://grafana.<secret:kv/data/domains~local>/
-    adminPassword: <secret:kv/data/monitoring/grafana~adminPassword>
+    externalUrl: http://grafana.<secret:kv/data/shared/domains~local>/
+    adminPassword: <secret:kv/data/system/monitoring/monitoring~grafana-admin-password>
     grafana.ini:
       server:
-        domain: grafana.<secret:kv/data/domains~local>
-        root_url: http://grafana.<secret:kv/data/domains~local>/
+        domain: grafana.<secret:kv/data/shared/domains~local>
+        root_url: http://grafana.<secret:kv/data/shared/domains~local>/
     serviceMonitor:
       enabled: false
     deploymentStrategy:

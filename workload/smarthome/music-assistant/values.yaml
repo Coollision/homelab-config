@@ -78,7 +78,7 @@ resources:
 # Internal only. No external ingress, and not scale-to-zero: Sonos and Home Assistant hold long-lived
 # connections that a sleeping pod cannot answer.
 ingress_internal_secure:
-  host: music.<secret:kv/data/domains~domain>
+  host: music.<secret:kv/data/shared/domains~domain>
   port: web
 
 storage:

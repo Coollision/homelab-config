@@ -6,7 +6,7 @@ over USB, every consumer (the NAS, Prometheus, Home Assistant, future shutdown a
 single NUT server over the standard NUT protocol on TCP **3493**.
 
 ```
-            USB                          NUT proto :3493 (LoadBalancer, Vault kv/nut/nut~lb-ip)
+            USB                          NUT proto :3493 (LoadBalancer, Vault kv/system/nut/nut~lb-ip)
   APC UPS ───────► UPS node   ┌─────────────────┬──────────────┬────────────────┐
                    (worker)   │                 │              │                │
                         ┌─────▼────┐      ┌──────▼────┐   ┌─────▼────┐    ┌──────▼─────┐
@@ -63,12 +63,12 @@ The `instantlinux/nut-upsd` image generates `ups.conf` / `upsd.conf` / `upsmon.c
 (see [`nut/values.yaml`](nut/values.yaml)). We override **only `upsd.users`** (mounted at
 `/etc/nut/local/upsd.users`) to define two accounts:
 
-| User | Password (Vault `kv/nut/nut`) | Role | Used by |
+| User | Password (Vault `kv/system/nut/nut`) | Role | Used by |
 |------|-------------------------------|------|---------|
 | `admin` | `admin-pass` | `upsmon primary` + `instcmds ALL` + `actions SET` | the container's own `upsmon`, `nut_exporter`, PeaNUT, future HA controls |
 | `monuser` | `monuser-pass` (= `secret`) | `upsmon secondary` | the NAS (see below) |
 
-The LoadBalancer IP and both passwords live in Vault at `kv/nut/nut`.
+The LoadBalancer IP and both passwords live in Vault at `kv/system/nut/nut`.
 
 ## NAS as a client
 
@@ -76,7 +76,7 @@ The NAS no longer owns the UPS over USB — it becomes a NUT **client**:
 
 1. DSM → **Control Panel → Hardware & Power → UPS**
 2. Enable UPS support, type = **"Synology UPS server"** (this is DSM's name for a NUT secondary)
-3. **NUT server IP** = the LoadBalancer IP (Vault `kv/nut/nut~lb-ip`)
+3. **NUT server IP** = the LoadBalancer IP (Vault `kv/system/nut/nut~lb-ip`)
 4. DSM hardcodes the UPS name to `ups`, user `monuser`, password `secret` — which is exactly why our
    `upsd.users` defines `monuser`/`secret` as `upsmon secondary`.
 

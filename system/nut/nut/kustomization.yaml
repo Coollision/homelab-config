@@ -108,7 +108,7 @@ patches:
             - --nut.vars_enable=
           env:
             - name: NUT_EXPORTER_PASSWORD
-              value: <secret:kv/data/nut/nut~admin-pass>
+              value: <secret:kv/data/system/nut/nut~admin-pass>
           ports:
             - name: metrics
               containerPort: 9199

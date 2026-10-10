@@ -71,7 +71,7 @@ spec:
         module:
           - synology
         target:
-          - <secret:kv/data/external-ips~gobelijn>
+          - <secret:kv/data/shared/network~gobelijn-ip>
         auth:
           - public_v2
       relabelings:

@@ -19,12 +19,12 @@ no-autoupdate: true
 # E.g. `cloudflared tunnel route dns example-tunnel tunnel.example.com`.
 
 ingress:
-  # - hostname: test-external.<secret:kv/data/domains~domain>
+  # - hostname: test-external.<secret:kv/data/shared/domains~domain>
   #   service: hello_world
-  - hostname: "*.<secret:kv/data/domains~domain>"
+  - hostname: "*.<secret:kv/data/shared/domains~domain>"
     service: https://cloudflare-tunnel-traefik
     originRequest:
-      originServerName: blaat.<secret:kv/data/domains~domain>
+      originServerName: blaat.<secret:kv/data/shared/domains~domain>
 
   - service: http_status:404
 {{- end -}}

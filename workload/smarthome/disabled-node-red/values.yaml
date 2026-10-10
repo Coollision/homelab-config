@@ -8,7 +8,7 @@ statefulset:
 config:
   TZ: Europe/Brussels
 ingress_internal:
-  host: nodered.<secret:kv/data/domains~local>
+  host: nodered.<secret:kv/data/shared/domains~local>
   port: web
 storage:
   - mountPath: /data

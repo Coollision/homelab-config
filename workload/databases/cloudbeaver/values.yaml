@@ -16,10 +16,10 @@ resources:
     cpu: 600m
     memory: 448Mi
 ingress_internal:
-  host: cloudbeaver.<secret:kv/data/domains~local>
+  host: cloudbeaver.<secret:kv/data/shared/domains~local>
   port: ingress
 ingress_internal_secure:
-  host: cloudbeaver.<secret:kv/data/domains~domain>
+  host: cloudbeaver.<secret:kv/data/shared/domains~domain>
   port: ingress
 storage:
   - mountPath: /opt/cloudbeaver/workspace

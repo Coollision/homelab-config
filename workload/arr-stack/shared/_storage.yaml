@@ -12,8 +12,8 @@ spec:
     - ReadWriteMany
   persistentVolumeReclaimPolicy: Retain
   nfs:
-    server: <secret:kv/data/storage/nfs~server-ip>
-    path: "<secret:kv/data/storage/nfs~series-path>"
+    server: <secret:kv/data/shared/nfs~server-ip>
+    path: "<secret:kv/data/shared/nfs~series-path>"
   mountOptions:
     - vers=4.1
     - hard
@@ -32,8 +32,8 @@ spec:
     - ReadWriteMany
   persistentVolumeReclaimPolicy: Retain
   nfs:
-    server: <secret:kv/data/storage/nfs~server-ip>
-    path: "<secret:kv/data/storage/nfs~videos-path>"
+    server: <secret:kv/data/shared/nfs~server-ip>
+    path: "<secret:kv/data/shared/nfs~videos-path>"
   mountOptions:
     - vers=4.1
     - hard
@@ -52,8 +52,8 @@ spec:
     - ReadWriteMany
   persistentVolumeReclaimPolicy: Retain
   nfs:
-    server: <secret:kv/data/storage/nfs~server-ip>
-    path: "<secret:kv/data/storage/nfs~downloads-path>"
+    server: <secret:kv/data/shared/nfs~server-ip>
+    path: "<secret:kv/data/shared/nfs~downloads-path>"
   mountOptions:
     - vers=4.1
     - hard
@@ -72,8 +72,8 @@ spec:
     - ReadWriteMany
   persistentVolumeReclaimPolicy: Retain
   nfs:
-    server: <secret:kv/data/storage/nfs~server-ip>
-    path: "<secret:kv/data/storage/nfs~books-path>"
+    server: <secret:kv/data/shared/nfs~server-ip>
+    path: "<secret:kv/data/shared/nfs~books-path>"
   mountOptions:
     - vers=4.1
     - hard
@@ -92,8 +92,8 @@ spec:
     - ReadWriteMany
   persistentVolumeReclaimPolicy: Retain
   nfs:
-    server: <secret:kv/data/storage/nfs~server-ip>
-    path: "<secret:kv/data/storage/nfs~music-path>"
+    server: <secret:kv/data/shared/nfs~server-ip>
+    path: "<secret:kv/data/shared/nfs~music-path>"
   mountOptions:
     - vers=4.1
     - hard

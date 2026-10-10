@@ -21,7 +21,7 @@ wordpress:
         name: vloerwerken-schollaert-mysql-wp
         key: db_user_pass
   ingress_internal:
-    host: vloerwerken-schollaert.<secret:kv/data/domains~local>
+    host: vloerwerken-schollaert.<secret:kv/data/shared/domains~local>
     port: wordpress
   storage:
     - mountPath: /var/www/html
@@ -31,9 +31,9 @@ wordpress:
   secrets:
     - name: vloerwerken-schollaert-mysql-wp
       secret_kv:
-        db_name: <secret:kv/data/wordpress/vloerwerken-schollaert~db_name>
-        db_user: <secret:kv/data/wordpress/vloerwerken-schollaert~db_user>
-        db_user_pass: <secret:kv/data/wordpress/vloerwerken-schollaert~db_user_pass>
+        db_name: <secret:kv/data/workload/wordpress/vloerwerken-schollaert~db-name>
+        db_user: <secret:kv/data/workload/wordpress/vloerwerken-schollaert~db-user>
+        db_user_pass: <secret:kv/data/workload/wordpress/vloerwerken-schollaert~db-user-password>
 
 mysql:
   fullnameOverride: vloerwerken-schollaert-mysql
@@ -68,4 +68,4 @@ mysql:
   secrets:
     - name: vloerwerken-schollaert-mysql
       secret_kv:
-        db_root_pass: <secret:kv/data/wordpress/vloerwerken-schollaert~db_root_pass>
+        db_root_pass: <secret:kv/data/workload/wordpress/vloerwerken-schollaert~db-root-password>

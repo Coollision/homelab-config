@@ -67,8 +67,8 @@ traefik:
           Cf-Connecting-Ip: keep
           User-Agent: keep
   additionalArguments:
-    - '--entryPoints.web.forwardedHeaders.trustedIPs=<secret:kv/data/kube-system/traefik~trusted-ips>'
-    - '--entryPoints.websecure.forwardedHeaders.trustedIPs=<secret:kv/data/kube-system/traefik~trusted-ips>'
+    - '--entryPoints.web.forwardedHeaders.trustedIPs=<secret:kv/data/shared/network~trusted-ips>'
+    - '--entryPoints.websecure.forwardedHeaders.trustedIPs=<secret:kv/data/shared/network~trusted-ips>'
     - --providers.kubernetesingress.ingressclass=traefik-external
     - --serversTransport.insecureSkipVerify=true
 

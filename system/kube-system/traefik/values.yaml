@@ -11,13 +11,13 @@ traefik:
   ingressRoute:
     dashboard:
       enabled: true
-      matchRule: Host(`traefik.<secret:kv/data/domains~local>`) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))
+      matchRule: Host(`traefik.<secret:kv/data/shared/domains~local>`) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))
       entryPoints:
         - web
   service:
     spec:
       externalTrafficPolicy: Local
-      loadBalancerIP: <secret:kv/data/kube-system/traefik~ip>
+      loadBalancerIP: <secret:kv/data/system/kube-system/traefik~ip>
   providers:
     kubernetesCRD:
       enabled: true
@@ -55,8 +55,8 @@ traefik:
           X-Forwarded-Host: keep
           User-Agent: keep
   additionalArguments:
-    - "--entryPoints.web.forwardedHeaders.trustedIPs=<secret:kv/data/kube-system/traefik~trusted-ips>"
-    - "--entryPoints.websecure.forwardedHeaders.trustedIPs=<secret:kv/data/kube-system/traefik~trusted-ips>"
+    - "--entryPoints.web.forwardedHeaders.trustedIPs=<secret:kv/data/shared/network~trusted-ips>"
+    - "--entryPoints.websecure.forwardedHeaders.trustedIPs=<secret:kv/data/shared/network~trusted-ips>"
   deployment:
     replicas: 2
   affinity:

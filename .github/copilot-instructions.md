@@ -39,8 +39,8 @@ Use Vault with ArgoCD Lovely Plugin syntax:
 
 ```yaml
 # In values.yaml files
-server: <secret:kv/data/storage/nfs~server-ip>
-password: <secret:kv/data/domains~cloudflare-token>
+server: <secret:kv/data/shared/nfs~server-ip>
+password: <secret:kv/data/system/cert-manager/cert-manager~cloudflare-api-token>
 ```
 
 ## Directory Structure Patterns
@@ -106,7 +106,7 @@ deployment: # or statefulset:
     http: 8080 # Auto-creates service + container ports
 
 ingress_internal: # Creates Traefik IngressRoute
-  host: app.<secret:kv/data/domains~local>
+  host: app.<secret:kv/data/shared/domains~local>
   port: http # References ports above
 
 storage: # Auto-mounts + creates PVCs

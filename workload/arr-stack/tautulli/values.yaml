@@ -18,7 +18,7 @@ config:
   PUID: 1000
   PGID: 1000
 ingress_internal:
-  host: tautulli.<secret:kv/data/domains~local>
+  host: tautulli.<secret:kv/data/shared/domains~local>
   port: web
 storage:
   - type: longhorn

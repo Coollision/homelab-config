@@ -7,12 +7,12 @@ deployment:
     https: 8443
 
 ingress_internal:
-  host: echo.<secret:kv/data/domains~local>
+  host: echo.<secret:kv/data/shared/domains~local>
   path: /
   port: http
 
 ingress_internal_secure:
-  host: echo.<secret:kv/data/domains~domain>
+  host: echo.<secret:kv/data/shared/domains~domain>
   path: /
   port: http
 

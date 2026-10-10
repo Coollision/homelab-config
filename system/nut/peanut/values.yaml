@@ -13,13 +13,13 @@ config:
   NUT_HOST: nut-service.nut.svc.cluster.local
   NUT_PORT: "3493"
   USERNAME: admin
-  PASSWORD: <secret:kv/data/nut/nut~admin-pass>
+  PASSWORD: <secret:kv/data/system/nut/nut~admin-pass>
   WEB_PORT: "8080"
   # Disable PeaNUT web-UI login (internal dashboard, no external exposure)
   AUTH_DISABLED: "true"
 
 ingress_internal_secure:
-  host: ups.<secret:kv/data/domains~domain>
+  host: ups.<secret:kv/data/shared/domains~domain>
   port: web
 
 resources:

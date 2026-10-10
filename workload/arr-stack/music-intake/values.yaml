@@ -24,7 +24,7 @@ keel:
 secrets:
   - name: music-intake
     secret_kv:
-      ma_token: <secret:kv/data/apps/music-intake~ma_token>
+      ma_token: <secret:kv/data/workload/arr-stack/music-intake~ma-token>
 
 config:
   TZ: Europe/Brussels
@@ -53,7 +53,7 @@ resources:
 
 # Internal only (no external ingress, and there is no login of its own).
 ingress_internal_secure:
-  host: intake.<secret:kv/data/domains~domain>
+  host: intake.<secret:kv/data/shared/domains~domain>
   port: http
 
 storage:

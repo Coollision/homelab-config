@@ -17,7 +17,7 @@ resources:
     cpu: 600m
     memory: 224Mi
 ingress_internal:
-  host: jackett.<secret:kv/data/domains~local>
+  host: jackett.<secret:kv/data/shared/domains~local>
   port: web
 storage:
   - mountPath: /config

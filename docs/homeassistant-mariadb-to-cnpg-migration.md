@@ -109,7 +109,7 @@ metadata: { name: pgrole-homeassistant, namespace: smarthome }
 type: kubernetes.io/basic-auth
 stringData:
   username: homeassistant_user
-  password: <secret:kv/data/smarthome/homeassistant-db~pg-password>   # add to Vault first
+  password: <secret:kv/data/workload/smarthome/homeassistant~db-pg-password>   # add to Vault first
 ---
 # add to the existing `smarthome-db` ConfigMap data:  homeassistant_database: homeassistant
 ```

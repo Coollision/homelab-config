@@ -72,13 +72,13 @@ initContainers:
           - NET_ADMIN
 
 ingress_internal:
-  host: homeassistant.<secret:kv/data/domains~local>
+  host: homeassistant.<secret:kv/data/shared/domains~local>
   port: web
 ingress_internal_secure:
-  host: homeassistant.<secret:kv/data/domains~domain>
+  host: homeassistant.<secret:kv/data/shared/domains~domain>
   port: web
 ingress_external_secure:
-  host: homeassistant.<secret:kv/data/domains~domain>
+  host: homeassistant.<secret:kv/data/shared/domains~domain>
   port: web
 storage:
   - mountPath: /config
@@ -112,7 +112,7 @@ multusNetworks:
 hostNetwork: false
 dnsPolicy: ClusterFirst
 imagePreSync: true
-serviceIp: <secret:kv/data/smarthome/homeassistant~ip>
+serviceIp: <secret:kv/data/workload/smarthome/homeassistant~ip>
 probes:
   liveness:
     httpGet:

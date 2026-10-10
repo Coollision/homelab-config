@@ -35,5 +35,5 @@ storage:
 # - Kustomize patch in kustomization.yaml configures:
 #   - Service name: mosquitto-mqtt
 #   - Type: LoadBalancer
-#   - LoadBalancerIP: <secret:kv/data/smarthome/mosquito~ip>
+#   - LoadBalancerIP: <secret:kv/data/workload/smarthome/mosquitto~ip>
 #   - Maps service port 1880 to container port 1883

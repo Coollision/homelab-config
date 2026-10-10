@@ -9,11 +9,11 @@ data:
       public_v2:
         community: public
         security_level: authPriv
-        username: <secret:kv/data/monitoring/snmp-gobelijn~username>
-        password: <secret:kv/data/monitoring/snmp-gobelijn~password>
+        username: <secret:kv/data/system/monitoring/home-metrics~snmp-username>
+        password: <secret:kv/data/system/monitoring/home-metrics~snmp-password>
         auth_protocol: MD5
         priv_protocol: DES
-        priv_password: <secret:kv/data/monitoring/snmp-gobelijn~priv_password>
+        priv_password: <secret:kv/data/system/monitoring/home-metrics~snmp-priv-password>
         version: 3
     modules:
       synology:

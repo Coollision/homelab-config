@@ -56,15 +56,15 @@ config:
 
 
 ingress_internal:
-  host: jellyseerr.<secret:kv/data/domains~local>
+  host: jellyseerr.<secret:kv/data/shared/domains~local>
   port: ingress
 
 ingress_internal_secure:
-  host: jellyseerr.<secret:kv/data/domains~domain>
+  host: jellyseerr.<secret:kv/data/shared/domains~domain>
   port: ingress
 
 ingress_external_secure:
-  host: jellyseerr.<secret:kv/data/domains~domain>
+  host: jellyseerr.<secret:kv/data/shared/domains~domain>
   port: ingress
 
 storage:

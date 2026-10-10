@@ -48,11 +48,11 @@ resources:
     memory: 896Mi
 
 ingress_internal:
-  host: sonarr.<secret:kv/data/domains~local>
+  host: sonarr.<secret:kv/data/shared/domains~local>
   port: web
 
 ingress_internal_secure:
-  host: sonarr.<secret:kv/data/domains~domain>
+  host: sonarr.<secret:kv/data/shared/domains~domain>
   port: web
 
 storage:
