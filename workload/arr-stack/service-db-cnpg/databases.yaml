@@ -97,3 +97,29 @@ spec:
   cluster:
     name: service-db-pg
   databaseReclaimPolicy: retain
+---
+# Lidarr is a new app (not imported like the others), so unlike the databases above its databases are owned by
+# its own role: an app role that only has the default privileges could not create its schema in a postgres-owned DB.
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: db-lidarr-main
+  namespace: arr-stack
+spec:
+  name: lidarr_main
+  owner: lidarr_user
+  cluster:
+    name: service-db-pg
+  databaseReclaimPolicy: retain
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: db-lidarr-log
+  namespace: arr-stack
+spec:
+  name: lidarr_log
+  owner: lidarr_user
+  cluster:
+    name: service-db-pg
+  databaseReclaimPolicy: retain

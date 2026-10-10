@@ -1,0 +1,84 @@
+fullnameOverride: lidarr
+
+# Lidarr manages ARTIST albums only (monitor an artist, it finds and files missing albums). Compilations stay with the
+# intake: Lidarr has no "Various Artists" artist and handles DJ-mix style compilations badly. Its root folder is a
+# separate, initially empty "Lidarr" folder inside the Music share, so the legacy library and the intake output are
+# never touched; Music Assistant already scans the whole share. See wiki/03-media-stack/music.md.
+statefulset:
+  image:
+    repository: linuxserver/lidarr
+    # Stable branch (v3.1.0). The develop/nightly branches only add plugin support, and moving back to stable later
+    # needs a database restore, so stay on a plain version tag.
+    tag: 3.1.0
+    imagePullPolicy: Always
+  ports:
+    web: 8686
+
+config:
+  TZ: Europe/Brussels
+  PUID: 1000
+  PGID: 1000
+
+arrXmlPostgres:
+  enabled: true
+  requireExistingConfig: false
+  userKey: lidarr_user
+  passwordKey: lidarr_password
+  mainDbKey: lidarr_database
+  logDbKey: lidarr_database_logs
+  authenticationMethod: External
+
+probes:
+  readiness:
+    httpGet:
+      path: /ping
+      port: web
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+  liveness:
+    httpGet:
+      path: /ping
+      port: web
+    initialDelaySeconds: 30
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 5
+
+# The .NET app plus a large artist/album metadata refresh: more headroom than Radarr.
+resources:
+  requests:
+    cpu: 50m
+    memory: 384Mi
+  limits:
+    cpu: 1500m
+    memory: 1Gi
+
+ingress_internal:
+  host: lidarr.<secret:kv/data/shared/domains~local>
+  port: web
+
+ingress_internal_secure:
+  host: lidarr.<secret:kv/data/shared/domains~domain>
+  port: web
+
+storage:
+  - type: longhorn
+    mountPath: /config
+    size: 4Gi
+    nameSuffix: config
+    volumeName: arr-stack-lidarr-config
+    protect: true
+  # The Downloads share, where Download Station puts finished torrents (same claim radarr/sonarr use). Lidarr's remote
+  # path mapping translates the NAS path of Download Station to /data/downloads.
+  - type: existingClaim
+    mountPath: /data/downloads
+    claimName: arr-stack-downloads
+    nameSuffix: downloads
+  # Lidarr's library root: only the Lidarr subfolder of the Music share (the kubelet creates it on first start).
+  - type: existingClaim
+    mountPath: /music
+    claimName: arr-stack-music
+    nameSuffix: music
+    subPath: Lidarr
