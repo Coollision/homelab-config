@@ -231,6 +231,35 @@ slskd -> Downloads/slskd (inbox) -> settle + slskd finished? -> analyse -> confi
 - The tagger is Python (mutagen) on purpose for now, because it is the one mature library that writes all three
   formats including ReplayGain; a Go port (ffprobe/ffmpeg) is a possible later step.
 
+## Lidarr (artist albums, torrents)
+
+`workload/arr-stack/lidarr/`: Lidarr **v3.1.0 on the stable branch** (linuxserver image), PostgreSQL through the shared
+CNPG cluster (role `lidarr_user`, databases `lidarr_main` and `lidarr_log`, wired like Radarr with the `arr-lib`
+helper), config on a Longhorn volume, internal ingress only.
+
+- **Scope.** Artist albums only: monitor an artist and it finds and files missing albums. **Compilations stay with
+  the intake.** Lidarr deliberately has no "Various Artists" artist, the Servarr wiki says DJ-mix and compilation
+  libraries "won't import well", and a compilation has to be added album by album.
+- **Library root.** A separate, initially empty `Lidarr` folder inside the Music share (mounted at `/music` with a
+  `subPath`, so Lidarr cannot see or touch anything else). The legacy folders and the intake's output are never
+  scanned by it, because its import expects `Artist/Album` folders and the flat layout would mismatch. Music Assistant
+  scans the whole share, so Lidarr's albums show up there too, as ordinary albums.
+- **Acquisition.** Torrents only for now: the cluster's Prowlarr (public torrent indexers with an Audio category, no
+  Usenet) and the Synology's Download Station as the download client. Lidarr mounts the Downloads share at
+  `/data/downloads`, with a remote path mapping in the Lidarr UI from the NAS path to that.
+- **Soulseek is deliberately not connected.** Soularr (the maintained bridge) would download through slskd into the
+  same folder the intake treats as its inbox, so the intake would also pick those albums up, and Soularr has an open
+  bug where its cleanup touches other slskd downloads. Torrents avoid this: they land in `Downloads`, the intake
+  only watches `Downloads/slskd`. Revisit once there is a design for separating them.
+- **Settings to apply in the UI** (they live in the database, not in this repo): root folder `/music`, **Recycle Bin on**
+  (when the community metadata server returns nothing for an artist Lidarr can delete the artist's files), write
+  metadata off, the Prowlarr application link, the Download Station client and its remote path mapping. A metadata
+  profile with only studio albums is the default.
+- **Metadata source.** Lidarr depends on a community-hosted mirror of MusicBrainz (the Servarr metadata server). It had a
+  long outage in 2025 and looks healthy now. If it misbehaves, the symptoms are artists that cannot be added or refreshed.
+- Version bumps: stay on a plain stable tag. `develop`/`nightly` only add plugin support (Tubifarry) and going back
+  to stable afterwards needs a database restore.
+
 ## The legacy library and its tag cleanup
 
 The library was audited read-only (tags parsed on the NAS itself, nothing copied over the network):

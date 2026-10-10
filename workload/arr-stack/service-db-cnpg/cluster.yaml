@@ -53,6 +53,11 @@ spec:
         login: true
         passwordSecret:
           name: pgrole-radarr
+      - name: lidarr_user
+        ensure: present
+        login: true
+        passwordSecret:
+          name: pgrole-lidarr
       - name: prowlarr_user
         ensure: present
         login: true
