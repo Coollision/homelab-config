@@ -12,11 +12,11 @@ deployment:
 config:
   TZ: Europe/Brussels
   PRINTFLOW_DATA: /config
-  SPOOLMAN_URL: https://spoolman.<secret:kv/data/domains~domain>
+  SPOOLMAN_URL: https://spoolman.<secret:kv/data/shared/domains~domain>
   PRINTSTASH_URL: http://printstash-service:3000
-  PRINTSTASH_UI_URL: https://printstash.<secret:kv/data/domains~domain>
-  PRINTSTASH_USERNAME: <secret:kv/data/apps/printflow~printstash_username>
-  PRINTSTASH_API_KEY: <secret:kv/data/apps/printflow~printstash_api_key>
+  PRINTSTASH_UI_URL: https://printstash.<secret:kv/data/shared/domains~domain>
+  PRINTSTASH_USERNAME: <secret:kv/data/workload/apps/printflow~printstash-username>
+  PRINTSTASH_API_KEY: <secret:kv/data/workload/apps/printflow~printstash-api-key>
 
 storage:
   # Saved printer profiles and the writable preset overlay. The presets that
@@ -50,7 +50,7 @@ probes:
     periodSeconds: 20
 
 ingress_internal_secure:
-  host: printflow.<secret:kv/data/domains~domain>
+  host: printflow.<secret:kv/data/shared/domains~domain>
   port: http
 
 syncWave: -5

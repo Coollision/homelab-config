@@ -58,7 +58,7 @@ longhorn:
     recurringFailedJobsHistoryLimit: 1
 
   defaultBackupStore:
-    backupTarget: "nfs://<secret:kv/data/storage/nfs~server-ip>:/volume4/k3s-volumes/storage/longhorn-backups"
+    backupTarget: "nfs://<secret:kv/data/shared/nfs~server-ip>:/volume4/k3s-volumes/storage/longhorn-backups"
 
   longhornManager:
     nodeSelector:
@@ -104,7 +104,7 @@ longhorn:
 # Ingress for Longhorn UI
 ingress:
   enabled: true
-  host: "longhorn.<secret:kv/data/domains~domain>"
+  host: "longhorn.<secret:kv/data/shared/domains~domain>"
 
 # StorageClasses
 # Note: The default "longhorn" storage class is created by the upstream Longhorn chart.

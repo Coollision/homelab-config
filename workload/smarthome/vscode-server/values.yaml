@@ -73,7 +73,7 @@ storage:
     nameSuffix: z2m
 
 ingress_internal_secure:
-  host: vscode.<secret:kv/data/domains~domain>
+  host: vscode.<secret:kv/data/shared/domains~domain>
   port: web
 
 probes:

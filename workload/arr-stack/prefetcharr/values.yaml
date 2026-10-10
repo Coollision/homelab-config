@@ -18,11 +18,11 @@ config:
   # Jellyfin/Emby/Plex baseurl
   MEDIA_SERVER_URL: https://plex.declerck.dev
   # Jellyfin/Emby API key or plex server token
-  MEDIA_SERVER_API_KEY: <secret:kv/data/services~plex_token>
+  MEDIA_SERVER_API_KEY: <secret:kv/data/workload/arr-stack/prefetcharr~plex-token>
   # Sonarr baseurl (in-cluster service — avoids an external Traefik round-trip)
   SONARR_URL: http://sonarr-service:8989
   # Sonarr API key
-  SONARR_API_KEY: <secret:kv/data/services~sonarr_api_key>
+  SONARR_API_KEY: <secret:kv/data/workload/arr-stack/sonarr~api-key>
   # Logging directory
   LOG_DIR: /log
   # Log level

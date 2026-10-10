@@ -24,7 +24,7 @@ resources:
     memory: 256Mi
 
 ingress_internal_secure:
-  host: spoolman.<secret:kv/data/domains~domain>
+  host: spoolman.<secret:kv/data/shared/domains~domain>
   port: http
 
 storage:

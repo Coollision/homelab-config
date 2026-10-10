@@ -23,10 +23,10 @@ config:
   # process) uses to monitor ups@localhost — must match the [admin] entry in
   # upsd.users, which carries the `upsmon primary` role.
   API_USER: admin
-  API_PASSWORD: <secret:kv/data/nut/nut~admin-pass>
+  API_PASSWORD: <secret:kv/data/system/nut/nut~admin-pass>
 
 # LoadBalancer on .30/server range so NAS + other clients can reach upsd
-serviceIp: <secret:kv/data/nut/nut~lb-ip>
+serviceIp: <secret:kv/data/system/nut/nut~lb-ip>
 
 # libusb requires privilege to open USB device nodes. The host's /dev/bus/usb
 # is mounted directly (see kustomization) so the usbhid-ups driver can re-open

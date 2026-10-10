@@ -10,10 +10,10 @@ config:
   ZIGBEE2MQTT_DATA: /data
 
 ingress_internal_secure:
-  host: zigbee2mqtt.<secret:kv/data/domains~domain>
+  host: zigbee2mqtt.<secret:kv/data/shared/domains~domain>
   port: web
 ingress_internal:
-  host: zigbee2mqtt.<secret:kv/data/domains~local>
+  host: zigbee2mqtt.<secret:kv/data/shared/domains~local>
   port: web
 storage:
   - mountPath: /data

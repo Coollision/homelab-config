@@ -48,11 +48,11 @@ resources:
     memory: 640Mi
 
 ingress_internal:
-  host: radarr.<secret:kv/data/domains~local>
+  host: radarr.<secret:kv/data/shared/domains~local>
   port: web
 
 ingress_internal_secure:
-  host: radarr.<secret:kv/data/domains~domain>
+  host: radarr.<secret:kv/data/shared/domains~domain>
   port: web
 
 storage:

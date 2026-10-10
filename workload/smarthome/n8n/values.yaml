@@ -35,16 +35,16 @@ config:
       name: smarthome-db
       key: port
   DB_POSTGRESDB_DATABASE: n8n
-  DB_POSTGRESDB_USER: <secret:kv/data/smarthome/n8n~user>
-  DB_POSTGRESDB_PASSWORD: <secret:kv/data/smarthome/n8n~password>
+  DB_POSTGRESDB_USER: <secret:kv/data/workload/smarthome/n8n~user>
+  DB_POSTGRESDB_PASSWORD: <secret:kv/data/workload/smarthome/n8n~password>
   # n8n applicatie
-  N8N_ENCRYPTION_KEY: <secret:kv/data/smarthome/n8n~encryption_key>
-  N8N_HOST: n8n.<secret:kv/data/domains~domain>
+  N8N_ENCRYPTION_KEY: <secret:kv/data/workload/smarthome/n8n~encryption-key>
+  N8N_HOST: n8n.<secret:kv/data/shared/domains~domain>
   N8N_PORT: "5678"
   N8N_PROTOCOL: https
   # Renamed in 2.x: WEBHOOK_URL is deprecated in favour of N8N_WEBHOOK_URL, which sets
   # the base URL for both test and production webhooks.
-  N8N_WEBHOOK_URL: https://n8n.<secret:kv/data/domains~domain>/
+  N8N_WEBHOOK_URL: https://n8n.<secret:kv/data/shared/domains~domain>/
   # N8N_RUNNERS_ENABLED removed — task runners are always on as of 2.x and n8n now
   # warns that the variable is no longer needed.
   # Opschonen van oude uitvoeringen (7 dagen)
@@ -87,7 +87,7 @@ resources:
     memory: 640Mi
 
 ingress_internal_secure:
-  host: n8n.<secret:kv/data/domains~domain>
+  host: n8n.<secret:kv/data/shared/domains~domain>
   port: web
 
 storage:

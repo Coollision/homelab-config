@@ -4,8 +4,8 @@ keel:
     tag: latest
   basicauth:
     enabled: true
-    user: <secret:kv/data/kube-system/keel~user>
-    password: <secret:kv/data/kube-system/keel~password>
+    user: <secret:kv/data/system/kube-system/keel~user>
+    password: <secret:kv/data/system/kube-system/keel~password>
 
   dockerRegistry:
     enabled: true

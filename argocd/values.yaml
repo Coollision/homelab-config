@@ -3,12 +3,12 @@ vault:
   role: argocd-role
 
 ingress:
-  host: argocd.<secret:kv/data/domains~domain>
+  host: argocd.<secret:kv/data/shared/domains~domain>
 
 argo-cd:
   fullnameOverride: argocd
   # global:
-  #   domain: argocd.<secret:kv/data/domains~domain>
+  #   domain: argocd.<secret:kv/data/shared/domains~domain>
   crds:
     keep: false
   configs:
@@ -18,7 +18,7 @@ argo-cd:
       timeout.reconciliation.jitter: 2m
       repos.server.timeout.seconds: "300"
       # Garbage collection
-      server.default.logout.url: https://argocd.<secret:kv/data/domains~domain>/
+      server.default.logout.url: https://argocd.<secret:kv/data/shared/domains~domain>/
       application.resourceTrackingMethod: annotation
       resource.exclusions: |
         # ### Network resources created by the Kubernetes control plane and excluded to reduce the number of watched events and UI clutter

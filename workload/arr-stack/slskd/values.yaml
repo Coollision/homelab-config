@@ -22,12 +22,12 @@ securityContext:
 secrets:
   - name: slskd
     secret_kv:
-      web_username: <secret:kv/data/apps/slskd~web_username>
-      web_password: <secret:kv/data/apps/slskd~web_password>
-      api_key: <secret:kv/data/apps/slskd~api_key>
-      jwt_key: <secret:kv/data/apps/slskd~jwt_key>
-      slsk_username: <secret:kv/data/apps/slskd~slsk_username>
-      slsk_password: <secret:kv/data/apps/slskd~slsk_password>
+      web_username: <secret:kv/data/workload/arr-stack/slskd~web-username>
+      web_password: <secret:kv/data/workload/arr-stack/slskd~web-password>
+      api_key: <secret:kv/data/workload/arr-stack/slskd~api-key>
+      jwt_key: <secret:kv/data/workload/arr-stack/slskd~jwt-key>
+      slsk_username: <secret:kv/data/workload/arr-stack/slskd~slsk-username>
+      slsk_password: <secret:kv/data/workload/arr-stack/slskd~slsk-password>
 
 config:
   TZ: Europe/Brussels
@@ -64,7 +64,7 @@ resources:
 
 # Internal only (no external ingress). The UI sends the API key as a query parameter, hence HTTPS.
 ingress_internal_secure:
-  host: slskd.<secret:kv/data/domains~domain>
+  host: slskd.<secret:kv/data/shared/domains~domain>
   port: web
 
 storage:

@@ -22,11 +22,11 @@ configMaps:
         include_snapshot: False
 
         [printer Kobra S1]
-        moonraker_uri: <secret:kv/data/3d-printer/printers~kobra_s1_moonraker_uri>
+        moonraker_uri: <secret:kv/data/workload/3d-printing/mobileraker-companion~kobra-s1-moonraker-uri>
         moonraker_api_key: False
 
         [printer K1C]
-        moonraker_uri: <secret:kv/data/3d-printer/printers~k1c_moonraker_uri>
+        moonraker_uri: <secret:kv/data/workload/3d-printing/mobileraker-companion~k1c-moonraker-uri>
         moonraker_api_key: False
 
 storage:

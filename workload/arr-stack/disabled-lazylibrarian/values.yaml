@@ -12,11 +12,11 @@ config:
   PGID: "1000"
 
 ingress_internal:
-  host: lazylibrarian.<secret:kv/data/domains~local>
+  host: lazylibrarian.<secret:kv/data/shared/domains~local>
   port: ingress
 
 ingress_internal_secure:
-  host: lazylibrarian.<secret:kv/data/domains~domain>
+  host: lazylibrarian.<secret:kv/data/shared/domains~domain>
   port: ingress
 
 storage:

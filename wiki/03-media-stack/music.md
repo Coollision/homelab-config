@@ -25,7 +25,7 @@ music fetched by **slskd** (Soulseek). The pieces:
 | slskd | `workload/arr-stack/slskd/` | StatefulSet, Longhorn `/app`, internal ingress only, no inbound port |
 | music-intake | `workload/arr-stack/music-intake/` (code in its own repository) | Tags and files finished downloads into the library, review UI on an internal ingress, see [Intake](#intake-music-intake) |
 | Tag cleanup scripts | `scripts/music/` | One-off transform for the legacy library, see [below](#the-legacy-library-and-its-tag-cleanup) |
-| NFS paths | Vault `kv/storage/nfs` (`music-path`, `downloads-path`) | Same secret as the other NFS paths |
+| NFS paths | Vault `kv/shared/nfs` (`music-path`, `downloads-path`) | Same secret as the other NFS paths |
 
 Nothing here has external ingress. Music Assistant and slskd are only reachable on the internal secure
 ingress, and Music Assistant is **not** scale-to-zero (Sonos and Home Assistant hold long-lived
@@ -155,7 +155,7 @@ Image `slskd/slskd`, pinned to the newest stable tag (ignore `canary` and the ro
 `0.26.0.<build>-<sha>` tags). Runs non-root (uid 1000, `fsGroup` for `/app`); do not combine that with
 `PUID`/`PGID`, the entrypoint exits.
 
-- **Credentials** come from Vault `kv/apps/slskd` (web UI user/password, API key, JWT key, Soulseek
+- **Credentials** come from Vault `kv/workload/arr-stack/slskd` (web UI user/password, API key, JWT key, Soulseek
   account). The web UI defaults to `slskd`/`slskd`, so they are always overridden. Soulseek has no
   signup: the first login with an unused username creates the account.
 - **No inbound port, no VPN.** The Soulseek listen port is a container port only; it is not forwarded
@@ -224,7 +224,7 @@ slskd -> Downloads/slskd (inbox) -> settle + slskd finished? -> analyse -> confi
   cleaned out). `/library` is the Music share through its own PV/PVC in `arr-stack` (read-write here, while Music
   Assistant mounts the same path read-only). The SQLite job state is on a small Longhorn volume.
 - **Wiring.** It asks slskd (same namespace) which transfers are unfinished, using slskd's API key, and triggers
-  a library sync in Music Assistant after each import with a token from Vault (`kv/apps/music-intake`).
+  a library sync in Music Assistant after each import with a token from Vault (`kv/workload/arr-stack/music-intake`).
 - **Env names** follow the config library: the config path without dots, upper-cased
   (`INTAKE_INBOXDIR`, `INTAKE_SLSKD_URL`, `DB_PATH`).
 - **No login of its own** and no external ingress: internal secure ingress only.

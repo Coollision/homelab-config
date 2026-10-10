@@ -6,10 +6,10 @@ statefulset:
     imagePullPolicy: Always
 config:
   LOGLEVEL: INFO
-  MQTT_BROKERADDRESS: <secret:kv/data/smarthome/mqtt-go-playground~BrokerAddress>
-  MQTT_BROKERID: <secret:kv/data/smarthome/mqtt-go-playground~BrokerId>
-  MQTT_BROKERUSER: <secret:kv/data/smarthome/mqtt-go-playground~BrokerUser>
-  MQTT_BROKERPASSWORD: <secret:kv/data/smarthome/mqtt-go-playground~BrokerPassword>
+  MQTT_BROKERADDRESS: <secret:kv/data/workload/smarthome/mqtt-playground~broker-address>
+  MQTT_BROKERID: <secret:kv/data/workload/smarthome/mqtt-playground~broker-id>
+  MQTT_BROKERUSER: <secret:kv/data/workload/smarthome/mqtt-playground~broker-user>
+  MQTT_BROKERPASSWORD: <secret:kv/data/workload/smarthome/mqtt-playground~broker-password>
 
 keel:
   policy: force

@@ -15,17 +15,17 @@ aws-tunnels-operator:
       # refresh token and tunnels read the rotated creds from a mounted Secret in place, so they
       # are not rolled (no ~hourly connection drop) when creds expire. Log in once per SSO session.
       useRefresh: true
-      ssoStartUrl: <secret:kv/data/proxies/aws-tunnel~sso-start-url>
-      accountId: <secret:kv/data/proxies/aws-tunnel~account-id>
-      roleName: <secret:kv/data/proxies/aws-tunnel~sso-role-name>
+      ssoStartUrl: <secret:kv/data/workload/proxies/aws-tunnels~sso-start-url>
+      accountId: <secret:kv/data/workload/proxies/aws-tunnels~account-id>
+      roleName: <secret:kv/data/workload/proxies/aws-tunnels~sso-role-name>
       extraProfiles:
         - name: awsprofile001-prod
           region: eu-central-1
-          ssoStartUrl: <secret:kv/data/proxies/aws-tunnel~prod-sso-start-url>
-          accountId: <secret:kv/data/proxies/aws-tunnel~prod-account-id>
-          roleName: <secret:kv/data/proxies/aws-tunnel~prod-sso-role-name>
+          ssoStartUrl: <secret:kv/data/workload/proxies/aws-tunnels~prod-sso-start-url>
+          accountId: <secret:kv/data/workload/proxies/aws-tunnels~prod-account-id>
+          roleName: <secret:kv/data/workload/proxies/aws-tunnels~prod-sso-role-name>
     auth:
-      host: aws-auth.<secret:kv/data/domains~domain>
+      host: aws-auth.<secret:kv/data/shared/domains~domain>
     tunnelDefaults:
       # session-manager-plugin needs ~226m while streaming; the chart default limit of 200m
       # throttles it in ~80% of CFS periods (measured 2026-08-07). That costs latency jitter,
@@ -60,48 +60,48 @@ aws-tunnels-operator:
     tunnels:
       - name: gitlab-dev
         bastionName: bastion-dev
-        remoteHost: <secret:kv/data/proxies/aws-tunnel~gitlab-dev-host>
+        remoteHost: <secret:kv/data/workload/proxies/aws-tunnels~gitlab-dev-host>
         remotePort: "81"
         localPort: 18080
-        host: gitlab-work.<secret:kv/data/domains~domain>
+        host: gitlab-work.<secret:kv/data/shared/domains~domain>
       - name: dev-db
         bastionName: bastion-dev
         remoteHost: ""
-        remotePort: <secret:kv/data/proxies/aws-tunnel~dev-db-port>
+        remotePort: <secret:kv/data/workload/proxies/aws-tunnels~dev-db-port>
         localPort: 15432
-        host: dev-db-work.<secret:kv/data/domains~domain>
+        host: dev-db-work.<secret:kv/data/shared/domains~domain>
         ingressMode: tcp
         tls:
           passthrough: false
         ssh:
           enabled: true
         rds:
-          clusterPrefix: <secret:kv/data/proxies/aws-tunnel~dev-db-cluster-prefix>
+          clusterPrefix: <secret:kv/data/workload/proxies/aws-tunnels~dev-db-cluster-prefix>
       - name: preprod-db
         bastionName: bastion-preprod
         remoteHost: ""
-        remotePort: <secret:kv/data/proxies/aws-tunnel~preprod-db-port>
+        remotePort: <secret:kv/data/workload/proxies/aws-tunnels~preprod-db-port>
         localPort: 25432
-        host: preprod-db-work.<secret:kv/data/domains~domain>
+        host: preprod-db-work.<secret:kv/data/shared/domains~domain>
         ingressMode: tcp
         tls:
           passthrough: false
         ssh:
           enabled: true
         rds:
-          clusterPrefix: <secret:kv/data/proxies/aws-tunnel~preprod-db-cluster-prefix>
+          clusterPrefix: <secret:kv/data/workload/proxies/aws-tunnels~preprod-db-cluster-prefix>
       - name: prod-db
         bastionName: bastion-prod
         awsProfile: awsprofile001-prod
         awsRegion: eu-central-1
         remoteHost: ""
-        remotePort: <secret:kv/data/proxies/aws-tunnel~prod-db-port>
+        remotePort: <secret:kv/data/workload/proxies/aws-tunnels~prod-db-port>
         localPort: 35432
-        host: prod-db-work.<secret:kv/data/domains~domain>
+        host: prod-db-work.<secret:kv/data/shared/domains~domain>
         ingressMode: tcp
         tls:
           passthrough: false
         ssh:
           enabled: true
         rds:
-          clusterPrefix: <secret:kv/data/proxies/aws-tunnel~prod-db-cluster-prefix>
+          clusterPrefix: <secret:kv/data/workload/proxies/aws-tunnels~prod-db-cluster-prefix>

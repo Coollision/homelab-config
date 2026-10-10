@@ -71,7 +71,7 @@ patches:
         value: LoadBalancer
       - op: add
         path: /spec/loadBalancerIP
-        value: <secret:kv/data/smarthome/mosquito~ip>
+        value: <secret:kv/data/workload/smarthome/mosquitto~ip>
       - op: replace
         path: /spec/ports/0/port
         value: 1880
@@ -86,10 +86,10 @@ configMapGenerator:
     files:
       - mosquitto.conf
     literals:
-      - credential1=<secret:kv/data/smarthome/mosquito~credential1>
-      - credential2=<secret:kv/data/smarthome/mosquito~credential2>
-      - credential3=<secret:kv/data/smarthome/mosquito~credential3>
-      - credential4=<secret:kv/data/smarthome/mosquito~credential4>
-      - credential5=<secret:kv/data/smarthome/mosquito~credential5>
-      - credential6=<secret:kv/data/smarthome/mosquito~credential6>
-      - credential7=<secret:kv/data/smarthome/mosquito~credential7>
+      - credential1=<secret:kv/data/workload/smarthome/mosquitto~credential-1>
+      - credential2=<secret:kv/data/workload/smarthome/mosquitto~credential-2>
+      - credential3=<secret:kv/data/workload/smarthome/mosquitto~credential-3>
+      - credential4=<secret:kv/data/workload/smarthome/mosquitto~credential-4>
+      - credential5=<secret:kv/data/workload/smarthome/mosquitto~credential-5>
+      - credential6=<secret:kv/data/workload/smarthome/mosquitto~credential-6>
+      - credential7=<secret:kv/data/workload/smarthome/mosquitto~credential-7>

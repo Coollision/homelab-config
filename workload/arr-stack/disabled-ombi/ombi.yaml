@@ -26,9 +26,9 @@ spec:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
   iscsi:
-    targetPortal: "<secret:kv/data/storage/iscsi~target-portal>"
-    iqn: <secret:kv/data/storage/iscsi~ombi-iqn>
-    initiatorName: <secret:kv/data/storage/iscsi~ombi-initiator>
+    targetPortal: "<secret:kv/data/shared/iscsi~target-portal>"
+    iqn: <secret:kv/data/shared/iscsi~ombi-iqn>
+    initiatorName: <secret:kv/data/shared/iscsi~ombi-initiator>
     lun: 1
     fsType: 'ext4'
     readOnly: false
@@ -108,7 +108,7 @@ spec:
     - web
   routes:
   - kind: Rule
-    match: Host(`ombi.<secret:kv/data/domains~local>`)
+    match: Host(`ombi.<secret:kv/data/shared/domains~local>`)
     priority: 0
     services:
     - kind: Service
@@ -126,7 +126,7 @@ spec:
     - websecure
   routes:
   - kind: Rule
-    match: host(`ombi.<secret:kv/data/domains~domain>`)
+    match: host(`ombi.<secret:kv/data/shared/domains~domain>`)
     priority: 0
     services:
     - kind: Service
@@ -147,7 +147,7 @@ spec:
     - websecure
   routes:
   - kind: Rule
-    match: host(`ombi.<secret:kv/data/domains~domain>`)
+    match: host(`ombi.<secret:kv/data/shared/domains~domain>`)
     priority: 0
     services:
     - kind: Service

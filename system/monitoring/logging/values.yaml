@@ -261,7 +261,7 @@ alloy:
           forward_to    = [loki.write.default.receiver]
         }
 syslogService:
-  loadBalancerIP: <secret:kv/data/monitoring/logging~syslog_ip>
+  loadBalancerIP: <secret:kv/data/system/monitoring/logging~syslog-ip>
   externalTrafficPolicy: Local
 
 loki:

@@ -9,7 +9,7 @@
 
 # --- our own resources (templates/) ---
 ingress_internal_secure:
-  host: k8s-mcp.<secret:kv/data/domains~domain>
+  host: k8s-mcp.<secret:kv/data/shared/domains~domain>
 
 # --- upstream chart values (subchart, keyed by dependency name) ---
 kubernetes-mcp-server:

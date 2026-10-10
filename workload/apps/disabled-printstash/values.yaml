@@ -62,7 +62,7 @@ probes:
     failureThreshold: 3
 
 ingress_internal_secure:
-  host: printstash.<secret:kv/data/domains~domain>
+  host: printstash.<secret:kv/data/shared/domains~domain>
   port: http
 
 storage:

@@ -33,11 +33,11 @@ podSecurityContext:
   fsGroup: 1000
 
 ingress_internal:
-  host: prowlarr.<secret:kv/data/domains~local>
+  host: prowlarr.<secret:kv/data/shared/domains~local>
   port: web
 
 ingress_internal_secure:
-  host: prowlarr.<secret:kv/data/domains~domain>
+  host: prowlarr.<secret:kv/data/shared/domains~domain>
   port: web
 
 storage:

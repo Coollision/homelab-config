@@ -8,9 +8,9 @@ wishlistdb:
     ports:
       postgres: 5432
   config:
-    POSTGRES_USER: <secret:kv/data/wishlist/wishlist~db-user>
-    POSTGRES_PASSWORD: <secret:kv/data/wishlist/wishlist~db-password>
-    POSTGRES_DB: <secret:kv/data/wishlist/wishlist~db-name>
+    POSTGRES_USER: <secret:kv/data/workload/apps/wishlist~db-user>
+    POSTGRES_PASSWORD: <secret:kv/data/workload/apps/wishlist~db-password>
+    POSTGRES_DB: <secret:kv/data/workload/apps/wishlist~db-name>
   storage:
     - mountPath: /var/lib/postgresql/data
       storagePath: wishlist-db/
@@ -58,22 +58,22 @@ wishlist:
 
     DB_HOST: wishlist-db-service
     DB_PORT: 5432
-    DB_USER: <secret:kv/data/wishlist/wishlist~db-user>
-    DB_PASSWORD: <secret:kv/data/wishlist/wishlist~db-password>
-    DB_NAME: <secret:kv/data/wishlist/wishlist~db-name>
+    DB_USER: <secret:kv/data/workload/apps/wishlist~db-user>
+    DB_PASSWORD: <secret:kv/data/workload/apps/wishlist~db-password>
+    DB_NAME: <secret:kv/data/workload/apps/wishlist~db-name>
 
     API_PORT: 4000
     GIN_MODE: release
 
-    STRIPE_SECRETKEY: <secret:kv/data/wishlist/wishlist~stripe_secret_key>
-    STRIPE_PUBLICKEY: <secret:kv/data/wishlist/wishlist~stripe_public_key>
-    STRIPE_WEBHOOKSECRET: <secret:kv/data/wishlist/wishlist~stripe_webhook_secret>
+    STRIPE_SECRETKEY: <secret:kv/data/workload/apps/wishlist~stripe-secret-key>
+    STRIPE_PUBLICKEY: <secret:kv/data/workload/apps/wishlist~stripe-public-key>
+    STRIPE_WEBHOOKSECRET: <secret:kv/data/workload/apps/wishlist~stripe-webhook-secret>
 
   ingress_internal_secure:
-    host: wishlist.<secret:kv/data/domains~domain>
+    host: wishlist.<secret:kv/data/shared/domains~domain>
     port: web
   ingress_external_secure:
-    host: wishlist.<secret:kv/data/domains~domain>
+    host: wishlist.<secret:kv/data/shared/domains~domain>
     additionalRules: Path(`/api/stripe/confirmPayment`)
     port: web
   probes:

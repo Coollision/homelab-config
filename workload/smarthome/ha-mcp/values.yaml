@@ -26,7 +26,7 @@ config:
   # Public-facing base URL the clients connect to, and where the OAuth /authorize,
   # /token and /register endpoints live. MUST exactly match the ingress host below
   # (scheme + host), or the OAuth redirects break.
-  MCP_BASE_URL: https://ha-mcp.<secret:kv/data/domains~domain>
+  MCP_BASE_URL: https://ha-mcp.<secret:kv/data/shared/domains~domain>
 
   # ha-mcp persists its DCR client registrations (oauth_clients.json) and HMAC
   # signing secret (oauth_hmac_secret, auto-generated on first boot if absent)
@@ -60,7 +60,7 @@ storage:
 # LAN access for multiple PCs over TLS, internal only (websecure entrypoint, no external ingress).
 # Reuses the wildcard cert for the internal domain that homeassistant already uses.
 ingress_internal_secure:
-  host: ha-mcp.<secret:kv/data/domains~domain>
+  host: ha-mcp.<secret:kv/data/shared/domains~domain>
   port: web
 
 # The MCP endpoint rejects bare requests (anything without the secret path), so HTTP GET

@@ -26,7 +26,7 @@ defaults:
   # First-boot seed only — Technitium ignores these once /etc/dns config exists.
   config:
     TZ: Europe/Brussels
-    DNS_SERVER_ADMIN_PASSWORD: <secret:kv/data/dns/technitium~admin-pass>
+    DNS_SERVER_ADMIN_PASSWORD: <secret:kv/data/system/dns/technitium~admin-pass>
     DNS_SERVER_ENABLE_BLOCKING: "true"
     DNS_SERVER_FORWARDERS: "1.1.1.1, 9.9.9.9"
   # hostAliases: both pods need to resolve each other's cluster hostnames.
@@ -35,10 +35,10 @@ defaults:
   # stay on the flannel overlay — source IP is the pod IP, never the node IP.
   # ClusterIPs are pinned in each instance's clusterIP field (survives rebuild).
   hostAliases:
-    - ip: <secret:kv/data/dns/technitium~clusterip-primary>
+    - ip: <secret:kv/data/system/dns/technitium~clusterip-primary>
       hostnames:
         - technitium-primary.mylocaldns
-    - ip: <secret:kv/data/dns/technitium~clusterip-secondary>
+    - ip: <secret:kv/data/system/dns/technitium~clusterip-secondary>
       hostnames:
         - technitium-secondary.mylocaldns
   affinity:
@@ -78,7 +78,7 @@ defaults:
             ip link show net1 >/dev/null 2>&1 && break
             sleep 1
           done
-          for peer in <secret:kv/data/dns/technitium~lb-ip-primary> <secret:kv/data/dns/technitium~lb-ip-secondary> <secret:kv/data/external-ips~gobelijn>; do
+          for peer in <secret:kv/data/system/dns/technitium~lb-ip-primary> <secret:kv/data/system/dns/technitium~lb-ip-secondary> <secret:kv/data/shared/network~gobelijn-ip>; do
             ip route replace "$peer/32" dev net1
           done
       securityContext:
@@ -98,7 +98,7 @@ primary:
   syncWave: 0
   nameOverride: technitium-primary
   fullnameOverride: technitium-primary
-  clusterIP: <secret:kv/data/dns/technitium~clusterip-primary>
+  clusterIP: <secret:kv/data/system/dns/technitium~clusterip-primary>
   config:
     DNS_SERVER_DOMAIN: technitium-primary.mylocaldns
   # storage is a list — replaces defaults entirely (volumeName is the only difference)
@@ -144,7 +144,7 @@ primary:
       ipam:
         type: dhcp
   ingress_internal_secure:
-    host: dns-a.<secret:kv/data/domains~domain>
+    host: dns-a.<secret:kv/data/shared/domains~domain>
     port: cluster
     serversTransport: technitium-primary-https
 
@@ -154,7 +154,7 @@ secondary:
   syncWave: 1
   nameOverride: technitium-secondary
   fullnameOverride: technitium-secondary
-  clusterIP: <secret:kv/data/dns/technitium~clusterip-secondary>
+  clusterIP: <secret:kv/data/system/dns/technitium~clusterip-secondary>
   config:
     DNS_SERVER_DOMAIN: technitium-secondary.mylocaldns
   storage:
@@ -181,6 +181,6 @@ secondary:
       ipam:
         type: dhcp
   ingress_internal_secure:
-    host: dns-b.<secret:kv/data/domains~domain>
+    host: dns-b.<secret:kv/data/shared/domains~domain>
     port: cluster
     serversTransport: technitium-secondary-https

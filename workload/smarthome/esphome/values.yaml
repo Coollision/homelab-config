@@ -26,7 +26,7 @@ resources:
     cpu: 2000m
     memory: 2Gi
 ingress_internal_secure:
-  host: esphome.<secret:kv/data/domains~domain>
+  host: esphome.<secret:kv/data/shared/domains~domain>
   port: web
 
 # MACVLAN leg on VLAN 40 (IoT) so the dashboard's mDNS browser is L2-adjacent to

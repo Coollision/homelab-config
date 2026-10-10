@@ -14,8 +14,8 @@ spec:
     - ReadOnlyMany
   persistentVolumeReclaimPolicy: Retain
   nfs:
-    server: <secret:kv/data/storage/nfs~server-ip>
-    path: "<secret:kv/data/storage/nfs~music-path>"
+    server: <secret:kv/data/shared/nfs~server-ip>
+    path: "<secret:kv/data/shared/nfs~music-path>"
     readOnly: true
   mountOptions:
     - vers=4.1
