@@ -61,8 +61,15 @@ initContainers:
         # The speakers hold fixed addresses, so these routes are stable; if one
         # is ever renumbered its route goes stale and Sonos quietly falls back
         # to polling rather than failing loudly.
-        for speaker in 192.168.5.40 192.168.5.42 192.168.5.43; do
-          ip route replace "$speaker/32" dev net2 || echo "WARNING: no route for $speaker"
+        #
+        # 192.168.5.190 is the living-room Samsung TV (samsungtv integration,
+        # WebSocket 8001/8002). It needs the route for a different reason: the
+        # UniFi Servers -> Internal zone only allows Sonos, IPP and ESPHome, so
+        # via the eth0 default route (SNAT'd onto the Servers VLAN) the pairing
+        # request is dropped and the TV never shows its "Allow" prompt. Over
+        # net2 it is plain same-L2 traffic that the firewall never sees.
+        for host in 192.168.5.40 192.168.5.42 192.168.5.43 192.168.5.190; do
+          ip route replace "$host/32" dev net2 || echo "WARNING: no route for $host"
         done
     securityContext:
       runAsUser: 0
