@@ -214,9 +214,12 @@ slskd -> Downloads/slskd (inbox) -> settle + slskd finished? -> analyse -> confi
   the inbox ends up empty. If tagging fails for any file nothing moves. A restart in the middle (Keel restarts the
   pod on every new image) is resumed automatically: not yet in the library -> the import runs again, already
   filed -> only the bookkeeping is finished, ambiguous -> `failed` with an explanation for a person to look at.
-- **Speed.** ReplayGain dominates the import time: about a minute and a half for a 16-track mp3 album, about ten
-  minutes for a 28-track m4a compilation on the 2-core pod. Set `INTAKE_REPLAYGAIN=false` if speed matters more
-  (Music Assistant measures loudness itself when the tags are missing).
+- **Speed.** ReplayGain used to dominate the import time (about ten minutes for a 28-track m4a compilation). The
+  tagger now measures it with **`rsgain`** (one multi-threaded pass per album, scan-only, sample peak) and keeps the
+  old ffmpeg engine as an automatic fallback: 14 tracks of 4 minutes under the pod's 2 CPUs took 37 s with ffmpeg,
+  16 s with rsgain and true peak, 7 s with rsgain and sample peak (the default). A whole 14-track import now takes
+  seconds. `INTAKE_REPLAYGAIN=false` still switches the loudness tags off, `TAGGER_RG_ENGINE` and `TAGGER_RG_TRUE_PEAK=1`
+  override the engine and the peak type.
 - **Verified 2026-10-09** with two real slskd downloads: an mp3 artist album (auto-filed as `Artist - Album`, ID3v2.4,
   ReplayGain, no ID3v1) and an m4a compilation (filed as `Album`, `Various Artists`, compilation flag, ReplayGain),
   the inbox left empty and both albums visible in Music Assistant after the sync the intake triggered itself.
@@ -251,14 +254,46 @@ helper), config on a Longhorn volume, internal ingress only.
   same folder the intake treats as its inbox, so the intake would also pick those albums up, and Soularr has an open
   bug where its cleanup touches other slskd downloads. Torrents avoid this: they land in `Downloads`, the intake
   only watches `Downloads/slskd`. Revisit once there is a design for separating them.
-- **Settings to apply in the UI** (they live in the database, not in this repo): root folder `/music`, **Recycle Bin on**
-  (when the community metadata server returns nothing for an artist Lidarr can delete the artist's files), write
-  metadata off, the Prowlarr application link, the Download Station client and its remote path mapping. A metadata
-  profile with only studio albums is the default.
+- **Settings that live in Lidarr's database, not in this repo** (configured through the API on 2026-10-10, so a
+  rebuilt database needs them again):
+  - Root folder `Lidarr` = `/music`; new artists default to monitor **none**, so nothing downloads until you choose.
+  - Metadata profile `Standard` (album, studio only, compilations off). Quality profile **`Music 320+`**: MP3-VBR-V0,
+    MP3-320 and FLAC allowed, cutoff MP3-320, upgrades on (24-bit FLAC and AAC are not in the profile).
+  - **Recycle Bin on** at `/data/downloads/lidarr-recycle`, kept 14 days (when the metadata server returns nothing for an
+    artist Lidarr can delete the artist's files), delete empty folders on, unmonitor deleted tracks on, hardlinks off,
+    rename tracks on (this tree is Lidarr's own), write audio tags **off**, no extra files.
+  - Download client: Download Station (Lidarr's `TorrentDownloadStation` implementation, the only Download Station one
+    it offers) with the same connection settings as Radarr, category `lidarr` (the folder must exist on the NAS or the
+    test fails with "Shared folder does not exist"), remove completed off (the NAS keeps seeding), remove failed on.
+    Remote path mapping: the NAS Downloads share to `/data/downloads`, exactly like Radarr.
+  - Prowlarr application `Lidarr` (full sync, audio categories 3000-3050), which syncs the indexers into Lidarr: today
+    **Knaben and The Pirate Bay**. Enabled in Prowlarr but not synced: `jackett-idope` (no music search), `BT.etree`
+    (disabled by Prowlarr after failures) and `Torrent Downloads` (failing since 2026-08-31), worth a look in Prowlarr.
+  - Verified end to end without downloading anything: the metadata server answers, and a temporary unmonitored artist
+    returned 25 releases for one album from the two indexers (mostly FLAC), after which it was deleted again.
+- **First start gotcha.** On its very first start Lidarr (like the other arr apps) runs on **SQLite**, because
+  `config.xml` does not exist yet when the Postgres bootstrap init container runs; the Postgres settings are only
+  applied by that container on the **next start**. Restart the pod once after the first deploy and check
+  `/api/v1/system/status` reports `databaseType: postgreSQL`.
 - **Metadata source.** Lidarr depends on a community-hosted mirror of MusicBrainz (the Servarr metadata server). It had a
   long outage in 2025 and looks healthy now. If it misbehaves, the symptoms are artists that cannot be added or refreshed.
 - Version bumps: stay on a plain stable tag. `develop`/`nightly` only add plugin support (Tubifarry) and going back
   to stable afterwards needs a database restore.
+
+## Alternatives considered for the intake
+
+Recorded so nobody redoes this research (all evaluated 2026-10-09/10):
+
+- **beets-flask** (web UI for beets): release candidate software, copy-only (the inbox would never empty), no login, no
+  special handling for compilations without a MusicBrainz match, and a library-statistics call reported to block for
+  minutes on a large NFS library.
+- **wrtag** (Go, MusicBrainz based, optional web UI): tested hands-on. Strong for releases MusicBrainz knows, but it
+  **cannot import a release without a match** (no "keep my tags" mode, a fixed 95% score, matching on tag text of the
+  first track only), it **overwrites an existing destination silently and deletes the other files in it**, and it appends
+  an ID3v1 block to every mp3. It has no inbox watching either (something must POST each folder). Compilations are most
+  of the library, so it was not adopted; it could only ever be an optional side path for single-artist albums.
+- **Tagr**: a manual tag editor with a web UI, not an inbox pipeline; a possible hand-fix tool, not adopted.
+- Borrowed instead: `rsgain` for ReplayGain (see Speed above).
 
 ## The legacy library and its tag cleanup
 
