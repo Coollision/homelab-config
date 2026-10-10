@@ -39,9 +39,10 @@ radio playing across all devices, legacy library scanned (116 albums, 31 album a
 
 ## Lidarr (artist albums, torrents; deployed 2026-10-10)
 
-- [ ] Pod Ready, the two databases created (owned by `lidarr_user`), the UI reachable on its internal ingress.
-- [ ] In the UI: root folder `/music`, Recycle Bin on, write metadata off, link Prowlarr, add the Download Station client
-      and the remote path mapping, check that a test search finds something.
+- [x] Pod Ready on PostgreSQL (after the one extra restart), the databases created, the UI reachable (2026-10-10).
+- [x] Configured via the API and verified: root folder, quality and metadata profiles, Recycle Bin, Download Station
+      client and remote path mapping, Prowlarr link (Knaben, The Pirate Bay synced), a test search returned releases.
+- [ ] Look at the two Prowlarr indexers that fail (`BT.etree`, `Torrent Downloads`) and decide whether to fix or drop them.
 - [ ] Add one artist you do not have yet and follow it to a filed album: grabbed, imported into `Music/Lidarr`, visible
       in Music Assistant with sensible tags.
 - [ ] Decide later whether to connect Soulseek (Soularr) and how to keep it apart from the intake.

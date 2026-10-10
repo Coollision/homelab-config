@@ -214,6 +214,14 @@ and caused an OOMKill on startup that presented in the browser as "WebSocket not
 connected" with no obvious cause. Check for an OOMKill first if this symptom recurs after
 a version bump.
 
+### Arr apps start on SQLite the first time and only use Postgres after one more restart {#arr-first-start-sqlite}
+
+A new Radarr/Sonarr/Lidarr/Prowlarr deployment with `arrXmlPostgres` first starts on its default **SQLite**: the init
+container that writes the Postgres settings into `config.xml` finds no file yet and skips ("config.xml not found yet,
+skipping Postgres bootstrap"). The app then creates `config.xml`, and the settings are only applied on the **next**
+start. Fix: restart the pod once (`kubectl -n arr-stack delete pod <app>-0`) and check `/api/v1/system/status` for
+`databaseType: postgreSQL`. Nothing is lost, because a fresh app has no data yet; do it before configuring the app.
+
 ### The Sonos Roam keeps dropping out of a group {#roam-drops-in-bridged-groups}
 
 Symptom: audio stops for a moment every few seconds on the Roam while the group plays. The Roam's Wi-Fi is fine
