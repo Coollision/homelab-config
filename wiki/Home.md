@@ -45,6 +45,7 @@ The infrastructure layer every workload depends on — all under `system/`.
 | [Cluster housekeeping](01-platform/cluster-housekeeping.md) | Keel, kube-fledged, Reloader, Sablier scale-to-zero, NFD/descheduler |
 | [Certificates](01-platform/certificates.md) | cert-manager + the Cloudflare DNS-01 wildcard cert |
 | [Power — NUT](01-platform/power-nut.md) | UPS monitoring, PeaNUT dashboard, planned auto-shutdown |
+| [Routed IPTV](01-platform/iptv.md) | Proximus TV on its own UniFi VLAN/zone: WAN2 on the ISP box LAN, IGMP proxy, multicast→unicast over WiFi mesh + watchdog |
 
 ### [02 · Smart Home](02-smarthome/)
 Home Assistant and everything wired into it — all under `workload/smarthome/`.
