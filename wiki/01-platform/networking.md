@@ -78,6 +78,7 @@ ClusterIPs and the API won't let a primary's advertised IP change after init.
 | 5 | Intern | Home Assistant, matter-server (2nd leg), thread-border-router (2nd leg, mDNS only), mdns-reflector |
 | 30 | Servers | Technitium DNS cluster, Mosquitto's LoadBalancer IP |
 | 40 | IoT | matter-server (primary), thread-border-router (primary/Thread backbone), mdns-reflector, ESPHome |
+| 120 | TV | Proximus TV decoders (routed, own firewall zone, IGMP proxy via a 2nd WAN) — not cluster-related, see [Routed IPTV](iptv.md) |
 
 The **mdns-reflector** (`workload/smarthome/mdns-reflector`) exists purely to bridge
 mDNS announcements between VLAN 40 and VLAN 5, so phones on the LAN can discover IoT

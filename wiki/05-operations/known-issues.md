@@ -308,6 +308,37 @@ fixed IP reservation requires the older, undocumented legacy API instead. Reserv
 address still held by another client fails until that client is explicitly forgotten
 first, and a forgotten client's record can reappear on any residual traffic from it.
 
+
+### IPTV multicast never crosses the ISP box's internet bridge {#iptv-multicast-never-crosses-the-isp-box-bridge}
+
+With VDSL and the ISP's Internet Box bridging the internet session to the UDM, the UDM's IGMP
+proxy can send perfect joins upstream (any IGMP version) and **still receive zero multicast**:
+the box only delivers TV multicast to devices on **its own LAN side**. The symptom is subtle —
+live TV *starts* but stutters, because the decoder keeps joining/leaving and falls back to the
+ISP's short unicast fast-channel-change stream; replay/recordings (plain unicast) are perfect.
+Fix: a second UDM WAN (failover-only) cabled to a box LAN port, IGMP proxy upstream on that WAN.
+Prove it first with a packet capture on the UDM, not with switch counters — the UDM's own WAN
+port doesn't populate its multicast counters at all (always 0). Full story:
+[Routed IPTV](../01-platform/iptv.md).
+
+### IGMP snooping breaks live TV when a switch querier competes with the IGMP proxy {#igmp-snooping-competing-querier}
+
+On the TV VLAN, IGMP snooping with the switches configured as querier made live TV drop out
+within a minute or two. The UDM's IGMP proxy already acts as querier on that VLAN; a second
+querier on the switches fights it. Snooping **with an empty switch-querier list** (fast-leave
+off) works on every decoder and stops flooding each TV's channel to the other. Test snooping
+changes for at least 2–3 minutes per decoder — the failure only shows at the first membership
+refresh.
+
+### Multicast over a UniFi wireless-mesh link saturates the channel {#multicast-over-wifi-mesh}
+
+A wired device behind a **meshed** (cable-less) AP receiving a multicast stream (IPTV) makes the
+mesh link send it as broadcast at the lowest basic rate: one ~7 Mbit/s stream ≈ 90% of the 5 GHz
+airtime. A better mesh parent and the SSID "minimum data rate" don't help — the mesh backhaul
+ignores SSID settings. What fixed it: the UDM's Linux bridge flag `mcast_to_unicast` on the
+VLAN's bridge ports (unicast copy per IGMP listener → full PHY rate, airtime ~22%). UniFi resets
+that flag on every reprovision/reboot, so it's kept alive by a watchdog with a Home Assistant
+dead man's switch — see [Routed IPTV → the watchdog](../01-platform/iptv.md#keeping-it-on-the-watchdog).
 ---
 
 ## Databases
