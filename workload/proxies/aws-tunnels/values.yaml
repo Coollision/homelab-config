@@ -8,6 +8,18 @@ aws-tunnels-operator:
   ingress:
     enabled: true
 
+  # Keep everything off the Raspberry Pi workers: the Amazon Linux based images need ARMv8.2+, and
+  # the Pi (v8.0) dies with "Fatal glibc error" on `aws sso login` (exit 127). Operator pod uses
+  # the chart affinity; the tunnel pods it spawns get the same rule via stack.nodeAffinity below.
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: type
+                operator: NotIn
+                values: [rpi]
+
   stack:
     aws:
       region: eu-central-1
@@ -24,6 +36,9 @@ aws-tunnels-operator:
           ssoStartUrl: <secret:kv/data/workload/proxies/aws-tunnels~prod-sso-start-url>
           accountId: <secret:kv/data/workload/proxies/aws-tunnels~prod-account-id>
           roleName: <secret:kv/data/workload/proxies/aws-tunnels~prod-sso-role-name>
+    # Same rule for the tunnel pods (operator renders it as type NotIn [rpi]).
+    nodeAffinity:
+      excludedType: rpi
     auth:
       host: aws-auth.<secret:kv/data/shared/domains~domain>
     tunnelDefaults:
