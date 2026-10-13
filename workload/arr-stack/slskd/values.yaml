@@ -5,7 +5,7 @@ statefulset:
   image:
     repository: slskd/slskd
     # Newest stable on Docker Hub (2026-10). Ignore the 'canary' and 0.26.0.65534-<sha> rolling tags.
-    tag: 0.26.0
+    tag: 0.26.1
   ports:
     web: 5030
     # Soulseek listen port. Deliberately NOT forwarded on the router and not exposed through a
