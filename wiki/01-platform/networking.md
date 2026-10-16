@@ -8,7 +8,7 @@ gone wrong here. This page covers the steady-state design.
 
 ## The pieces, and how traffic actually flows
 
-```
+```text
 Internet ──▶ Cloudflare Tunnel ──▶ "external" Traefik ──▶ ingress objects opting into
                 (cloudflared)         (2nd instance)        ingressClass: traefik-external
 

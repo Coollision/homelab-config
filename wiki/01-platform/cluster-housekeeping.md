@@ -16,15 +16,17 @@ rather than waiting for a Renovate PR.
 ## kube-fledged — image pre-caching
 
 `system/kube-system/kube-fledged` pre-pulls/caches container images on nodes via
-`ImageCache` CRDs (defined per-workload, not centrally). Useful for large images
+`ImageCache` CRs, rendered per-workload by `shared-lib`'s image pre-sync template (not
+centrally). Useful for large images
 (ESPHome's build toolchain, monitoring stack images) where a cold pull would otherwise
 delay a pod's first start noticeably.
 
 ## Reloader — status unclear
 
 `system/kube-system/reloader` is listed here for completeness, but as of this writing
-its `Chart.yaml`/`values.yaml` don't exist on disk *or* in git, and no workload anywhere
-in the repo carries a `reloader.stakater.com/...` annotation. **Don't assume this is
+the directory holds only a vendored `charts/reloader-*.tgz` — there is no `Chart.yaml` or
+`values.yaml` — and no workload anywhere in the repo carries a `reloader.stakater.com/...`
+annotation. **Don't assume this is
 active** — verify against the live ArgoCD UI before relying on config-change-triggered
 rollouts here.
 
@@ -55,9 +57,10 @@ node sat at 94% CPU by *requested* (not actual) load.
 idle web-UI Deployments to zero replicas and wake them on the next incoming request.
 One shared Sablier controller serves every enrolled app.
 
-**Currently enrolled:** echo (test app, 2m), CloudBeaver (30m), PeaNUT (30m), ESPHome
-(3h — deliberately long to avoid interrupting batch firmware updates), ha-mcp (30m,
-blocking wait), kubernetes-mcp-server, Longhorn UI, and the ArgoCD server itself (the
+**Currently enrolled** (via `shared-lib`'s `scaleToZero` block unless noted; default idle
+timeout 30m): echo (test app, 2m), CloudBeaver, PeaNUT, vscode-server (1h), ESPHome
+(3h — deliberately long to avoid interrupting batch firmware updates), ha-mcp (blocking
+wait, 2m timeout), kubernetes-mcp-server, Longhorn UI, and the ArgoCD server itself (the
 last three via hand-wired label patches since their upstream charts have no
 `scaleToZero` knob). **BabyBuddy was tried and explicitly reverted** — used too often for
 the wake delay to be worth it.

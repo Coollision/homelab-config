@@ -17,7 +17,7 @@ steady-state design **plus** the story of why it ended up this shape, because al
 
 ## The final design
 
-```
+```text
 VDSL ─▶ ISP Internet Box ──(bridged internet: public IP)────────▶ UDM WAN1  (DHCP)
                  │
                  └──(box LAN port: TV multicast lives HERE)──────▶ UDM WAN2  (DHCP, failover-only,

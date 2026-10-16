@@ -70,7 +70,7 @@ Vault holds one KV v2 mount, `kv`. Every secret path **mirrors the repo director
 that owns it**, so "where does this secret live?" and "who uses it?" are answerable from the
 file tree alone:
 
-```
+```text
 kv/
   system/<namespace>/<app>     ← repo dir system/<namespace>/<app>
   workload/<namespace>/<app>   ← repo dir workload/<namespace>/<app>

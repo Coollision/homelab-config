@@ -7,12 +7,12 @@
 `system/databases/cloudnative-pg` installs just the **CloudNativePG operator** — a small,
 lean deployment (operator only; monitoring/dashboards explicitly left disabled for now).
 Every actual Postgres instance is a separate `Cluster` custom resource defined by the
-*consuming* workload, not centrally here. There are currently two:
+*consuming* workload, not centrally here. There are currently two (`workload/smarthome/smarthome-db-cnpg`, `workload/arr-stack/service-db-cnpg`):
 
 | Cluster | Namespace | Backs |
 |---|---|---|
 | `smarthome-db-pg` | `smarthome` | Home Assistant recorder, n8n |
-| `service-db-pg` | `arr-stack` | Sonarr, Radarr, Prowlarr, Bazarr, Jellyseerr |
+| `service-db-pg` | `arr-stack` | Sonarr, Radarr, Prowlarr, Lidarr, Bazarr, Jellyseerr |
 
 ## The declarative pattern every CNPG cluster follows
 
@@ -61,7 +61,7 @@ as the only rollback path after that point.
 
 ## Consumer pattern for apps that don't natively speak Postgres
 
-Radarr, Sonarr, and Prowlarr default to SQLite and don't take a `DATABASE_URL`-style env
+Radarr, Sonarr, Prowlarr and Lidarr default to SQLite and don't take a `DATABASE_URL`-style env
 var — so `lib/arr-lib` (a thin Helm library wrapping `shared-lib`) injects an init
 container that waits for Postgres to be reachable, then rewrites the app's
 `config.xml` in place via `xmlstarlet` to point at Postgres instead. Apps that *do*

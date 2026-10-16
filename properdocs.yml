@@ -1,0 +1,86 @@
+site_name: HomeLab Wiki
+site_description: How the k3s homelab is built, why, and how to operate it
+repo_url: https://github.com/Coollision/homelab-config
+edit_uri: edit/master/wiki/
+docs_dir: wiki
+site_dir: site
+
+nav:
+  - Home: Home.md
+  - Setup:
+      - 00-setup/bootstrap.md
+      - 00-setup/gitops-structure.md
+      - 00-setup/ansible.md
+  - Platform:
+      - 01-platform/networking.md
+      - 01-platform/storage.md
+      - 01-platform/databases.md
+      - 01-platform/secrets-vault.md
+      - 01-platform/certificates.md
+      - 01-platform/observability.md
+      - 01-platform/cluster-housekeeping.md
+      - 01-platform/power-nut.md
+      - 01-platform/iptv.md
+  - Smart Home:
+      - 02-smarthome/home-assistant.md
+      - 02-smarthome/database.md
+      - 02-smarthome/esphome.md
+      - 02-smarthome/zigbee.md
+      - 02-smarthome/matter-thread.md
+      - 02-smarthome/voice.md
+      - 02-smarthome/automation-mcp.md
+  - Media Stack:
+      - 03-media-stack/overview.md
+      - 03-media-stack/music.md
+  - Apps:
+      - 04-apps/aws-proxies.md
+      - 04-apps/misc-apps.md
+  - Operations:
+      - 05-operations/known-issues.md
+      - 05-operations/kubectl-cheatsheet.md
+      - 05-operations/ansible-cheatsheet.md
+      - 05-operations/history.md
+  - TODO:
+      - 06-todo/music-stack.md
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle: { icon: material/weather-night, name: Switch to dark mode }
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle: { icon: material/weather-sunny, name: Switch to light mode }
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - search.suggest
+    - content.code.copy
+    - content.action.edit
+
+plugins:
+  - search
+  - redirects:
+      redirect_maps:
+        index.md: Home.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      slugify: !!python/object/apply:pymdownx.slugs.slugify {kwds: {case: lower}}
+  - pymdownx.superfences
+  - pymdownx.highlight
+
+# Pages link out to repo paths (docs/, workload/, ...) that live outside docs_dir;
+# those can't resolve on the site, so don't fail the build on them.
+validation:
+  links:
+    not_found: info
+    absolute_links: info
+    unrecognized_links: info

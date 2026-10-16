@@ -7,7 +7,7 @@ internalizing before touching anything: **the directory path *is* the deployment
 
 ## The path → namespace convention
 
-```
+```text
 system/<namespace>/<app>/       ──▶  Application "<app>", namespace <namespace>, AppProject "system"
 workload/<namespace>/<app>/     ──▶  Application "<app>", namespace <namespace>, AppProject "workloads"
 tests/<namespace>/<app>/        ──▶  same, but from a separate git branch ("tests"), AppProject "tests"
@@ -94,7 +94,7 @@ just fills in the blanks.
 
 ## Directory layout at a glance
 
-```
+```text
 argocd/          ArgoCD's own Helm release (self-managed, standalone Application)
 applications/    AppProjects + ApplicationSets — the root of the fan-out tree
 lib/             Shared Helm library charts (not deployed directly — consumed as deps)

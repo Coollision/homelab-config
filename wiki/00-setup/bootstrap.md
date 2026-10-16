@@ -6,7 +6,7 @@ Bootstrapping this homelab is a two-phase process with a hard line between them:
 **Ansible builds the OS + k3s layer. Everything above that is Helm/ArgoCD.** Ansible
 never touches a Kubernetes object; it stops the moment `kubectl get nodes` works.
 
-```
+```text
 ┌─────────────┐   ┌──────────────┐   ┌─────────────┐   ┌──────────────┐
 │  Debian      │──▶│  Ansible:    │──▶│  Ansible:   │──▶│  Ansible:    │
 │  preseed     │   │  node prep   │   │  k3s install │   │  DNS records │
@@ -61,8 +61,8 @@ At this point `kubectl get nodes` works and Ansible's job is done.
 From the top-level `README.md`, in order, run manually:
 
 ```bash
-# 1. Storage must exist first — everything else needs a StorageClass
-helm install storage system/kube-system/storage -n kube-system
+# 1. Storage must exist first — everything else needs a StorageClass (Longhorn)
+helm install storage system/storage/longhorn -n storage --create-namespace
 
 # 2. Vault next — unseal it before continuing (see the Vault page/readme)
 helm install vault system/secrets/vault -n secrets --create-namespace

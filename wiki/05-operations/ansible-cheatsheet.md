@@ -16,8 +16,8 @@ cd ansible
 | `k3scluster` | every k3s node (`k3smaster` + `k3sworkers`) |
 | `k3smaster` | the control-plane node(s) |
 | `k3sworkers` | worker nodes |
-| `nodes` | `vm` + `mini` groups (everything that isn't a bare Pi) |
-| `rpi` | Raspberry Pi hosts outside the k3s cluster |
+| `nodes` | `vm` + `mini` + `rpi` groups |
+| `rpi` | Raspberry Pi hosts (currently one, also a k3s worker) |
 | `vm` | the VM-class worker |
 | `mini` | Mac mini-class hosts |
 | `all` | literally everything in inventory |
@@ -72,7 +72,7 @@ ansible <hostname> -m setup
 ## Full cluster update (OS + kernel + k3s)
 
 One cordon/drain/uncordon pass per node covering OS packages, the kernel, and the k3s
-binary version together — see [docs/cluster-update-playbook.md](../../docs/cluster-update-playbook.md)
+binary version together — see [docs/cluster-update-playbook.md](https://github.com/Coollision/homelab-config/blob/master/docs/cluster-update-playbook.md)
 for the full design (why it's one pass, the Longhorn/CNPG drain-blocker handling, node
 ordering). **Safe by default** — `dry_run` defaults to `true`, so a plain run only
 reports what would change; nothing is touched until you pass `-e dry_run=false`.
@@ -85,7 +85,7 @@ cd ansible
 ansible-playbook playbooks/cluster_update.yml
 
 # Try it for real on one node first (recommended — pick the least critical node)
-ansible-playbook playbooks/cluster_update.yml -e dry_run=false --limit node-blue
+ansible-playbook playbooks/cluster_update.yml -e dry_run=false --limit <node-name>
 
 # Real run, everything, whole cluster (master first, then workers — see docs)
 ansible-playbook playbooks/cluster_update.yml -e dry_run=false

@@ -339,6 +339,7 @@ ignores SSID settings. What fixed it: the UDM's Linux bridge flag `mcast_to_unic
 VLAN's bridge ports (unicast copy per IGMP listener → full PHY rate, airtime ~22%). UniFi resets
 that flag on every reprovision/reboot, so it's kept alive by a watchdog with a Home Assistant
 dead man's switch — see [Routed IPTV → the watchdog](../01-platform/iptv.md#keeping-it-on-the-watchdog).
+
 ---
 
 ## Databases
@@ -411,13 +412,12 @@ your ConfigMap or JSON is wrong.
 
 ### Local `helm template` can lie about what ArgoCD will actually render {#helm-4-local-render-gap}
 
-If you're on a newer major Helm version locally than what ArgoCD uses to render in
-cluster, be aware: newer Helm versions changed how a subchart's own default values get
-merged into the parent chart's values tree, so a template that depends on a subchart
-default being coalesced up can render as empty locally while rendering correctly in
-ArgoCD (or vice versa). If a local `helm template` run doesn't show a change you expect,
-try explicitly setting the value you'd expect to be inherited before concluding the
-template itself is broken.
+ArgoCD's rendering plugin is pinned to Helm 3, so a newer major Helm locally can differ
+from what renders in cluster. As of Helm 4.2.x the only known gap is how a `null` override
+of a subchart default is merged (e.g. clearing a subchart's default `resources`): the
+value may survive locally but not in ArgoCD, or vice versa. If a local `helm template`
+doesn't show a change you expect, compare against `helm3` before concluding the template
+is broken.
 
 ### The Grafana v2 dashboard export format needs a wrapper {#grafana-v2-dashboard-export-format}
 
@@ -461,7 +461,7 @@ deep-links to that dashboard to keep working.
 **The conflict:** idle-timeout scale-to-zero resets its idle clock on new incoming HTTP
 requests — but a long-lived session-based protocol (like an MCP server's persistent
 connection) can sit open and quiet without sending a new request, so the clock expires
-and the pod scales to zero **out from under an still-open client session**, killing it.
+and the pod scales to zero **out from under a still-open client session**, killing it.
 
 **This is confirmed in practice, not theoretical** — an MCP server enrolled in
 scale-to-zero here genuinely does this: it works, but needs a short manual reconnect
@@ -532,7 +532,7 @@ node, for different reasons:
 
 **Fix:** don't hand-drain nodes here — use `ansible-playbook playbooks/cluster_update.yml`
 (see [Ansible cheat sheet](ansible-cheatsheet.md#full-cluster-update-os--kernel--k3s) and
-[docs/cluster-update-playbook.md](../../docs/cluster-update-playbook.md)), which drains
+[docs/cluster-update-playbook.md](https://github.com/Coollision/homelab-config/blob/master/docs/cluster-update-playbook.md)), which drains
 with `--disable-eviction` — bypassing every PDB directly (Longhorn's, CNPG's, anything
 else) rather than negotiating with each — safe only because the playbook's own
 pre-flight check already refuses to run at all if any volume is degraded, guaranteeing

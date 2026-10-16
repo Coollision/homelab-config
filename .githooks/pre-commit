@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Pre-commit: let Claude (Sonnet, low effort) check whether the staged change makes
+# the wiki stale, and if so update wiki/ and stage that update into the same commit.
+#
+# Enable once per clone:   git config core.hooksPath .githooks
+# Skip for one commit:     SKIP_WIKI_SYNC=1 git commit ...   (or git commit --no-verify)
+#
+# Never blocks a commit: any failure here just logs and lets the commit through.
+
+[ -n "${SKIP_WIKI_SYNC:-}" ] && exit 0
+[ -n "${CI:-}" ] && exit 0
+command -v claude >/dev/null 2>&1 || exit 0
+
+cd "$(git rev-parse --show-toplevel)" || exit 0
+
+# Only react to changes that can make the wiki stale (not wiki/docs/site-tooling edits).
+relevant=$(git diff --cached --name-only --diff-filter=ACMRD \
+  | grep -vE '^(wiki/|\.githooks/|\.github/|properdocs\.yml$|\.gitignore$|renovate\.json$)' || true)
+[ -z "$relevant" ] && exit 0
+
+# Don't mix in wiki edits that are in progress (unstaged) — we'd end up staging them.
+if ! git diff --quiet -- wiki; then
+  echo "wiki-sync: unstaged changes in wiki/, skipping (stage or stash them first)" >&2
+  exit 0
+fi
+
+before=$(git status --porcelain | grep -v ' wiki/' | sort)
+
+diff_file=$(mktemp)
+trap 'rm -f "$diff_file"' EXIT
+git diff --cached -- . ':(exclude)wiki' | head -c 60000 > "$diff_file"
+
+echo "wiki-sync: checking whether the wiki needs an update..." >&2
+
+prompt="You are a pre-commit wiki maintainer for this repo. The staged diff is in $diff_file (read it).
+The wiki lives in wiki/ (Home.md plus numbered section folders) and is published as a docs site.
+
+1. Decide whether this change makes any wiki page wrong, stale or incomplete (new/removed/renamed apps, changed paths, versions, ports, resources, behaviour, finished TODO items, fixed known issues). Most commits need NO wiki update; routine bumps, comment tweaks and refactors that don't change documented facts do not.
+2. If an update is needed: grep wiki/ for the affected pages, verify against the repo, and edit them minimally. Keep the existing tone/structure and every heading's {#anchor} id; keep relative links valid; put a blank line before every markdown table. NEVER write private identifiers (real domains, IPs, real node hostnames, emails): use placeholders like <internal-domain>, <node-name>. If you cannot verify a fact from the repo, leave it alone.
+3. Only edit files under wiki/. Do not touch anything else, do not commit.
+Finish with ONE line: either 'NO_UPDATE' or 'UPDATED: <comma-separated wiki files>' followed by a short reason."
+
+out=$(perl -e 'alarm 240; exec @ARGV' -- claude -p "$prompt" \
+  --model sonnet --effort low --no-session-persistence \
+  --permission-mode acceptEdits \
+  --allowedTools "Read" "Grep" "Glob" "Edit(wiki/**)" "Write(wiki/**)" 2>&1) || {
+  echo "wiki-sync: claude run failed or timed out, skipping (commit continues)" >&2
+  exit 0
+}
+
+# Safety net: refuse to keep anything the run changed outside wiki/.
+after=$(git status --porcelain | grep -v ' wiki/' | sort)
+if [ "$before" != "$after" ]; then
+  echo "wiki-sync: WARNING run touched files outside wiki/ — not staging anything" >&2
+  exit 0
+fi
+
+if git diff --quiet -- wiki; then
+  echo "wiki-sync: no wiki update needed" >&2
+else
+  git add -A wiki
+  echo "wiki-sync: wiki updated and staged into this commit:" >&2
+  git diff --cached --stat -- wiki >&2
+  echo "$out" | tail -n 3 >&2
+fi
+exit 0

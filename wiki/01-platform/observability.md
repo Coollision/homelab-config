@@ -16,8 +16,9 @@ Heavily tuned for a resource-constrained homelab rather than left at chart defau
 aggressive `metricRelabelings` drop high-cardinality Go-runtime and process metrics from
 nearly every scrape target (kube-apiserver, kube-scheduler, node-exporter, kubelet/cAdvisor,
 etc.), Prometheus itself runs with `native-histograms` enabled and a capped
-`query.max-samples`/`query.max-concurrency`, and storage is a 20Gi Longhorn PVC with
-90-day retention.
+`query.max-samples`/`query.max-concurrency`, and storage is a 20Gi Longhorn PVC. Retention is configured as 90d, but
+`retentionSize: 18GiB` is the cap that actually bites, so effective retention is shorter
+(roughly three weeks at the time of writing).
 
 **Generic scrape-in mechanism:** any pod/service annotated `prometheus.io/scrape: "true"`
 (plus `~port`/`~path`/`~scheme`) gets auto-discovered across all namespaces except
@@ -38,9 +39,9 @@ pushed a log stream past Loki's default 15-label-per-stream limit, silently drop
 alert. Fixed with an explicit `labeldrop` rule plus raising the limit to 20 for headroom
 — worth remembering if logs from a *new* CNPG cluster ever seem to just vanish.
 
-Loki retention is ~7 days (`retention_period: 90d` is configured but storage is
-filesystem-only, single `replication_factor: 1` — homelab-scale by design, not
-accidental). **For anything Matter/Thread-related, Loki is the first place to look**, not
+Loki is single-binary with filesystem storage on a 10Gi Longhorn PVC and
+`replication_factor: 1` — homelab-scale by design, not accidental. `retention_period` is
+90d, but the PVC size is the practical limit. **For anything Matter/Thread-related, Loki is the first place to look**, not
 in-pod logs — the matter-server/thread-border-router pods get restarted often enough
 during mesh troubleshooting that in-pod logs are frequently already gone; see
 [Known Issues → the Matter mesh](../05-operations/known-issues.md#the-matter-thread-mesh-is-fragile-by-design).

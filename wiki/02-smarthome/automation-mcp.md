@@ -55,3 +55,9 @@ an accepted trade-off for a single-user homelab, not an oversight — but it's t
 this page calls it out rather than glossing over it. Narrowing the blast radius later
 (a scoped ClusterRole instead of cluster-admin, plus a read-only/no-destructive-actions
 config flag) is possible without touching the auth-gating layer at all, if ever needed.
+
+## vscode-server — `workload/smarthome/vscode-server`
+
+A code-server (browser VS Code) instance that mounts the Home Assistant, ESPHome and
+Zigbee2MQTT config PVCs live via `existingClaim`, so their files can be edited in place.
+Enrolled in scale-to-zero.

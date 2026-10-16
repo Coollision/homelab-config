@@ -5,7 +5,7 @@
 A music library that plays on Sonos, Home Assistant and phones through **Music Assistant**, with new
 music fetched by **slskd** (Soulseek). The pieces:
 
-```
+```text
                        ┌───────────── NAS (NFS, read-only mounts) ─────────────┐
                        │  Music share (legacy library, flat, ~100 albums)      │
                        │  Downloads share ── slskd/  (complete downloads)      │
@@ -193,7 +193,7 @@ has tagged and filed it. It is a small Go + React service in its own (private) r
 multi-arch image on GHCR (Keel polls `latest`, like the other self-built apps), with the Python tagger from
 the cleanup inside the image. The chart here only wires it up.
 
-```
+```text
 slskd -> Downloads/slskd (inbox) -> settle + slskd finished? -> analyse -> confident -> tag, file, clean ----> Music/<album>
                                                               \-> unsure -> review UI (edit, approve) -/        (Music Assistant sync triggered)
 ```
@@ -349,8 +349,8 @@ permanently cap that album's gain in players (loud, clipped 128 kbps MP3s normal
 - **No inbound port for Soulseek** for a one-week trial: reversible and lowest exposure.
 - **New downloads are an inbox on the Downloads volume** (subPath), and Music Assistant cannot see it: the
   library Music Assistant plays from only ever contains tagged, filed music.
-- **Lidarr deferred.** It is weak for compilations and its dependencies (Prowlarr, the download client) live
-  on the NAS, not in this cluster.
+- **Lidarr for artist albums only.** It is weak for compilations, so those stay with the intake; Lidarr was
+  deployed afterwards for single-artist albums (see [Lidarr](#lidarr-artist-albums-torrents)).
 
 ## First rollout checklist
 

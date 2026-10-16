@@ -25,16 +25,18 @@ This wiki explains **how it's built, why it's built that way, and how to operate
 
 ## Map of the wiki
 
-### [00 · Setup](00-setup/)
+### 00 · Setup
 How a bare machine becomes a cluster node, and how the cluster bootstraps itself.
+
 | Page | Covers |
 |---|---|
 | [Bootstrap](00-setup/bootstrap.md) | Preseed → Ansible → k3s → Helm bootstrap of storage/Vault/ArgoCD |
 | [Ansible](00-setup/ansible.md) | Every role, what it does, inventory groups |
 | [GitOps structure](00-setup/gitops-structure.md) | `argocd/`, `applications/`, `lib/` — how the "app of apps" tree works |
 
-### [01 · Platform](01-platform/)
+### 01 · Platform
 The infrastructure layer every workload depends on — all under `system/`.
+
 | Page | Covers |
 |---|---|
 | [Networking](01-platform/networking.md) | MetalLB, Multus/VLANs, Traefik, Cloudflare Tunnel, Technitium DNS |
@@ -47,8 +49,9 @@ The infrastructure layer every workload depends on — all under `system/`.
 | [Power — NUT](01-platform/power-nut.md) | UPS monitoring, PeaNUT dashboard, planned auto-shutdown |
 | [Routed IPTV](01-platform/iptv.md) | Proximus TV on its own UniFi VLAN/zone: WAN2 on the ISP box LAN, IGMP proxy, multicast→unicast over WiFi mesh + watchdog |
 
-### [02 · Smart Home](02-smarthome/)
+### 02 · Smart Home
 Home Assistant and everything wired into it — all under `workload/smarthome/`.
+
 | Page | Covers |
 |---|---|
 | [Home Assistant](02-smarthome/home-assistant.md) | The core app, VLANs, DB, ingress |
@@ -59,21 +62,24 @@ Home Assistant and everything wired into it — all under `workload/smarthome/`.
 | [Automation & MCP](02-smarthome/automation-mcp.md) | n8n, ha-mcp, kubernetes-mcp-server |
 | [Smarthome database](02-smarthome/database.md) | The shared CNPG cluster backing HA + n8n |
 
-### [03 · Media Stack](03-media-stack/)
+### 03 · Media Stack
 The Radarr/Sonarr/Prowlarr automation pipeline — `workload/arr-stack/`.
+
 | Page | Covers |
 |---|---|
 | [Overview & topology](03-media-stack/overview.md) | Request flow, every app, the shared DB and NFS libraries |
 | [Music](03-media-stack/music.md) | Music Assistant (Sonos, Spotify), slskd, the legacy library and its tag cleanup |
 
-### [04 · Apps](04-apps/)
+### 04 · Apps
 Everything else — `workload/apps/`, `workload/databases/`, `workload/secrets/`, `workload/proxies/`.
+
 | Page | Covers |
 |---|---|
-| [Misc apps](04-apps/misc-apps.md) | BabyBuddy, CloudBeaver, Vaultwarden, WordPress |
-| [AWS proxies](04-apps/aws-proxies.md) | aws-tunnels, aws-mcp — SSM-based tunnels into AWS |
+| [Misc apps](04-apps/misc-apps.md) | BabyBuddy, CloudBeaver, Vaultwarden, WordPress, the wedding geocache site |
+| [AWS proxies](04-apps/aws-proxies.md) | aws-tunnels — SSM-based tunnels into AWS |
 
-### [05 · Operations](05-operations/)
+### 05 · Operations
+
 | Page | Covers |
 |---|---|
 | [History & Evolution](05-operations/history.md) | How this repo got here — narrative from commit history |
@@ -81,8 +87,9 @@ Everything else — `workload/apps/`, `workload/databases/`, `workload/secrets/`
 | [Ansible cheat sheet](05-operations/ansible-cheatsheet.md) | Ad-hoc commands: uptime, reboot, facts, targeting a subset of nodes |
 | [kubectl / cluster cheat sheet](05-operations/kubectl-cheatsheet.md) | Draining nodes, restarting crashy pods, ArgoCD cache-busting, Sablier status |
 
-### [06 · TODO](06-todo/)
+### 06 · TODO
 Planned work that is not built yet. Pages move to their normal section once done.
+
 | Page | Covers |
 |---|---|
 | [Music stack](06-todo/music-stack.md) | First-rollout checklist, library cleanup run, slskd trial, deferred intake tooling |
@@ -102,4 +109,4 @@ so each app's chart is just data. Secrets never live in Git — every `values.ya
 at a Vault path (`<secret:kv/data/...>`), resolved at render time by an ArgoCD plugin
 sidecar. On top of that platform, three workload families run: a **smart-home stack**
 (Home Assistant + Matter/Thread + Zigbee + voice), a **media-automation stack**
-(Radarr/Sonarr/Prowlarr), and a grab-bag of **standalone apps**.
+(Radarr/Sonarr/Prowlarr/Lidarr plus the music stack), and a grab-bag of **standalone apps**.

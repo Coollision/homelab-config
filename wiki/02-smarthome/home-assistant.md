@@ -21,11 +21,11 @@ in-cluster matter-server Service and a manually-added IPv6 route (see
 
 ## Database
 
-The recorder is being migrated off a previously-bundled MariaDB onto the shared
-CloudNativePG cluster — see [Smarthome database](database.md) and
+The recorder runs on the shared CloudNativePG cluster (the bundled MariaDB is gone from
+the chart) — see [Smarthome database](database.md) and
 [Known Issues → HA recorder migration](../05-operations/known-issues.md#ha-recorder-to-cnpg-migration)
-for the full story, including a rendered-manifest leftover file that still shows the old
-MariaDB shape and should not be mistaken for current config.
+for the full story. The `test.yaml` file in the app directory is a leftover that still
+shows the old MariaDB shape and should not be mistaken for current config.
 
 ## The `http:` YAML deprecation
 
