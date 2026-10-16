@@ -168,6 +168,10 @@
     .dot-bad{background:#ff6f91;box-shadow:0 0 6px rgba(255,111,145,.45)}
     .dot-grey{background:#4a6070}
     .restarts{display:inline-block;padding:2px 7px;border-radius:999px;font-size:.75rem;font-weight:700;background:rgba(255,204,102,.13);color:#ffe1a5;border:1px solid rgba(255,204,102,.3)}
+    [hidden]{display:none !important}
+    #live{color:#4a6070;font-size:.8rem}
+    #live.on{color:var(--accent)}
+    #live.err{color:var(--bad)}
     .section-title{font-size:.82rem;text-transform:uppercase;letter-spacing:.08em;color:#7fa6c4;margin:20px 0 8px}
     @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
     @media (max-width:780px){
@@ -189,7 +193,7 @@
       </div>
       {{if .Msg}}<div class="flash flash-ok">{{.Msg}}</div>{{end}}
       {{if .Err}}<div class="flash flash-err">{{.Err}}</div>{{end}}
-      <div class="token-line">
+      <div class="token-line" id="token-line">
         {{if .TokenImported}}
           <span class="dot dot-ok"></span> SSO token captured — credentials refresh automatically until the session expires.
         {{else}}
@@ -213,11 +217,11 @@
         <tbody>
           {{if .Targets}}
             {{range .Targets}}
-              <tr>
+              <tr data-profile="{{.Profile}}">
                 <td>{{.Namespace}}</td>
                 <td>{{.Stack}}</td>
                 <td>{{.Profile}}</td>
-                <td>
+                <td class="c-cred">
                   {{if .Valid}}
                     <span class="badge badge-valid">valid</span>
                   {{else if .Expiration}}
@@ -226,7 +230,7 @@
                     <span class="badge badge-missing">missing</span>
                   {{end}}
                 </td>
-                <td>{{.Expiration}}</td>
+                <td class="c-exp">{{.Expiration}}</td>
                 <td>
                   <form method="POST" action="/login" style="display:inline">
                     <input type="hidden" name="profile" value="{{.Profile}}">
@@ -252,7 +256,7 @@
       </form>
     </section>
 
-    <p class="meta">API: <code>POST /login</code>, <code>POST /restart</code>, <code>GET /status.json</code>, <code>GET /healthz</code>.</p>
+    <p class="meta"><span id="live" title="Live status polling">●</span> <span id="live-text"></span> API: <code>POST /login</code>, <code>POST /restart</code>, <code>GET /status.json</code>, <code>GET /healthz</code>.</p>
 
     {{if .Tunnels}}
     <p class="section-title">Tunnel Status</p>
@@ -272,7 +276,7 @@
         </thead>
         <tbody>
           {{range .Tunnels}}
-          <tr>
+          <tr data-tunnel="{{.Name}}">
             <td><code>{{.Name}}</code></td>
             <td>{{.Profile}}</td>
             <td>{{.Bastion}}</td>
@@ -283,7 +287,7 @@
                 <span style="color:#4a6070">—</span>
               {{end}}
             </td>
-            <td>
+            <td class="c-ready">
               {{if .Stopped}}
                 <span style="display:inline-flex;align-items:center;gap:7px"><span class="dot dot-bad"></span> stopped</span>
               {{else if eq .Desired 0}}
@@ -303,22 +307,16 @@
                        style="width:52px;padding:3px 5px;border-radius:5px;border:1px solid #2a3f52;background:#0e1a24;color:inherit;font-size:.85rem"
                        title="Independent SSM sessions. Only helps multi-connection workloads.">
                 <button class="btn" type="submit" style="padding:3px 8px;font-size:.8rem">Set</button>
-                {{if .Manual}}
-                  <span title="Pinned from this UI — overrides the configured value until reset" style="color:var(--accent-2);font-size:.75rem">pinned</span>
-                {{end}}
-                {{if .SSH}}
-                  <span title="Using the compressed SSH transport" style="color:#5fb37a;font-size:.75rem">gz</span>
-                {{end}}
+                <span class="f-pinned" {{if not .Manual}}hidden{{end}} title="Pinned from this UI — overrides the configured value until reset" style="color:var(--accent-2);font-size:.75rem">pinned</span>
+                <span class="f-gz" {{if not .SSH}}hidden{{end}} title="Using the compressed SSH transport" style="color:#5fb37a;font-size:.75rem">gz</span>
               </form>
-              {{if .Manual}}
-                <form method="POST" action="/tunnel-scale" style="margin:3px 0 0 0">
-                  <input type="hidden" name="tunnel" value="{{.Name}}">
-                  <input type="hidden" name="replicas" value="auto">
-                  <button class="btn" type="submit" style="padding:1px 6px;font-size:.72rem;opacity:.75">reset to config</button>
-                </form>
-              {{end}}
+              <form class="f-reset" {{if not .Manual}}hidden{{end}} method="POST" action="/tunnel-scale" style="margin:3px 0 0 0">
+                <input type="hidden" name="tunnel" value="{{.Name}}">
+                <input type="hidden" name="replicas" value="auto">
+                <button class="btn" type="submit" style="padding:1px 6px;font-size:.72rem;opacity:.75">reset to config</button>
+              </form>
             </td>
-            <td>
+            <td class="c-restarts">
               {{if gt .Restarts 0}}
                 <span class="restarts">{{.Restarts}}</span>
               {{else}}
@@ -326,19 +324,16 @@
               {{end}}
             </td>
             <td>
-              {{if .Stopped}}
-                <form method="POST" action="/tunnel-toggle" style="margin:0;display:inline">
-                  <input type="hidden" name="tunnel" value="{{.Name}}">
-                  <input type="hidden" name="action" value="start">
-                  <button class="btn btn-start" type="submit">Start</button>
-                </form>
-              {{else}}
-                <form method="POST" action="/tunnel-toggle" style="margin:0;display:inline" onsubmit="return confirm('Stop tunnel {{.Name}}? Existing connections will drop.');">
-                  <input type="hidden" name="tunnel" value="{{.Name}}">
-                  <input type="hidden" name="action" value="stop">
-                  <button class="btn btn-stop" type="submit">Stop</button>
-                </form>
-              {{end}}
+              <form class="f-start" {{if not .Stopped}}hidden{{end}} method="POST" action="/tunnel-toggle" style="margin:0;display:inline">
+                <input type="hidden" name="tunnel" value="{{.Name}}">
+                <input type="hidden" name="action" value="start">
+                <button class="btn btn-start" type="submit">Start</button>
+              </form>
+              <form class="f-stop" {{if .Stopped}}hidden{{end}} method="POST" action="/tunnel-toggle" style="margin:0;display:inline" onsubmit="return confirm('Stop tunnel {{.Name}}? Existing connections will drop.');">
+                <input type="hidden" name="tunnel" value="{{.Name}}">
+                <input type="hidden" name="action" value="stop">
+                <button class="btn btn-stop" type="submit">Stop</button>
+              </form>
             </td>
           </tr>
           {{end}}
@@ -369,6 +364,102 @@
           localStorage.setItem(key, current);
         } catch (e) {}
       });
+    })();
+  </script>
+  <script>
+    // Live status: poll /status.json while the tab is visible, pause when hidden, refresh the
+    // moment it becomes visible again. Updates cells in place, never replaces forms, and leaves
+    // the replica input alone while it is being edited.
+    (function() {
+      var INTERVAL = 5000, timer = null, inflight = false;
+      var live = document.getElementById("live"), liveText = document.getElementById("live-text");
+
+      function el(tag, cls, text) {
+        var n = document.createElement(tag);
+        if (cls) n.className = cls;
+        if (text !== undefined) n.textContent = text;
+        return n;
+      }
+      function badge(t) {
+        var cls = t.valid ? "valid" : (t.expiration ? "expired" : "missing");
+        return el("span", "badge badge-" + cls, cls);
+      }
+      function readyCell(t) {
+        var dot = "ok", text = t.ready + "/" + t.desired;
+        if (t.stopped) { dot = "bad"; text = "stopped"; }
+        else if (t.desired === 0) { dot = "grey"; text = "pending"; }
+        else if (t.ready === t.desired) { dot = "ok"; }
+        else if (t.ready === 0) { dot = "bad"; }
+        else { dot = "warn"; }
+        var w = el("span");
+        w.style.cssText = "display:inline-flex;align-items:center;gap:7px";
+        w.appendChild(el("span", "dot dot-" + dot));
+        w.appendChild(document.createTextNode(" " + text));
+        return w;
+      }
+      function restartsCell(n) {
+        if (n > 0) return el("span", "restarts", String(n));
+        var z = el("span", "", "0");
+        z.style.color = "#4a6070";
+        return z;
+      }
+      function setHidden(node, hide) { if (node) node.hidden = !!hide; }
+      function swap(cell, child) { cell.replaceChildren(child); }
+
+      function apply(data) {
+        (data.targets || []).forEach(function(t) {
+          var row = document.querySelector('tr[data-profile="' + CSS.escape(t.profile) + '"]');
+          if (!row) return;
+          swap(row.querySelector(".c-cred"), badge(t));
+          row.querySelector(".c-exp").textContent = t.expiration || "";
+        });
+        (data.tunnels || []).forEach(function(t) {
+          var row = document.querySelector('tr[data-tunnel="' + CSS.escape(t.name) + '"]');
+          if (!row) return;
+          swap(row.querySelector(".c-ready"), readyCell(t));
+          swap(row.querySelector(".c-restarts"), restartsCell(t.restarts));
+          setHidden(row.querySelector(".f-start"), !t.stopped);
+          setHidden(row.querySelector(".f-stop"), t.stopped);
+          setHidden(row.querySelector(".f-pinned"), !t.manual);
+          setHidden(row.querySelector(".f-reset"), !t.manual);
+          setHidden(row.querySelector(".f-gz"), !t.ssh);
+          var input = row.querySelector('input[name="replicas"][type="number"]');
+          if (input && document.activeElement !== input && !input.dataset.dirty) input.value = t.configured;
+        });
+        var tl = document.getElementById("token-line");
+        if (tl) {
+          var dot = el("span", "dot " + (data.tokenImported ? "dot-ok" : "dot-warn"));
+          var txt = data.tokenImported
+            ? " SSO token captured — credentials refresh automatically until the session expires."
+            : " No SSO token yet. Click a profile's login above and approve the device code in your browser — credentials then refresh automatically.";
+          tl.replaceChildren(dot, document.createTextNode(txt));
+        }
+      }
+
+      function setLive(ok, text) {
+        if (!live) return;
+        live.className = ok ? "on" : "err";
+        liveText.textContent = text;
+      }
+
+      function tick() {
+        if (inflight || document.hidden) return;
+        inflight = true;
+        fetch("/status.json", { cache: "no-store", credentials: "same-origin" })
+          .then(function(r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+          .then(function(d) { apply(d); setLive(true, "live · " + new Date().toLocaleTimeString() + " "); })
+          .catch(function(e) { setLive(false, "offline (" + e.message + ") "); })
+          .then(function() { inflight = false; });
+      }
+
+      function start() { if (!timer) { tick(); timer = setInterval(tick, INTERVAL); } }
+      function stop() { if (timer) { clearInterval(timer); timer = null; } if (document.hidden) setLive(false, "paused "); }
+
+      document.addEventListener("input", function(e) {
+        if (e.target && e.target.name === "replicas") e.target.dataset.dirty = "1";
+      });
+      document.addEventListener("visibilitychange", function() { document.hidden ? stop() : start(); });
+      if (!document.hidden) start();
     })();
   </script>
 </body>

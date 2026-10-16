@@ -3,6 +3,7 @@ package controllers
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -103,26 +104,26 @@ func (s *ssoSession) snapshot() (ssoURL, code string, isDone bool, loginErr erro
 }
 
 type tunnelStatus struct {
-	Name     string
-	Profile  string
-	Bastion  string
-	Host     string
-	Ready    int32
-	Desired  int32
-	Restarts int32
-	Stopped  bool
+	Name     string `json:"name"`
+	Profile  string `json:"profile"`
+	Bastion  string `json:"bastion"`
+	Host     string `json:"host"`
+	Ready    int32  `json:"ready"`
+	Desired  int32  `json:"desired"`
+	Restarts int32  `json:"restarts"`
+	Stopped  bool   `json:"stopped"`
 
 	// Configured is the replica count from the stack config, and Manual reports whether an
 	// operator has pinned a different count via the scale control (annotManualReplicas). The UI
 	// shows both so it's obvious when the live count no longer matches git.
-	Configured int32
-	Manual     bool
+	Configured int32 `json:"configured"`
+	Manual     bool  `json:"manual"`
 
 	// SSH reports whether this tunnel uses the compressed SSH transport, so the UI can show why
 	// one tunnel is much faster than another.
-	SSH bool
+	SSH bool `json:"ssh"`
 	// MaxReplicas bounds the scale input in the rendered form.
-	MaxReplicas int32
+	MaxReplicas int32 `json:"maxReplicas"`
 }
 
 type authRootPageData struct {
@@ -212,20 +213,18 @@ func (s *AuthServer) handleRoot(w http.ResponseWriter, r *http.Request) {
 		authLog.Error(tunnelErr, "failed to discover tunnel statuses")
 	}
 
-	tokenImported := false
-	if len(targets) > 0 {
-		secret := &corev1.Secret{}
-		if err := s.Client.Get(r.Context(), types.NamespacedName{Namespace: targets[0].Namespace, Name: tokenSecretName(targets[0].Stack)}, secret); err == nil && len(secret.Data) > 0 {
-			tokenImported = true
-		}
-	}
+	tokenImported := s.tokenImported(r.Context(), targets)
 
+	flashKind, flashMsg := popFlash(w, r)
 	data := authRootPageData{
 		Targets:       targets,
 		Tunnels:       tunnels,
-		Msg:           r.URL.Query().Get("msg"),
-		Err:           r.URL.Query().Get("err"),
 		TokenImported: tokenImported,
+	}
+	if flashKind == flashErr {
+		data.Err = flashMsg
+	} else {
+		data.Msg = flashMsg
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -233,6 +232,16 @@ func (s *AuthServer) handleRoot(w http.ResponseWriter, r *http.Request) {
 		authLog.Error(err, "failed to render auth-root template")
 		http.Error(w, fmt.Sprintf("failed to render page: %v", err), http.StatusInternalServerError)
 	}
+}
+
+// tokenImported reports whether an SSO token cache has been captured for the stack.
+func (s *AuthServer) tokenImported(ctx context.Context, targets []loginTarget) bool {
+	if len(targets) == 0 {
+		return false
+	}
+	secret := &corev1.Secret{}
+	err := s.Client.Get(ctx, types.NamespacedName{Namespace: targets[0].Namespace, Name: tokenSecretName(targets[0].Stack)}, secret)
+	return err == nil && len(secret.Data) > 0
 }
 
 func (s *AuthServer) handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -246,8 +255,18 @@ func (s *AuthServer) handleStatus(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("failed to load status: %v", err), http.StatusInternalServerError)
 		return
 	}
+	// Tunnel statuses are best-effort: a failed list must not blank the credentials half.
+	tunnels, tunnelErr := s.discoverTunnelStatuses(r.Context())
+	if tunnelErr != nil {
+		authLog.Error(tunnelErr, "failed to discover tunnel statuses in status")
+	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"targets": targets})
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"targets":       targets,
+		"tunnels":       tunnels,
+		"tokenImported": s.tokenImported(r.Context(), targets),
+	})
 }
 
 func (s *AuthServer) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -404,7 +423,8 @@ func (s *AuthServer) handleLoginPoll(w http.ResponseWriter, r *http.Request) {
 		}
 		authLog.Info("async login complete", "sid", sid, "restarted", restarted)
 		msg := fmt.Sprintf("credentials updated (expires %s); restarted %d tunnel(s)", expiration, restarted)
-		_ = json.NewEncoder(w).Encode(map[string]any{"status": "done", "redirect": "/?msg=" + url.QueryEscape(msg)})
+		setFlash(w, flashOK, msg)
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": "done", "redirect": "/"})
 		return
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{"status": "waiting", "url": ssoURL, "code": code})
@@ -704,7 +724,7 @@ func (s *AuthServer) handleRestart(w http.ResponseWriter, r *http.Request) {
 	}
 	message := fmt.Sprintf("restarted %d tunnel deployment(s)", restarted)
 	if formMode {
-		http.Redirect(w, r, "/?msg="+url.QueryEscape(message), http.StatusSeeOther)
+		redirectFlash(w, r, flashOK, message)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -823,7 +843,7 @@ func (s *AuthServer) handleTunnelToggle(w http.ResponseWriter, r *http.Request) 
 	message := fmt.Sprintf("tunnel %q %s", tunnel, verb)
 	authLog.Info("tunnel toggle", "tunnel", tunnel, "stack", stack, "action", action)
 	if formMode {
-		http.Redirect(w, r, "/?msg="+url.QueryEscape(message), http.StatusSeeOther)
+		redirectFlash(w, r, flashOK, message)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -965,7 +985,7 @@ func (s *AuthServer) handleTunnelScale(w http.ResponseWriter, r *http.Request) {
 	}
 	authLog.Info("tunnel scale", "tunnel", tunnel, "stack", stack, "replicas", effective, "manual", !clearPin, "applied", applied)
 	if formMode {
-		http.Redirect(w, r, "/?msg="+url.QueryEscape(message), http.StatusSeeOther)
+		redirectFlash(w, r, flashOK, message)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -1003,7 +1023,7 @@ func isFormPost(r *http.Request) bool {
 
 func (s *AuthServer) redirectOrError(w http.ResponseWriter, r *http.Request, formMode bool, msg string, code int) {
 	if formMode {
-		http.Redirect(w, r, "/?err="+url.QueryEscape(msg), http.StatusSeeOther)
+		redirectFlash(w, r, flashErr, msg)
 		return
 	}
 	http.Error(w, msg, code)
@@ -1151,4 +1171,50 @@ func (s *AuthServer) restartStackTunnels(ctx context.Context, namespace, stackNa
 		restarted++
 	}
 	return restarted, nil
+}
+
+// Flash messages travel in a short-lived cookie instead of the URL, so they never land in
+// history, access logs or a shared link, and a reload does not replay them. The value is
+// base64url so arbitrary message text is cookie-safe; popFlash clears it on first read.
+const (
+	flashCookie = "auth_flash"
+	flashOK     = "ok"
+	flashErr    = "err"
+	flashMaxLen = 1000
+)
+
+func setFlash(w http.ResponseWriter, kind, msg string) {
+	if len(msg) > flashMaxLen {
+		msg = msg[:flashMaxLen] + "..."
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     flashCookie,
+		Value:    base64.RawURLEncoding.EncodeToString([]byte(kind + ":" + msg)),
+		Path:     "/",
+		MaxAge:   60,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func popFlash(w http.ResponseWriter, r *http.Request) (kind, msg string) {
+	c, err := r.Cookie(flashCookie)
+	if err != nil {
+		return "", ""
+	}
+	http.SetCookie(w, &http.Cookie{Name: flashCookie, Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode})
+	raw, err := base64.RawURLEncoding.DecodeString(c.Value)
+	if err != nil {
+		return "", ""
+	}
+	kind, msg, ok := strings.Cut(string(raw), ":")
+	if !ok || (kind != flashOK && kind != flashErr) {
+		return "", ""
+	}
+	return kind, msg
+}
+
+func redirectFlash(w http.ResponseWriter, r *http.Request, kind, msg string) {
+	setFlash(w, kind, msg)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }

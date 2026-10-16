@@ -255,12 +255,40 @@ func TestHandleTunnelToggle_UnknownTunnel(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
 	s.handleTunnelToggle(rec, req)
-	// Form-mode errors redirect to /?err=...
+	// Form-mode errors redirect to / with the message in a flash cookie, never in the URL.
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("expected redirect for unknown tunnel, got %d", rec.Code)
 	}
-	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "err=") {
-		t.Errorf("expected error redirect, got %q", loc)
+	if loc := rec.Header().Get("Location"); loc != "/" {
+		t.Errorf("expected clean redirect to /, got %q", loc)
+	}
+	back := httptest.NewRequest(http.MethodGet, "/", nil)
+	for _, c := range rec.Result().Cookies() {
+		back.AddCookie(c)
+	}
+	kind, msg := popFlash(httptest.NewRecorder(), back)
+	if kind != flashErr || !strings.Contains(msg, "ghost") {
+		t.Errorf("expected error flash mentioning the tunnel, got %q %q", kind, msg)
+	}
+}
+
+func TestFlashRoundTrip(t *testing.T) {
+	rec := httptest.NewRecorder()
+	setFlash(rec, flashOK, "scaled & done; ünïcode=1")
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	for _, c := range rec.Result().Cookies() {
+		req.AddCookie(c)
+	}
+	out := httptest.NewRecorder()
+	kind, msg := popFlash(out, req)
+	if kind != flashOK || msg != "scaled & done; ünïcode=1" {
+		t.Fatalf("round trip mismatch: %q %q", kind, msg)
+	}
+	if cs := out.Result().Cookies(); len(cs) != 1 || cs[0].MaxAge >= 0 {
+		t.Errorf("expected the flash cookie to be cleared after reading")
+	}
+	if k, _ := popFlash(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil)); k != "" {
+		t.Errorf("no cookie should yield no flash")
 	}
 }
 
