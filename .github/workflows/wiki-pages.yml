@@ -28,7 +28,7 @@ jobs:
           python-version: '3.12'
       - run: pip install properdocs mkdocs-material mkdocs-redirects
       - run: properdocs build --strict
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
 
