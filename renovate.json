@@ -35,6 +35,24 @@
       "automergeSchedule": ["after 1am and before 5am"]
     },
     {
+      "description": "Noisy platform charts - one weekly PR for minor and patch (cuts ~200 commits/yr; automerge rule above still applies)",
+      "matchBaseBranches": ["master"],
+      "matchPackageNames": ["argo-cd", "kube-prometheus-stack"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "schedule": ["on saturday"],
+      "groupName": "platform charts",
+      "groupSlug": "platform-charts"
+    },
+    {
+      "description": "Noisy smarthome images - one weekly PR for patch bumps",
+      "matchBaseBranches": ["master"],
+      "matchPackageNames": ["ghcr.io/home-assistant/home-assistant", "ghcr.io/esphome/esphome"],
+      "matchUpdateTypes": ["patch"],
+      "schedule": ["on saturday"],
+      "groupName": "smarthome images",
+      "groupSlug": "smarthome-images"
+    },
+    {
       "description": "Operator branch - weekly grouped minor and patch updates",
       "matchBaseBranches": ["orphan/aws-tunnels-operator-standalone"],
       "automerge": true,
