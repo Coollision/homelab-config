@@ -9,12 +9,12 @@ Radarr/Sonarr/Prowlarr deployment the household might also use elsewhere (e.g. o
 verify by content (item counts, a known title) before acting on it. See
 [Known Issues → verify a service's actual location](../05-operations/known-issues.md#verify-where-a-service-actually-runs-before-acting-on-it).
 
-Music is a separate, smaller stack (Music Assistant in `smarthome`, slskd here): see
-[Music](music.md).
+Music is a separate, smaller stack (Music Assistant in `smarthome`; slskd, music-intake and
+Lidarr here): see [Music](music.md).
 
 ## Request flow
 
-```
+```text
 User ──▶ Jellyseerr (request UI)
               │
               ▼
@@ -55,13 +55,16 @@ you'll find almost nothing — that's expected, not a gap.
 | **Jackett** | Secondary indexer proxy | config PVC only | — |
 | **FlareSolverr** | Cloudflare-challenge solver for indexers | — | — |
 | **Tautulli** | Media-server usage stats | config PVC | — |
+| **Lidarr** | Music (artist albums) library manager | config PVC + shared downloads/music NFS | Postgres via `arr-lib` XML rewrite |
+| **slskd** | Soulseek client (music inbox) | config PVC + downloads subPaths | — |
+| **music-intake** | Tags and files finished slskd downloads into the music library | job-state PVC + downloads/music NFS | SQLite |
 | **Prefetcharr** | Pre-fetches upcoming episodes based on viewing progress | — (no Service, outbound-only) | — |
 
-## The shared Postgres — `service-db-cnpg`
+## The shared Postgres — `service-db-cnpg` {#the-shared-postgres-service-db-cnpg}
 
-A single CloudNativePG cluster (`service-db-pg`) backs Radarr, Sonarr, Prowlarr, Bazarr,
-and Jellyseerr, following the same declarative pattern described in
-[Platform → Databases](../01-platform/databases.md). Radarr/Sonarr/Prowlarr don't support
+A single CloudNativePG cluster (`service-db-pg`) backs Radarr, Sonarr, Prowlarr, Lidarr,
+Bazarr, and Jellyseerr, following the same declarative pattern described in
+[Platform → Databases](../01-platform/databases.md). Radarr/Sonarr/Prowlarr/Lidarr don't support
 Postgres natively, so `lib/arr-lib` (a thin wrapper around `lib/shared-lib`) injects an
 init container per pod that waits for Postgres, then rewrites the app's XML config file
 in place to point at it instead of SQLite. Bazarr and Jellyseerr support Postgres
@@ -74,10 +77,10 @@ the memory-pressure incident that triggered it.
 
 ## The shared media volumes
 
-Four NFS-backed `PersistentVolumeClaim`s, all `ReadWriteMany`, defined once in
+Five NFS-backed `PersistentVolumeClaim`s, all `ReadWriteMany`, defined once in
 `workload/arr-stack/shared/` and mounted by whichever app needs that library:
-video, series, downloads, and a books volume currently unused by any active app (kept
-around for a disabled book-management app). NFS keeps media zero-copy on the NAS — only
+video, series, downloads, music (used by Lidarr and music-intake), and a books volume
+currently unused by any active app (kept around for a disabled book-management app). NFS keeps media zero-copy on the NAS — only
 config/database data lives on Longhorn.
 
 ## History: the namespace migration

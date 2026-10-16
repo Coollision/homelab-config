@@ -45,7 +45,6 @@ aren't reachable through a single-host tunnel at all and will simply hang.
 
 An MCP server exposing read-only AWS API access, following the same "agent tooling via
 MCP" pattern as [ha-mcp and kubernetes-mcp-server](../02-smarthome/automation-mcp.md).
-**Not currently deployed** — the working version exists only on an unmerged feature
-branch; what's present on the main branch under this path today is leftover build
-artifacts (a lockfile and a cached dependency archive, no actual chart), not a live
-service. Don't be confused into thinking this is running.
+**Not currently deployed** — there is no `aws-mcp` directory anywhere in the repo on the
+main branch (only `workload/proxies/aws-tunnels` exists under `workload/proxies`). Don't
+be confused into thinking this is running.

@@ -12,7 +12,7 @@ note; always run in the folder an helm dependency update , otherwise the charts 
 
 (make sure to replace the secrets with your own values, you can use the vault values later)
 
-run `helm install storage system/kube-system/storage -n kube-system`
+run `helm install storage system/storage/longhorn -n storage --create-namespace`
 
 #### we then depend on vault so make sure that is installed first
 

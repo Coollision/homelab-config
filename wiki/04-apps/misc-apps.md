@@ -17,6 +17,10 @@ both internally and externally.
 **Deliberately excluded from Sablier scale-to-zero** — it was tried, but the app is used
 often enough that the wake delay wasn't worth the memory savings, so it was reverted.
 
+## ke-wedding-geocache — `workload/apps/ke-wedding-geocache`
+
+A small self-built web app (image on GHCR), exposed both internally and externally.
+
 ## CloudBeaver — `workload/databases/cloudbeaver`
 
 A web-based SQL admin UI. Internal-only, enrolled in scale-to-zero. It has **no
@@ -48,11 +52,17 @@ needs to serve mobile apps and browser extensions from outside the LAN.
 
 ## WordPress — `workload/wordpress`
 
-Both entries under this folder are disabled (excluded from deployment by the
+Both site folders here are disabled (excluded from deployment by the
 `disabled-*` naming convention — see [GitOps structure](../00-setup/gitops-structure.md)).
 They're small, unrelated side-project client sites hosted on this cluster as a
 convenience, each a standalone WordPress + MariaDB pair backed by NFS storage rather than
 Longhorn (unlike everything else in this repo) — parked rather than torn down. If either
 is ever re-enabled, double-check its Vault secret path actually matches its own site
-before assuming the credentials are wired correctly; a copy-paste-from-sibling mistake
-has been spotted in this pair before and was never confirmed fixed.
+before assuming the credentials are wired correctly; one of them still
+reads its database credentials from the other site's Vault path (a copy-paste
+leftover), so fix that before enabling it.
+
+## Disabled apps — `workload/apps`
+
+`disabled-printflow`, `disabled-printstash`, `disabled-spoolman` and `disabled-wishlist` are
+parked (excluded from deployment by the `disabled-*` convention).

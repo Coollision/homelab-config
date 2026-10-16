@@ -23,3 +23,5 @@ tmp/*
 .claude/
 docs/printflow-printstash-handoff.md
 .env
+# properdocs build output
+site/
