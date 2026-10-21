@@ -3,7 +3,7 @@ fullnameOverride: peanut
 deployment:
   image:
     repository: brandawg93/peanut
-    tag: "6.1.0"
+    tag: "6.1.2"
   ports:
     web: 8080
 
