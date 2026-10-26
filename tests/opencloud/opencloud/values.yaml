@@ -47,6 +47,10 @@ ingress_internal_secure:
   host: opencloud.<secret:kv/data/shared/domains~domain>
   port: http
 
+# RESULT 2026-10-26: PosixFS cannot run on the Synology NFS export. DSM offers NFSv4.1 only (v4.2 mount: "Protocol
+# not supported"), v4.1 has no user xattrs, and OpenCloud refuses to start ("extended attributes not supported").
+# Kept for retesting on a future NAS: to try one, add a storage entry of type existingClaim with
+# claimName opencloud-pilot-nfs-<variant> and subPath opencloud-pilot/<variant> (mkdir the folder first).
 # Test matrix for PosixFS-on-NFS (opencloud#1596). `nosharecache` is needed so the option sets are not
 # silently merged with the arr stack's existing mount of the same export on the same node.
 nfsVariants:
@@ -55,34 +59,11 @@ nfsVariants:
   v41-lowcache: [vers=4.1, hard, nosharecache, acregmin=1, acregmax=5, acdirmin=1, acdirmax=5]
   v41-noac: [vers=4.1, hard, nosharecache, noac]
 
-# Creates the per-variant folders on the NAS. chown is refused by the NAS (squashed ids), so open the mode instead.
-initContainers:
-  - name: nfs-dir
-    image: busybox:1.37.0
-    command: ["/bin/sh", "-c", "mkdir -p /nfs/opencloud-pilot && for v in v41 v42 v41-lowcache v41-noac; do mkdir -p /nfs/opencloud-pilot/$v; done && chmod -R 0777 /nfs/opencloud-pilot; mkdir -p /state/storage/users && chown -R 1000:1000 /state/storage; id; ls -lnd /nfs/opencloud-pilot/*"]
-    securityContext:
-      runAsUser: 0
-    volumeMounts:
-      - name: opencloud-nfs
-        mountPath: /nfs
-      # kubelet creates the nested NFS mount point inside the emptyDir as root; hand it to uid 1000 first.
-      - name: opencloud-state
-        mountPath: /state
-
-# App state (NATS, search index, IDM, IDP keys) is throwaway: emptyDir, so every pod restart starts clean and
-# the only thing under test is the user-data root on NFS. Config (/etc/opencloud) keeps the generated secrets.
+# Block storage on a node disk (PosixFS needs xattrs + coherent caching; see the NFS result above and opencloud#1596).
+# replicas: 1 keeps it effectively local; backup/protect off so the pilot is disposable.
 storage:
   - mountPath: /var/lib/opencloud
-    type: emptyDir
-    nameSuffix: state
-  # Active variant: keep claimName and subPath in sync with the variant name.
-  - mountPath: /var/lib/opencloud/storage/users
-    type: existingClaim
-    claimName: opencloud-pilot-nfs-v42
-    nameSuffix: nfs
-    subPath: opencloud-pilot/v42
-  - mountPath: /etc/opencloud
-    size: 1Gi
+    size: 10Gi
     type: longhorn
     replicas: 1
     backup: false
@@ -90,14 +71,13 @@ storage:
     # non-empty labels: the lib renders a bare `{}` (invalid YAML) when backup+protect are both off
     labels:
       pilot: "true"
-    nameSuffix: config
-  # Previous pilot state on local Longhorn, kept (not pruned) until deletion is approved.
-  - mountPath: /mnt/old-pilot-data
-    size: 10Gi
+    nameSuffix: data
+  - mountPath: /etc/opencloud
+    size: 1Gi
     type: longhorn
     replicas: 1
     backup: false
     protect: false
     labels:
       pilot: "true"
-    nameSuffix: data
+    nameSuffix: config
