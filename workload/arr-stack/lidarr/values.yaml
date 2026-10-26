@@ -9,7 +9,7 @@ statefulset:
     repository: linuxserver/lidarr
     # Stable branch (v3.1.0). The develop/nightly branches only add plugin support, and moving back to stable later
     # needs a database restore, so stay on a plain version tag.
-    tag: 3.1.0
+    tag: 3.1.6
     imagePullPolicy: Always
   ports:
     web: 8686

@@ -236,7 +236,7 @@ slskd -> Downloads/slskd (inbox) -> settle + slskd finished? -> analyse -> confi
 
 ## Lidarr (artist albums, torrents)
 
-`workload/arr-stack/lidarr/`: Lidarr **v3.1.0 on the stable branch** (linuxserver image), PostgreSQL through the shared
+`workload/arr-stack/lidarr/`: Lidarr **v3.1.6 on the stable branch** (linuxserver image), PostgreSQL through the shared
 CNPG cluster (role `lidarr_user`, databases `lidarr_main` and `lidarr_log`, wired like Radarr with the `arr-lib`
 helper), config on a Longhorn volume, internal ingress only.
 
