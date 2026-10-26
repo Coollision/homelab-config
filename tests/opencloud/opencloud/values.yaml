@@ -47,19 +47,37 @@ ingress_internal_secure:
   host: opencloud.<secret:kv/data/shared/domains~domain>
   port: http
 
-# Block storage on a node disk, NOT NFS: PosixFS breaks on NFS caching (opencloud#1596).
-# replicas: 1 keeps it effectively local; backup/protect off so the pilot is disposable.
+# Test matrix for PosixFS-on-NFS (opencloud#1596). `nosharecache` is needed so the option sets are not
+# silently merged with the arr stack's existing mount of the same export on the same node.
+nfsVariants:
+  v41: [vers=4.1, hard, nosharecache]
+  v42: [vers=4.2, hard, nosharecache]
+  v41-lowcache: [vers=4.1, hard, nosharecache, acregmin=1, acregmax=5, acdirmin=1, acdirmax=5]
+  v41-noac: [vers=4.1, hard, nosharecache, noac]
+
+# Creates the per-variant folder on the NAS and hands it to uid 1000 (kubelet would create a subPath as root).
+initContainers:
+  - name: nfs-dir
+    image: busybox:1.37.0
+    command: ["/bin/sh", "-c", "mkdir -p /nfs/opencloud-pilot && for v in v41 v42 v41-lowcache v41-noac; do mkdir -p /nfs/opencloud-pilot/$v; done && chown -R 1000:1000 /nfs/opencloud-pilot && ls -ld /nfs/opencloud-pilot/*"]
+    securityContext:
+      runAsUser: 0
+    volumeMounts:
+      - name: opencloud-nfs
+        mountPath: /nfs
+
+# App state (NATS, search index, IDM, IDP keys) is throwaway: emptyDir, so every pod restart starts clean and
+# the only thing under test is the user-data root on NFS. Config (/etc/opencloud) keeps the generated secrets.
 storage:
   - mountPath: /var/lib/opencloud
-    size: 10Gi
-    type: longhorn
-    replicas: 1
-    backup: false
-    protect: false
-    # non-empty labels: the lib renders a bare `{}` (invalid YAML) when backup+protect are both off
-    labels:
-      pilot: "true"
-    nameSuffix: data
+    type: emptyDir
+    nameSuffix: state
+  # Active variant: keep claimName and subPath in sync with the variant name.
+  - mountPath: /var/lib/opencloud/storage/users
+    type: existingClaim
+    claimName: opencloud-pilot-nfs-v41
+    nameSuffix: nfs
+    subPath: opencloud-pilot/v41
   - mountPath: /etc/opencloud
     size: 1Gi
     type: longhorn
@@ -70,3 +88,13 @@ storage:
     labels:
       pilot: "true"
     nameSuffix: config
+  # Previous pilot state on local Longhorn, kept (not pruned) until deletion is approved.
+  - mountPath: /mnt/old-pilot-data
+    size: 10Gi
+    type: longhorn
+    replicas: 1
+    backup: false
+    protect: false
+    labels:
+      pilot: "true"
+    nameSuffix: data
