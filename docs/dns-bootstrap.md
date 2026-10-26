@@ -12,9 +12,9 @@ The advertised address is set at init/join but is **no longer immutable** — v1
 IPv4 MACVLAN IP and **never a delegated GUA** — see §2.0.
 
 **Cert model — DANE/TLSA (important):** cluster TLS uses each node's **self-signed** cert,
-validated via **DANE**: each node publishes `_53443._tcp.technitium-<role>.mylocaldns TLSA`
-records in the `mylocaldns` zone. A node trusts a peer only if it can resolve that TLSA
-record, so **`mylocaldns` must transfer first** or every heartbeat/config-sync fails with
+validated via **DANE**: each node publishes `_53443._tcp.technitium-<role>.<internal-zone> TLSA`
+records in the `<internal-zone>` zone. A node trusts a peer only if it can resolve that TLSA
+record, so **`<internal-zone>` must transfer first** or every heartbeat/config-sync fails with
 `UntrustedRoot`. `ignoreCertificateErrors=true` (below) bypasses validation **only for the
 one-time join**; ongoing comms always DANE-validate.
 
@@ -29,7 +29,7 @@ Token: `GET /api/user/login?user=admin&pass=<pass>`.
 
 ```http
 POST /api/admin/cluster/init
-  clusterDomain=mylocaldns
+  clusterDomain=<internal-zone>
   primaryNodeIpAddresses=<VIP-A>          # the primary's VLAN 30 MACVLAN IP, NOT a ClusterIP
 ```
 
@@ -37,7 +37,7 @@ POST /api/admin/cluster/init
 
 ```http
 POST /api/admin/cluster/initJoin          # on the secondary/tertiary itself
-  primaryNodeUrl=https://technitium-primary.mylocaldns:53443/
+  primaryNodeUrl=https://technitium-primary.<internal-zone>:53443/
   primaryNodeIpAddress=<VIP-A>            # REQUIRED manual IP — see gotcha below
   primaryNodeUsername=admin  primaryNodePassword=<pass>
   secondaryNodeIpAddresses=<this node's VLAN 30 IP>   # <VIP-B> or <NAS-IP>
@@ -45,7 +45,7 @@ POST /api/admin/cluster/initJoin          # on the secondary/tertiary itself
 ```
 
 > **Gotcha:** the join resolves the primary's name through the joining node's resolver
-> (CoreDNS for pods) which doesn't host `mylocaldns` → "could not be resolved". `nslookup`
+> (CoreDNS for pods) which doesn't host `<internal-zone>` → "could not be resolved". `nslookup`
 > also bypasses `/etc/hosts`, so it looks broken even when `hostAliases` are set. Always
 > pass `primaryNodeIpAddress=<VIP-A>` explicitly.
 
@@ -56,7 +56,7 @@ cluster traffic to a VLAN 30 peer would otherwise egress via the overlay → nod
 the (changing) node IP, which the ACLs refuse. The chart's initContainer
 ([`system/dns/technitium/values.yaml`](../system/dns/technitium/values.yaml)) adds `/32`
 routes to every peer (`<VIP-A>`/`<VIP-B>`/`<NAS-IP>`) out of net1 so each pod sources from
-its own MACVLAN IP. Without it: AXFR/NOTIFY refused → `mylocaldns` never transfers → DANE
+its own MACVLAN IP. Without it: AXFR/NOTIFY refused → `<internal-zone>` never transfers → DANE
 fails → `UntrustedRoot`. The NAS reaches VLAN 30 natively, so it needs no routes.
 
 ---
@@ -74,7 +74,7 @@ the moment anything touches cluster config — always fix the node list instead:
 
 ```http
 POST /api/admin/cluster/updateIpAddress
-  node=technitium-<role>.mylocaldns
+  node=technitium-<role>.<internal-zone>
   ipAddresses=<VIP-x>,<ULA-x>              # IPv4 MACVLAN + ULA; NEVER a delegated GUA
 ```
 
@@ -94,9 +94,9 @@ renumber-proof. See the long comment in
 
 AXFR from a secondary arrives sourced from that node's VLAN 30 MACVLAN IP (via the net1
 routes). Allow the specific MACVLAN IPs on **every** zone the cluster replicates — that is
-`pi`, `declerck.dev`, `mylocaldns`, `thewizardofoz.win`, `cluster-catalog.mylocaldns`
+`<lan-zone>`, `<personal-domain-1>`, `<internal-zone>`, `<personal-domain-2>`, `cluster-catalog.<internal-zone>`
 **and the reverse zones** (`<vlan>.168.192.in-addr.arpa`). A per-zone omission silently
-breaks just that zone's transfer (and if it's `mylocaldns`, DANE breaks too):
+breaks just that zone's transfer (and if it's `<internal-zone>`, DANE breaks too):
 
 ```http
 POST /api/zones/options/set
@@ -130,7 +130,7 @@ all member zones:
 
 ```http
 POST /api/zones/options/set   (on each secondary / tertiary)
-  zone=cluster-catalog.mylocaldns
+  zone=cluster-catalog.<internal-zone>
   primaryNameServerAddresses=<VIP-A>  primaryZoneTransferProtocol=Tcp
 ```
 
@@ -195,19 +195,19 @@ allowlist and checking blocked queries.
 ```http
 # Primary zone added to the cluster catalog:
 POST /api/zones/create
-  zone=<zone>  type=Primary  catalog=cluster-catalog.mylocaldns
+  zone=<zone>  type=Primary  catalog=cluster-catalog.<internal-zone>
 
 # Import records from a BIND zone file (catalog members reject NS/glue + SOA MNAME
-# mismatches — strip NS/glue and set SOA MNAME = technitium-primary.mylocaldns):
+# mismatches — strip NS/glue and set SOA MNAME = technitium-primary.<internal-zone>):
 POST /api/zones/import
   zone=<zone>  overwrite=true                     # body: BIND zone file text
 
-# Secondary zone from a remote master (e.g. pi1, declerck.cool):
+# Secondary zone from a remote master (e.g. <router-host>, <nas-domain>):
 POST /api/zones/create
   zone=<zone>  type=Secondary
   primaryNameServerAddresses=<REMOTE-MASTER-IP>
   zoneTransferProtocol=Tcp  tsigKeyName=secundaryzoneupdate   # lowercased internally
-  catalog=cluster-catalog.mylocaldns
+  catalog=cluster-catalog.<internal-zone>
 ```
 
 IPv6 recursion: there is no combined "private + specified" mode in v15 — use

@@ -20,7 +20,17 @@ tmp/*
 .venv
 .claude/settings.local.json
 
-.claude/
+# .claude: track only the generic, public-safe parts (CLAUDE.md, rules, agents, hooks, new skills).
+# Local-only: settings*.json (contains private hosts until replaced by the clean proposal),
+# DB dumps, and the three infra-debug skills that embed private IPs/hostnames.
+.claude/*
+!.claude/rules/
+!.claude/agents/
+!.claude/hooks/
+!.claude/skills/
+.claude/skills/zigbee-mesh-debug/
+.claude/skills/matter-thread-debug/
+.claude/skills/esphome-device-ops/
 docs/printflow-printstash-handoff.md
 .env
 # properdocs build output
