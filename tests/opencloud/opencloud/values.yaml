@@ -6,8 +6,9 @@ statefulset:
     repository: opencloudeu/opencloud-rolling
     tag: 8.1.0
   # `opencloud init` writes secrets + opencloud.yaml once and fails on later runs, hence `|| true`.
+  # `--insecure false` is required: without it init prompts on stdin and loops forever in a pod.
   command: ["/bin/sh"]
-  args: ["-c", "opencloud init || true; exec opencloud server"]
+  args: ["-c", "opencloud init --insecure false || true; exec opencloud server"]
   ports:
     http: 9200
 
