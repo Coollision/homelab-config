@@ -78,9 +78,9 @@ storage:
   # Active variant: keep claimName and subPath in sync with the variant name.
   - mountPath: /var/lib/opencloud/storage/users
     type: existingClaim
-    claimName: opencloud-pilot-nfs-v41
+    claimName: opencloud-pilot-nfs-v42
     nameSuffix: nfs
-    subPath: opencloud-pilot/v41
+    subPath: opencloud-pilot/v42
   - mountPath: /etc/opencloud
     size: 1Gi
     type: longhorn
