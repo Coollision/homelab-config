@@ -50,9 +50,9 @@ Node reference:
 
 | kubectl name  | SSH host         | IP prefix |
 |---------------|------------------|-----------|
-| master-green  | node-green.pi    | 10.42.0   |
-| worker-blue   | node-blue.pi     | 10.42.1   |
-| worker-silver | node-silver.pi   | 10.42.2   |
+| master-green  | <node-1-host>   | 10.42.0   |
+| worker-blue   | <node-2-host>   | 10.42.1   |
+| worker-silver | <node-3-host>   | 10.42.2   |
 
 No restart needed — flannel picks up the freed IPs immediately and pending pods
 start getting assigned addresses within seconds.
