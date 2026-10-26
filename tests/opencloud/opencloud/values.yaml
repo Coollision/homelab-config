@@ -23,6 +23,8 @@ config:
   # TLS terminates at Traefik.
   PROXY_TLS: "false"
   OC_LOG_LEVEL: info
+  # Pilot only: lets curl/rclone test WebDAV without a browser OIDC flow. Real clients use OIDC; drop this for production.
+  PROXY_ENABLE_BASIC_AUTH: "true"
   # Plain tree on disk: user data is browsable files, changes made on disk are picked up via inotify.
   STORAGE_USERS_DRIVER: posix
   STORAGE_USERS_POSIX_ROOT: /var/lib/opencloud/storage/users
