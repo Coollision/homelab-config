@@ -1,0 +1,11 @@
+apiVersion: v2
+name: sync-in
+description: Sync-in pilot with its data tree on the NAS (NFS)
+type: application
+version: 0.1.0
+appVersion: "2.6.1"
+
+dependencies:
+  - name: shared-lib
+    version: 0.1.0
+    repository: file://../../../lib/shared-lib

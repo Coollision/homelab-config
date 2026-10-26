@@ -1,0 +1,33 @@
+{{- /* Static PV on the arr Downloads share (throwaway data); the pod mounts one subfolder of it. */ -}}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: sync-in-pilot-nfs
+spec:
+  capacity:
+    storage: 100Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  claimRef:
+    namespace: {{ .Release.Namespace }}
+    name: sync-in-pilot-nfs
+  nfs:
+    server: <secret:kv/data/shared/nfs~server-ip>
+    path: "<secret:kv/data/shared/nfs~downloads-path>"
+  mountOptions:
+    - vers=4.1
+    - hard
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sync-in-pilot-nfs
+spec:
+  resources:
+    requests:
+      storage: 100Gi
+  volumeName: sync-in-pilot-nfs
+  storageClassName: ""
+  accessModes:
+    - ReadWriteMany
