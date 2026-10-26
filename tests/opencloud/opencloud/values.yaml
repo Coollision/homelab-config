@@ -1,0 +1,68 @@
+fullnameOverride: opencloud
+
+# Pilot (tests branch). Internal ingress only, nothing exposed externally.
+statefulset:
+  image:
+    repository: opencloudeu/opencloud-rolling
+    tag: 8.1.0
+  # `opencloud init` writes secrets + opencloud.yaml once and fails on later runs, hence `|| true`.
+  command: ["/bin/sh"]
+  args: ["-c", "opencloud init || true; exec opencloud server"]
+  ports:
+    http: 9200
+
+podSecurityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+config:
+  OC_URL: https://opencloud.<secret:kv/data/shared/domains~local>
+  # TLS terminates at Traefik.
+  PROXY_TLS: "false"
+  OC_LOG_LEVEL: info
+  # Plain tree on disk: user data is browsable files, changes made on disk are picked up via inotify.
+  STORAGE_USERS_DRIVER: posix
+  STORAGE_USERS_POSIX_ROOT: /var/lib/opencloud/storage/users
+  STORAGE_USERS_POSIX_WATCH_FS: "true"
+  # PosixFS needs a shared ID cache store for the watcher.
+  STORAGE_USERS_ID_CACHE_STORE: nats-js-kv
+  # `.CURRENT` / `.REV.*` files; server-side versioning (no retention cleanup upstream yet).
+  STORAGE_USERS_POSIX_ENABLE_FS_REVISIONS: "true"
+
+# Memory limit sized for the all-in-one process (search index + embedded NATS).
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1536Mi
+
+ingress_internal_secure:
+  host: opencloud.<secret:kv/data/shared/domains~local>
+  port: http
+
+# Block storage on a node disk, NOT NFS: PosixFS breaks on NFS caching (opencloud#1596).
+# replicas: 1 keeps it effectively local; backup/protect off so the pilot is disposable.
+storage:
+  - mountPath: /var/lib/opencloud
+    size: 10Gi
+    type: longhorn
+    replicas: 1
+    backup: false
+    protect: false
+    # non-empty labels: the lib renders a bare `{}` (invalid YAML) when backup+protect are both off
+    labels:
+      pilot: "true"
+    nameSuffix: data
+  - mountPath: /etc/opencloud
+    size: 1Gi
+    type: longhorn
+    replicas: 1
+    backup: false
+    protect: false
+    # non-empty labels: the lib renders a bare `{}` (invalid YAML) when backup+protect are both off
+    labels:
+      pilot: "true"
+    nameSuffix: config
