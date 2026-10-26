@@ -1,6 +1,7 @@
 fullnameOverride: opencloud
 
-# Pilot (tests branch). Internal ingress only, nothing exposed externally.
+# Pilot (tests branch). Internal ingress only (no ingress_external_secure). The <domain> host gets the
+# wildcard cert; a <local> host would serve Traefik's self-signed default, which the clients reject.
 statefulset:
   image:
     repository: opencloudeu/opencloud-rolling
@@ -18,7 +19,7 @@ podSecurityContext:
   fsGroup: 1000
 
 config:
-  OC_URL: https://opencloud.<secret:kv/data/shared/domains~local>
+  OC_URL: https://opencloud.<secret:kv/data/shared/domains~domain>
   # TLS terminates at Traefik.
   PROXY_TLS: "false"
   OC_LOG_LEVEL: info
@@ -41,7 +42,7 @@ resources:
     memory: 1536Mi
 
 ingress_internal_secure:
-  host: opencloud.<secret:kv/data/shared/domains~local>
+  host: opencloud.<secret:kv/data/shared/domains~domain>
   port: http
 
 # Block storage on a node disk, NOT NFS: PosixFS breaks on NFS caching (opencloud#1596).
