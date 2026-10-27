@@ -95,6 +95,81 @@ promstack:
             resources:
               requests:
                 storage: 2Gi
+    # ── Notification routing ────────────────────────────────────────────────
+    # Prometheus rules (kube-prometheus-stack defaults + templates/prometheusrules.yaml) all land
+    # here; log-based rules live in Grafana (grafana-alerts/) and notify Slack on their own.
+    # Policy: one Slack channel, severity decides how loud.
+    #   critical -> Slack within ~30s, re-notify every 4h, "resolved" posted
+    #   warning  -> grouped digest (first post after 2m, new members batched every 30m),
+    #               re-notify every 24h, no "resolved" noise
+    #   info     -> dropped (CPUThrottlingHigh & co. are dashboards, not notifications)
+    # Watchdog is always firing by design -> null (no dead-man's-switch endpoint configured yet).
+    config:
+      global:
+        resolve_timeout: 5m
+      inhibit_rules:
+        - source_matchers: ['severity = critical']
+          target_matchers: ['severity =~ warning|info']
+          equal: ['namespace', 'alertname']
+        - source_matchers: ['severity = warning']
+          target_matchers: ['severity = info']
+          equal: ['namespace', 'alertname']
+        - source_matchers: ['alertname = InfoInhibitor']
+          target_matchers: ['severity = info']
+          equal: ['namespace']
+        - target_matchers: ['alertname = InfoInhibitor']
+        # Mains power out: everything downstream (NAS unreachable, pods flapping...) is a
+        # consequence, so mute all warnings until the UPS reports it is back on mains.
+        - source_matchers: ['alertname = UpsOnBattery']
+          target_matchers: ['severity = warning']
+      route:
+        receiver: slack-warning
+        group_by: ['alertname', 'namespace']
+        group_wait: 2m
+        group_interval: 30m
+        repeat_interval: 24h
+        routes:
+          - receiver: "null"
+            matchers: ['alertname =~ "Watchdog|InfoInhibitor"']
+          - receiver: "null"
+            matchers: ['severity = info']
+          - receiver: slack-critical
+            matchers: ['severity = critical']
+            group_wait: 30s
+            group_interval: 5m
+            repeat_interval: 4h
+      receivers:
+        - name: "null"
+        - name: slack-critical
+          slack_configs:
+            - api_url: <secret:kv/data/system/monitoring/monitoring~slack-webhook-url>
+              send_resolved: true
+              color: '{{ template "homelab.slack.color" . }}'
+              title: '{{ template "homelab.slack.title" . }}'
+              text: '{{ template "homelab.slack.text" . }}'
+        - name: slack-warning
+          slack_configs:
+            - api_url: <secret:kv/data/system/monitoring/monitoring~slack-webhook-url>
+              send_resolved: false
+              color: '{{ template "homelab.slack.color" . }}'
+              title: '{{ template "homelab.slack.title" . }}'
+              text: '{{ template "homelab.slack.text" . }}'
+      templates:
+        - '/etc/alertmanager/config/*.tmpl'
+    templateFiles:
+      slack.tmpl: |-
+        {{ define "homelab.slack.color" -}}
+        {{ if eq .Status "resolved" }}good{{ else if eq .CommonLabels.severity "critical" }}danger{{ else }}warning{{ end }}
+        {{- end }}
+        {{ define "homelab.slack.title" -}}
+        {{ if eq .Status "resolved" }}:white_check_mark: RESOLVED{{ else if eq .CommonLabels.severity "critical" }}:red_circle: CRITICAL{{ else }}:warning: WARNING{{ end }} · {{ .CommonLabels.alertname }}{{ with .CommonLabels.namespace }} · {{ . }}{{ end }}{{ if gt (len .Alerts.Firing) 1 }} ({{ len .Alerts.Firing }}){{ end }}
+        {{- end }}
+        {{ define "homelab.slack.text" -}}
+        {{ range .Alerts -}}
+        • *{{ with .Annotations.summary }}{{ . }}{{ else }}{{ .Labels.alertname }}{{ end }}*{{ with .Annotations.description }}
+          {{ . }}{{ end }}
+        {{ end }}
+        {{- end }}
     serviceMonitor:
       interval: 60s
       metricRelabelings:
@@ -120,6 +195,16 @@ promstack:
           action: drop
     prometheusSpec:
       externalUrl: http://prometheus.<secret:kv/data/shared/domains~local>/
+      # Restart-proofing. A Prometheus restart takes ~3.5 min to serve again and stops sending
+      # alerts; Alertmanager treats an alert as resolved once its endsAt (= 4 x resendDelay
+      # after the last send) passes. The 1m default gave ~4 min -> every firing alert got a
+      # "resolved" + re-fire pair. 5m -> ~20 min, longer than restart + the 10m grace period
+      # below. Real resolutions are unaffected (Prometheus sends them explicitly).
+      rules:
+        alert:
+          resendDelay: 5m
+          forOutageTolerance: 1h   # restore pending/firing `for:` state across restarts (default)
+          forGracePeriod: 10m      # hold restored alerts as pending this long after restart (default)
       retention: 90d
       retentionSize: 18GiB
       enableAdminAPI: true
@@ -312,6 +397,7 @@ promstack:
       size: 2Gi
     additionalDataSources:
       - name: Loki
+        uid: P8E80F9AEF21F6940  # pinned: Grafana alert rules (grafana-alerts/) reference it
         type: loki
         access: proxy
         url: http://logging-loki-gateway:80
@@ -471,6 +557,9 @@ promstack:
   nameOverride: promstack
   cleanPrometheusOperatorObjectNames: true
   defaultRules:
+    # CPUThrottlingHigh: info-level, fired ~155h/week on scale-to-zero apps (Sablier) and Vault; never actionable.
+    disabled:
+      CPUThrottlingHigh: true
     rules:
       etcd: false
       # Rule groups for the three control-plane scrapes disabled above. Without these

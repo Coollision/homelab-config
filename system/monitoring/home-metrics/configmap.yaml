@@ -17,6 +17,12 @@ data:
         version: 3
     modules:
       synology:
+        # 10 rows per GETBULK keeps every reply under the path MTU. The default (25) makes the
+        # NAS in the remote site answer hrStorage with >1500-byte UDP replies that get fragmented
+        # and silently dropped on the site-to-site link -> scrape times out. Safe for all NASes.
+        max_repetitions: 10
+        timeout: 8s
+        retries: 2
         walk:
         - 1.3.6.1.2.1.2
         - 1.3.6.1.2.1.25.2
