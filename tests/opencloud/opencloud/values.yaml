@@ -43,11 +43,17 @@ initContainers:
         mkdir -p /nfs/opencloud-pilot/decomposed
         chmod 0777 /nfs/opencloud-pilot /nfs/opencloud-pilot/decomposed
         ls -lnd /nfs/opencloud-pilot/*
+        # The nested NFS mount point (storage/users) would be created root-owned by the runtime, which leaves
+        # opencloud unable to create its sibling storage/metadata ("permission denied"); pre-create it as uid 1000.
+        mkdir -p /data/storage/users
+        chown 1000:1000 /data /data/storage /data/storage/users
     securityContext:
       runAsUser: 0
     volumeMounts:
       - name: opencloud-nfs
         mountPath: /nfs
+      - name: opencloud-data
+        mountPath: /data
 
 # Memory limit sized for the all-in-one process (search index + embedded NATS).
 resources:
