@@ -30,19 +30,6 @@
   "links": [],
   "panels": [
     {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 0
-      },
-      "id": 30,
-      "panels": [],
-      "title": "statuses",
-      "type": "row"
-    },
-    {
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -50,19 +37,16 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "fixed",
+            "fixedColor": "text"
           },
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "rgb(255, 255, 255)",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 79.9999
+                "color": "text",
+                "value": null
               }
             ]
           },
@@ -71,25 +55,30 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
-        "w": 6,
+        "h": 3,
+        "w": 24,
         "x": 0,
-        "y": 1
+        "y": 0
       },
       "id": 24,
       "options": {
-        "colorMode": "background",
+        "colorMode": "none",
         "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "horizontal",
+        "justifyMode": "left",
+        "orientation": "vertical",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "/.*/",
           "values": false
         },
         "showPercentChange": false,
-        "text": {},
+        "text": {
+          "titleSize": 12,
+          "valueSize": 15
+        },
         "textMode": "value_and_name",
         "wideLayout": true
       },
@@ -130,7 +119,7 @@
           "refId": "C"
         }
       ],
-      "title": "system info",
+      "title": "$Device · System",
       "transformations": [
         {
           "id": "labelsToFields",
@@ -160,7 +149,7 @@
           "id": "renameByRegex",
           "options": {
             "regex": "synology_version",
-            "renamePattern": "DSM version"
+            "renamePattern": "DSM"
           }
         },
         {
@@ -174,12 +163,16 @@
           "id": "renameByRegex",
           "options": {
             "regex": "synology_serialNumber",
-            "renamePattern": "SerialNr"
+            "renamePattern": "Serial"
           }
         }
       ],
       "transparent": true,
-      "type": "stat"
+      "type": "stat",
+      "description": "Model, DSM version and serial number reported over SNMP.",
+      "repeat": "Device",
+      "repeatDirection": "h",
+      "maxPerRow": 2
     },
     {
       "datasource": {
@@ -190,27 +183,27 @@
         "defaults": {
           "mappings": [
             {
+              "type": "value",
               "options": {
                 "1": {
-                  "text": "Normal"
+                  "text": "OK",
+                  "color": "green",
+                  "index": 0
                 },
                 "2": {
-                  "text": "Failed"
+                  "text": "FAILED",
+                  "color": "red",
+                  "index": 1
                 }
-              },
-              "type": "value"
+              }
             }
           ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "semi-dark-green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 2
+                "color": "green",
+                "value": null
               }
             ]
           }
@@ -219,83 +212,114 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "are there updates?"
+              "options": "Updates"
             },
             "properties": [
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "blue",
-                      "value": 0
-                    },
-                    {
-                      "color": "semi-dark-green",
-                      "value": 2
-                    },
-                    {
-                      "color": "#EAB839",
-                      "value": 3
-                    },
-                    {
-                      "color": "red",
-                      "value": 23
-                    }
-                  ]
-                }
-              },
               {
                 "id": "mappings",
                 "value": [
                   {
+                    "type": "value",
                     "options": {
                       "1": {
-                        "text": "Available"
+                        "text": "Update available",
+                        "color": "yellow",
+                        "index": 0
                       },
                       "2": {
-                        "text": "Unavailable"
+                        "text": "Up to date",
+                        "color": "green",
+                        "index": 1
                       },
                       "3": {
-                        "text": "Connecting"
+                        "text": "Checking…",
+                        "color": "blue",
+                        "index": 2
                       },
                       "4": {
-                        "text": "Disconnected"
+                        "text": "Cannot check",
+                        "color": "yellow",
+                        "index": 3
                       },
                       "5": {
-                        "text": "Others"
+                        "text": "Unknown",
+                        "color": "yellow",
+                        "index": 4
                       }
-                    },
-                    "type": "value"
+                    }
                   }
                 ]
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "SNMP"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "Unreachable",
+                        "color": "red",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "Online",
+                        "color": "green",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
               }
             ]
           }
         ]
       },
       "gridPos": {
-        "h": 4,
-        "w": 12,
-        "x": 6,
-        "y": 1
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 3
       },
       "id": 22,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
-        "justifyMode": "auto",
+        "justifyMode": "center",
         "orientation": "vertical",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["last"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
         "showPercentChange": false,
-        "text": {},
-        "textMode": "auto",
+        "text": {
+          "titleSize": 11,
+          "valueSize": 15
+        },
+        "textMode": "value_and_name",
         "wideLayout": true
       },
       "pluginVersion": "12.4.1",
@@ -308,7 +332,7 @@
           "expr": "synology_systemStatus{instance=\"$Device\"}",
           "instant": true,
           "interval": "",
-          "legendFormat": "system status",
+          "legendFormat": "System",
           "refId": "A"
         },
         {
@@ -319,7 +343,7 @@
           "expr": "synology_powerStatus{instance=\"$Device\"}",
           "instant": true,
           "interval": "",
-          "legendFormat": "power",
+          "legendFormat": "Power",
           "refId": "E"
         },
         {
@@ -330,7 +354,7 @@
           "expr": "synology_systemFanStatus{instance=\"$Device\"}",
           "instant": true,
           "interval": "",
-          "legendFormat": "fan status",
+          "legendFormat": "System fan",
           "refId": "B"
         },
         {
@@ -341,7 +365,7 @@
           "expr": "synology_cpuFanStatus{instance=\"$Device\"}",
           "instant": true,
           "interval": "",
-          "legendFormat": "cpu fan status",
+          "legendFormat": "CPU fan",
           "refId": "C"
         },
         {
@@ -352,12 +376,27 @@
           "expr": "synology_upgradeAvailable{instance=\"$Device\"}",
           "instant": true,
           "interval": "",
-          "legendFormat": "are there updates?",
+          "legendFormat": "Updates",
           "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "up{job=\"snmp-exporter\",instance=\"$Device\"}",
+          "instant": true,
+          "interval": "",
+          "legendFormat": "SNMP",
+          "refId": "Z"
         }
       ],
-      "title": "statuses",
-      "type": "stat"
+      "title": "$Device · Health",
+      "type": "stat",
+      "description": "System/Power/Fans: OK or FAILED from the Synology MIB. Updates: whether DSM has a newer version available. SNMP: whether the exporter can reach the NAS.",
+      "repeat": "Device",
+      "repeatDirection": "h",
+      "maxPerRow": 2
     },
     {
       "datasource": {
@@ -368,36 +407,42 @@
         "defaults": {
           "mappings": [
             {
+              "type": "value",
               "options": {
                 "1": {
-                  "text": "Normal"
+                  "text": "Healthy",
+                  "color": "green",
+                  "index": 0
                 },
                 "2": {
-                  "text": "Initialized"
+                  "text": "Initialized",
+                  "color": "blue",
+                  "index": 1
                 },
                 "3": {
-                  "text": "NotInitialized"
+                  "text": "Not initialized",
+                  "color": "yellow",
+                  "index": 2
                 },
                 "4": {
-                  "text": "SystemPartitionFailed"
+                  "text": "System partition failed",
+                  "color": "red",
+                  "index": 3
                 },
                 "5": {
-                  "text": "Crashed"
+                  "text": "Crashed",
+                  "color": "red",
+                  "index": 4
                 }
-              },
-              "type": "value"
+              }
             }
           ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "semi-dark-green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 2
+                "color": "green",
+                "value": null
               }
             ]
           }
@@ -405,26 +450,31 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
-        "w": 5,
-        "x": 18,
-        "y": 1
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 6
       },
       "id": 18,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
+        "justifyMode": "center",
+        "orientation": "vertical",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["mean"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
         "showPercentChange": false,
-        "text": {},
-        "textMode": "auto",
+        "text": {
+          "titleSize": 11,
+          "valueSize": 15
+        },
+        "textMode": "value_and_name",
         "wideLayout": true
       },
       "pluginVersion": "12.4.1",
@@ -438,12 +488,16 @@
           "format": "time_series",
           "instant": true,
           "interval": "",
-          "legendFormat": "{{diskID}}:",
+          "legendFormat": "{{diskID}}",
           "refId": "A"
         }
       ],
-      "title": "Disk Status",
-      "type": "stat"
+      "title": "$Device · Disks",
+      "type": "stat",
+      "description": "Per-disk health from the Synology MIB. Healthy = normal; anything else needs a look.",
+      "repeat": "Device",
+      "repeatDirection": "h",
+      "maxPerRow": 2
     },
     {
       "datasource": {
@@ -457,15 +511,19 @@
           "max": 100,
           "min": 0,
           "thresholds": {
-            "mode": "percentage",
+            "mode": "absolute",
             "steps": [
               {
                 "color": "green",
-                "value": 0
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 75
               },
               {
                 "color": "red",
-                "value": 80
+                "value": 90
               }
             ]
           },
@@ -474,24 +532,32 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
-        "w": 11,
+        "h": 5,
+        "w": 24,
         "x": 0,
-        "y": 5
+        "y": 9
       },
       "id": 26,
       "options": {
-        "minVizHeight": 75,
-        "minVizWidth": 75,
-        "orientation": "auto",
+        "displayMode": "basic",
+        "orientation": "horizontal",
+        "valueMode": "color",
+        "namePlacement": "left",
+        "showUnfilled": true,
+        "minVizHeight": 12,
+        "minVizWidth": 0,
+        "sizing": "auto",
+        "maxVizHeight": 24,
+        "legend": {
+          "showLegend": false
+        },
         "reduceOptions": {
-          "calcs": ["mean"],
+          "calcs": [
+            "mean"
+          ],
           "fields": "",
           "values": false
         },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true,
-        "sizing": "auto",
         "text": {}
       },
       "pluginVersion": "12.4.1",
@@ -508,8 +574,12 @@
           "refId": "A"
         }
       ],
-      "title": "used disk space",
-      "type": "gauge"
+      "title": "$Device · Volume usage",
+      "type": "bargauge",
+      "description": "Used space per volume. Yellow above 75%, red above 90%.",
+      "repeat": "Device",
+      "repeatDirection": "h",
+      "maxPerRow": 2
     },
     {
       "datasource": {
@@ -520,92 +590,122 @@
         "defaults": {
           "mappings": [
             {
+              "type": "value",
               "options": {
                 "1": {
-                  "text": "Normal"
+                  "text": "Normal",
+                  "color": "green",
+                  "index": 0
                 },
                 "2": {
-                  "text": "Repairing"
+                  "text": "Repairing",
+                  "color": "yellow",
+                  "index": 1
                 },
                 "3": {
-                  "text": "Migrating"
+                  "text": "Migrating",
+                  "color": "yellow",
+                  "index": 2
                 },
                 "4": {
-                  "text": "Expanding"
+                  "text": "Expanding",
+                  "color": "yellow",
+                  "index": 3
                 },
                 "5": {
-                  "text": "Deleting"
+                  "text": "Deleting",
+                  "color": "yellow",
+                  "index": 4
                 },
                 "6": {
-                  "text": "Creating"
+                  "text": "Creating",
+                  "color": "yellow",
+                  "index": 5
                 },
                 "7": {
-                  "text": "RaidSyncing"
+                  "text": "Syncing",
+                  "color": "yellow",
+                  "index": 6
                 },
                 "8": {
-                  "text": "RaidParityChecking"
+                  "text": "Parity check",
+                  "color": "yellow",
+                  "index": 7
                 },
                 "9": {
-                  "text": "RaidAssembling"
+                  "text": "Assembling",
+                  "color": "yellow",
+                  "index": 8
                 },
                 "10": {
-                  "text": "Canceling"
+                  "text": "Canceling",
+                  "color": "yellow",
+                  "index": 9
                 },
                 "11": {
-                  "text": "Degrade"
+                  "text": "DEGRADED",
+                  "color": "red",
+                  "index": 10
                 },
                 "12": {
-                  "text": "Crashed"
+                  "text": "CRASHED",
+                  "color": "red",
+                  "index": 11
                 },
                 "13": {
-                  "text": "DataScrubbing"
+                  "text": "Scrubbing",
+                  "color": "blue",
+                  "index": 12
                 },
                 "14": {
-                  "text": "RaidDeploying"
+                  "text": "Deploying",
+                  "color": "yellow",
+                  "index": 13
                 },
                 "15": {
-                  "text": "RaidUnDeploying"
+                  "text": "Undeploying",
+                  "color": "yellow",
+                  "index": 14
                 },
                 "16": {
-                  "text": "RaidMountCache"
+                  "text": "Mount cache",
+                  "color": "yellow",
+                  "index": 15
                 },
                 "17": {
-                  "text": "RaidUnmountCache"
+                  "text": "Unmount cache",
+                  "color": "yellow",
+                  "index": 16
                 },
                 "18": {
-                  "text": "RaidExpandingUnfinishedSHR"
+                  "text": "Expanding (SHR)",
+                  "color": "yellow",
+                  "index": 17
                 },
                 "19": {
-                  "text": "RaidConvertSHRToPool"
+                  "text": "Converting SHR",
+                  "color": "yellow",
+                  "index": 18
                 },
                 "20": {
-                  "text": "RaidMigrateSHR1ToSHR2"
+                  "text": "Migrating SHR",
+                  "color": "yellow",
+                  "index": 19
                 },
                 "21": {
-                  "text": "RaidUnknownStatus"
+                  "text": "Unknown",
+                  "color": "yellow",
+                  "index": 20
                 }
-              },
-              "type": "value"
+              }
             }
           ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "semi-dark-green",
-                "value": 0
-              },
-              {
-                "color": "rgba(237, 129, 40, 0.89)",
-                "value": 2
-              },
-              {
-                "color": "#d44a3a",
-                "value": 2
-              },
-              {
-                "color": "#EAB839",
-                "value": 21
+                "color": "green",
+                "value": null
               }
             ]
           },
@@ -614,30 +714,37 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
-        "w": 8,
-        "x": 15,
-        "y": 5
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 14
       },
       "id": 9,
       "maxDataPoints": 100,
       "options": {
         "colorMode": "background",
         "fieldOptions": {
-          "calcs": ["mean"]
+          "calcs": [
+            "mean"
+          ]
         },
         "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
+        "justifyMode": "center",
+        "orientation": "vertical",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": ["mean"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
         "showPercentChange": false,
-        "text": {},
-        "textMode": "auto",
+        "text": {
+          "titleSize": 11,
+          "valueSize": 14
+        },
+        "textMode": "value_and_name",
         "wideLayout": true
       },
       "pluginVersion": "12.4.1",
@@ -656,21 +763,12 @@
           "refId": "A"
         }
       ],
-      "title": "raidStatus",
-      "type": "stat"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 11
-      },
-      "id": 28,
-      "panels": [],
-      "title": "base info",
-      "type": "row"
+      "title": "$Device · Storage pools & volumes",
+      "type": "stat",
+      "description": "RAID state per storage pool/volume. Normal is healthy; Degraded or Crashed means lost redundancy / data at risk; other states (syncing, scrubbing, repairing) are transient.",
+      "repeat": "Device",
+      "repeatDirection": "h",
+      "maxPerRow": 2
     },
     {
       "datasource": {
@@ -713,8 +811,9 @@
               "mode": "none"
             },
             "thresholdsStyle": {
-              "mode": "line+area"
-            }
+              "mode": "line"
+            },
+            "axisSoftMin": 20
           },
           "links": [],
           "mappings": [],
@@ -723,11 +822,15 @@
             "steps": [
               {
                 "color": "transparent",
-                "value": 0
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
               },
               {
                 "color": "red",
-                "value": 47
+                "value": 60
               }
             ]
           },
@@ -736,15 +839,18 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 7,
-        "w": 23,
+        "h": 6,
+        "w": 24,
         "x": 0,
-        "y": 12
+        "y": 17
       },
       "id": 16,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "mean"],
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true
@@ -774,12 +880,16 @@
           },
           "expr": "sum without(pod)(synology_temperature{instance=\"$Device\"})",
           "interval": "",
-          "legendFormat": "enclosureTemp",
+          "legendFormat": "Chassis",
           "refId": "B"
         }
       ],
-      "title": "Temperatures",
-      "type": "timeseries"
+      "title": "$Device · Temperatures",
+      "type": "timeseries",
+      "description": "Disk and chassis temperatures. Alerts: disk > 50 °C for 30 min (warning), > 60 °C (critical); chassis > 70 °C for 30 min.",
+      "repeat": "Device",
+      "repeatDirection": "h",
+      "maxPerRow": 2
     },
     {
       "datasource": {
@@ -845,8 +955,8 @@
         "overrides": [
           {
             "matcher": {
-              "id": "byName",
-              "options": "Out"
+              "id": "byRegexp",
+              "options": "/ out$/"
             },
             "properties": [
               {
@@ -860,8 +970,8 @@
           },
           {
             "matcher": {
-              "id": "byName",
-              "options": "Out"
+              "id": "byRegexp",
+              "options": "/ out$/"
             },
             "properties": [
               {
@@ -873,15 +983,18 @@
         ]
       },
       "gridPos": {
-        "h": 7,
-        "w": 23,
+        "h": 6,
+        "w": 24,
         "x": 0,
-        "y": 19
+        "y": 23
       },
       "id": 1,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull", "max"],
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true
@@ -899,12 +1012,12 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum without(pod) (irate(synology_ifHCInOctets{job='snmp-exporter',instance='$Device', ifName=~'$Interface'}[5m]))",
+          "expr": "sum without(pod) (irate(synology_ifHCInOctets{job='snmp-exporter',instance=\"$Device\", ifName=~'$Interface'}[5m]))",
           "format": "time_series",
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "In",
+          "legendFormat": "{{ifName}} in",
           "refId": "A",
           "step": 60
         },
@@ -913,18 +1026,22 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum without(pod)(irate(synology_ifHCOutOctets{job='snmp-exporter',instance='$Device', ifName=~'$Interface'}[5m]) )",
+          "expr": "sum without(pod)(irate(synology_ifHCOutOctets{job='snmp-exporter',instance=\"$Device\", ifName=~'$Interface'}[5m]) )",
           "format": "time_series",
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "Out",
+          "legendFormat": "{{ifName}} out",
           "refId": "B",
           "step": 60
         }
       ],
-      "title": "Trafick of $Interface Interfaces",
-      "type": "timeseries"
+      "title": "$Device · Network traffic",
+      "type": "timeseries",
+      "description": "Throughput per interface: in above the axis, out below. Use the Interface selector to narrow it down (virtual docker/veth/ovs interfaces are hidden).",
+      "repeat": "Device",
+      "repeatDirection": "h",
+      "maxPerRow": 2
     },
     {
       "datasource": {
@@ -985,15 +1102,16 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "none",
+          "decimals": 2
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
-        "w": 23,
+        "h": 5,
+        "w": 24,
         "x": 0,
-        "y": 26
+        "y": 29
       },
       "id": 11,
       "options": {
@@ -1016,7 +1134,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum without(pod) (synology_laLoadInt{instance=\"$Device\"})\n",
+          "expr": "sum without(pod) (synology_laLoadInt{instance=\"$Device\"}) / 100",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -1024,21 +1142,12 @@
           "refId": "A"
         }
       ],
-      "title": "Load",
-      "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 34
-      },
-      "id": 31,
-      "panels": [],
-      "title": "from Logs",
-      "type": "row"
+      "title": "$Device · Load average",
+      "type": "timeseries",
+      "description": "1 / 5 / 15 minute load average.",
+      "repeat": "Device",
+      "repeatDirection": "h",
+      "maxPerRow": 2
     },
     {
       "datasource": {
@@ -1058,8 +1167,8 @@
             "axisPlacement": "auto",
             "barAlignment": 0,
             "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 60,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -1073,7 +1182,7 @@
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "auto",
+            "showPoints": "never",
             "showValues": false,
             "spanNulls": false,
             "stacking": {
@@ -1097,23 +1206,25 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "decimals": 0,
+          "min": 0
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 9,
+        "h": 4,
         "w": 24,
         "x": 0,
-        "y": 35
+        "y": 34
       },
       "id": 32,
       "options": {
         "legend": {
-          "calcs": [],
+          "showLegend": false,
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": true
+          "calcs": []
         },
         "tooltip": {
           "hideZeros": false,
@@ -1129,67 +1240,90 @@
             "uid": "P8E80F9AEF21F6940"
           },
           "editorMode": "builder",
-          "expr": "sum by(hostname) (count_over_time({job=\"syslog\", service_name=\"Connection\"} |= `failed to sign in` [5m]))",
+          "expr": "sum by (hostname) (count_over_time({job=\"syslog\", service_name=\"Connection\", hostname=\"$Device\"} |= `failed to sign in` [5m]))",
           "legendFormat": "{{hostname}}",
           "queryType": "range",
           "refId": "A"
         }
       ],
-      "title": "Login Attempts",
-      "type": "timeseries"
+      "title": "$Device · Failed sign-ins (per 5 min)",
+      "type": "timeseries",
+      "description": "Failed DSM sign-in attempts from the NAS syslog. A burst can mean a brute-force attempt; alert fires above 4 in 10 minutes.",
+      "repeat": "Device",
+      "repeatDirection": "h",
+      "maxPerRow": 2
     }
   ],
   "preload": false,
   "refresh": "30s",
   "schemaVersion": 42,
-  "tags": [],
+  "tags": [
+    "synology",
+    "nas"
+  ],
   "templating": {
     "list": [
       {
         "current": {
-          "text": "Gobelijn",
-          "value": "Gobelijn"
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
         },
         "datasource": {
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "definition": "query_result(up{job=\"snmp-exporter\"})",
-        "includeAll": false,
+        "definition": "label_values(up{job=\"snmp-exporter\"}, instance)",
+        "includeAll": true,
         "name": "Device",
         "options": [],
         "query": {
-          "query": "query_result(up{job=\"snmp-exporter\"})",
-          "refId": "prometheus-Device-Variable-Query"
+          "qryType": 1,
+          "query": "label_values(up{job=\"snmp-exporter\"}, instance)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,
-        "regex": ".*instance=\"(.*?)\".*",
+        "regex": "",
         "regexApplyTo": "value",
         "sort": 1,
-        "type": "query"
+        "type": "query",
+        "multi": true,
+        "label": "NAS",
+        "skipUrlSync": false,
+        "hide": 0
       },
       {
         "current": {
-          "text": "eth0",
-          "value": "eth0"
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
         },
         "datasource": {
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "definition": "query_result(sum by (ifName)(synology_ifInOctets{job=\"snmp-exporter\",  instance=\"$Device\"}))",
-        "includeAll": false,
+        "definition": "label_values(synology_ifHCInOctets{job=\"snmp-exporter\",instance=~\"$Device\"}, ifName)",
+        "includeAll": true,
         "name": "Interface",
         "options": [],
         "query": {
-          "query": "query_result(sum by (ifName)(synology_ifInOctets{job=\"snmp-exporter\",  instance=\"$Device\"}))",
-          "refId": "prometheus-Interface-Variable-Query"
+          "qryType": 1,
+          "query": "label_values(synology_ifHCInOctets{job=\"snmp-exporter\",instance=~\"$Device\"}, ifName)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,
-        "regex": ".*ifName=\"(.*?)\".*",
+        "regex": "/^(?!lo$|sit\\d|docker|veth|br-|tap|ovs-).+/",
         "regexApplyTo": "value",
         "sort": 1,
-        "type": "query"
+        "type": "query",
+        "multi": true,
+        "label": "Interface"
       }
     ]
   },
@@ -1211,8 +1345,8 @@
     ]
   },
   "timezone": "browser",
-  "title": "Synology SNMP DashBoard Copy",
+  "title": "Synology SNMP Dashboard",
   "uid": "qfGRDGZgz",
-  "version": 15,
+  "version": 21,
   "weekStart": ""
 }

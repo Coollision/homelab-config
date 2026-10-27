@@ -64,6 +64,7 @@ spec:
       - monitoring
   endpoints:
     - interval: 30s
+      scrapeTimeout: 25s
       port: snmp-exporter-metrics
       path: "/snmp"
       targetPort: 9116
@@ -78,6 +79,35 @@ spec:
         - action: replace
           regex: (.*)
           replacement: Gobelijn
+          sourceLabels:
+            - instance
+          targetLabel: instance
+      metricRelabelings:
+        - sourceLabels: [__name__]
+          regex: "go_.*|process_.*|promhttp_.*"
+          action: drop
+        - sourceLabels: [__name__]
+          regex: "synology_if(Index|Descr|Type|Mtu|PhysAddress|LastChange|InUcastPkts|InNUcastPkts|OutUcastPkts|OutNUcastPkts|OutQLen|Specific|Alias|CounterDiscontinuityTime)"
+          action: drop
+        - sourceLabels: [__name__]
+          regex: "synology_(storageIO.*|spaceIO.*|iSCSILUN.*)"
+          action: drop
+    - interval: 30s
+      scrapeTimeout: 25s
+      port: snmp-exporter-metrics
+      path: "/snmp"
+      targetPort: 9116
+      params:
+        module:
+          - synology
+        target:
+          - <secret:kv/data/shared/network~homenas-ip>
+        auth:
+          - public_v2
+      relabelings:
+        - action: replace
+          regex: (.*)
+          replacement: HomeNas
           sourceLabels:
             - instance
           targetLabel: instance

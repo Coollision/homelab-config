@@ -205,3 +205,167 @@ spec:
           annotations:
             summary: "NUT exporter metrics missing"
             description: "No successful scrape of the nut-exporter target for 15 minutes — the UPS pod, its node, or the ServiceMonitor may be down. This is a real gap, not the known short driver stalls (which don't take the exporter itself down)."
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Synology NAS alerts (system/monitoring/home-metrics, SNMP exporter, job="snmp-exporter")
+    #
+    # One rule set covers every NAS the exporter scrapes; the `instance` label carries the
+    # NAS name (set by the relabeling in the ServiceMonitor). Synology MIB enums used:
+    #   systemStatus / powerStatus / *FanStatus : 1 = normal, 2 = failed
+    #   diskStatus : 1 normal, 2 initialized, 3 not initialized, 4 system-partition failed, 5 crashed
+    #   raidStatus : 1 normal, 11 degraded, 12 crashed (others = repairing/scrubbing/syncing: not paged)
+    # Temperature rules replace the old hand-made Grafana rules that flapped ~90x/week;
+    # long `for:` windows ride out RAID scrubs and Hyper Backup bursts.
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: synology.alerts
+      interval: 1m
+      rules:
+        - alert: SynologyUnreachable
+          expr: >-
+            up{job="snmp-exporter"} == 0
+          for: 10m
+          labels:
+            severity: critical
+            category: nas
+          annotations:
+            summary: "NAS {{`{{ $labels.instance }}`}} is unreachable"
+            description: "SNMP scrape of {{`{{ $labels.instance }}`}} has failed for 10 minutes — the NAS is down, SNMP is disabled, or the network path (VLAN/site link) is broken."
+
+        - alert: SynologySystemFailure
+          expr: >-
+            max by (instance) (synology_systemStatus > 1 or synology_powerStatus > 1)
+          for: 5m
+          labels:
+            severity: critical
+            category: nas
+          annotations:
+            summary: "NAS {{`{{ $labels.instance }}`}} reports a system or power failure"
+            description: "Synology systemStatus/powerStatus on {{`{{ $labels.instance }}`}} is not normal for 5 minutes. Check DSM Control Panel → Info Center."
+
+        - alert: SynologyFanFailure
+          expr: >-
+            max by (instance) (synology_systemFanStatus > 1 or synology_cpuFanStatus > 1)
+          for: 10m
+          labels:
+            severity: warning
+            category: nas
+          annotations:
+            summary: "NAS {{`{{ $labels.instance }}`}} fan failure"
+            description: "A system or CPU fan on {{`{{ $labels.instance }}`}} reports failed for 10 minutes."
+
+        - alert: SynologyRaidDegraded
+          expr: >-
+            synology_raidStatus >= 11 and synology_raidStatus <= 12
+          for: 5m
+          labels:
+            severity: critical
+            category: nas
+          annotations:
+            summary: "NAS {{`{{ $labels.instance }}`}}: {{`{{ $labels.raidName }}`}} is degraded or crashed"
+            description: "Storage pool/volume {{`{{ $labels.raidName }}`}} on {{`{{ $labels.instance }}`}} has RAID status {{`{{ $value | humanize }}`}} (11 = degraded, 12 = crashed). Redundancy is lost or data is at risk."
+
+        - alert: SynologyDiskFailure
+          expr: >-
+            synology_diskStatus >= 4
+          for: 5m
+          labels:
+            severity: critical
+            category: nas
+          annotations:
+            summary: "NAS {{`{{ $labels.instance }}`}}: {{`{{ $labels.diskID }}`}} has failed"
+            description: "{{`{{ $labels.diskID }}`}} on {{`{{ $labels.instance }}`}} reports a failed or crashed status ({{`{{ $value | humanize }}`}})."
+
+        - alert: SynologyDiskTemperatureHigh
+          expr: >-
+            max by (instance, diskID) (synology_diskTemperature) > 50
+          for: 30m
+          labels:
+            severity: warning
+            category: nas
+          annotations:
+            summary: "NAS {{`{{ $labels.instance }}`}}: {{`{{ $labels.diskID }}`}} is running hot ({{`{{ $value | humanize }}`}} °C)"
+            description: "{{`{{ $labels.diskID }}`}} on {{`{{ $labels.instance }}`}} has been above 50 °C for 30 minutes (normal is 30-45 °C)."
+
+        - alert: SynologyDiskTemperatureCritical
+          expr: >-
+            max by (instance, diskID) (synology_diskTemperature) > 60
+          for: 10m
+          labels:
+            severity: critical
+            category: nas
+          annotations:
+            summary: "NAS {{`{{ $labels.instance }}`}}: {{`{{ $labels.diskID }}`}} is overheating ({{`{{ $value | humanize }}`}} °C)"
+            description: "{{`{{ $labels.diskID }}`}} on {{`{{ $labels.instance }}`}} has been above 60 °C for 10 minutes. Check airflow/fans and consider shutting down."
+
+        - alert: SynologySystemTemperatureHigh
+          expr: >-
+            max by (instance) (synology_temperature) > 70
+          for: 30m
+          labels:
+            severity: warning
+            category: nas
+          annotations:
+            summary: "NAS {{`{{ $labels.instance }}`}} system temperature is high ({{`{{ $value | humanize }}`}} °C)"
+            description: "The NAS chassis/CPU temperature on {{`{{ $labels.instance }}`}} has been above 70 °C for 30 minutes."
+
+        - alert: SynologyVolumeLowSpace
+          expr: >-
+            synology_raidFreeSize{raidName=~"Volume.*"} / synology_raidTotalSize{raidName=~"Volume.*"} < 0.10
+          for: 1h
+          labels:
+            severity: warning
+            category: nas
+          annotations:
+            summary: "NAS {{`{{ $labels.instance }}`}}: {{`{{ $labels.raidName }}`}} has {{`{{ $value | humanizePercentage }}`}} free"
+            description: "{{`{{ $labels.raidName }}`}} on {{`{{ $labels.instance }}`}} is below 10% free space."
+
+        - alert: SynologyVolumeAlmostFull
+          expr: >-
+            synology_raidFreeSize{raidName=~"Volume.*"} / synology_raidTotalSize{raidName=~"Volume.*"} < 0.05
+          for: 30m
+          labels:
+            severity: critical
+            category: nas
+          annotations:
+            summary: "NAS {{`{{ $labels.instance }}`}}: {{`{{ $labels.raidName }}`}} is almost full ({{`{{ $value | humanizePercentage }}`}} free)"
+            description: "{{`{{ $labels.raidName }}`}} on {{`{{ $labels.instance }}`}} is below 5% free space. Writes may start failing."
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # cert-manager certificate alerts. Renewal normally happens ~30 days before expiry,
+    # so "expires within 14d" means automatic renewal is stuck.
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: certificates.alerts
+      interval: 5m
+      rules:
+        - alert: CertificateNotReady
+          expr: >-
+            certmanager_certificate_ready_status{condition="False"} == 1
+          for: 30m
+          labels:
+            severity: warning
+            category: certificates
+          annotations:
+            summary: "Certificate {{`{{ $labels.namespace }}/{{ $labels.name }}`}} is not ready"
+            description: "cert-manager reports Certificate {{`{{ $labels.namespace }}/{{ $labels.name }}`}} as not Ready for 30 minutes (issuance or renewal is failing). Check `kubectl describe certificate` and the issuer/ACME challenge."
+
+        - alert: CertificateExpiringSoon
+          expr: >-
+            (certmanager_certificate_expiration_timestamp_seconds - time()) < 14 * 86400
+          for: 1h
+          labels:
+            severity: warning
+            category: certificates
+          annotations:
+            summary: "Certificate {{`{{ $labels.namespace }}/{{ $labels.name }}`}} expires in under 14 days"
+            description: "Certificate {{`{{ $labels.namespace }}/{{ $labels.name }}`}} has not been renewed and expires in {{`{{ $value | humanizeDuration }}`}}."
+
+        - alert: CertificateExpiryImminent
+          expr: >-
+            (certmanager_certificate_expiration_timestamp_seconds - time()) < 3 * 86400
+          for: 10m
+          labels:
+            severity: critical
+            category: certificates
+          annotations:
+            summary: "Certificate {{`{{ $labels.namespace }}/{{ $labels.name }}`}} expires in under 3 days"
+            description: "Certificate {{`{{ $labels.namespace }}/{{ $labels.name }}`}} expires in {{`{{ $value | humanizeDuration }}`}}. Renewal has failed — services will start showing TLS errors."

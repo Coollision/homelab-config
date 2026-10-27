@@ -1,0 +1,39 @@
+# Grafana-managed alerting: where notifications go and how they are routed.
+# Provisioned by the Grafana alerts sidecar (every file in this directory becomes a ConfigMap,
+# see templates/grafana-alerts.yaml) — files must be PLAIN Grafana provisioning YAML (no ConfigMap wrapper).
+#
+# Grafana only evaluates the log-based rules (log-alerts.yaml, Loki). Every metric alert is a
+# PrometheusRule routed by Alertmanager (values.yaml -> alertmanager.config) — same Slack channel,
+# same severity semantics: critical = loud + resolved, warning = digest, never a "resolved" post.
+apiVersion: 1
+contactPoints:
+  - orgId: 1
+    name: slack-critical
+    receivers:
+      - uid: slack-critical
+        type: slack
+        disableResolveMessage: false
+        settings:
+          url: <secret:kv/data/system/monitoring/monitoring~slack-webhook-url>
+  - orgId: 1
+    name: slack-warning
+    receivers:
+      - uid: slack-warning
+        type: slack
+        disableResolveMessage: true
+        settings:
+          url: <secret:kv/data/system/monitoring/monitoring~slack-webhook-url>
+policies:
+  - orgId: 1
+    receiver: slack-warning
+    group_by: [grafana_folder, alertname]
+    group_wait: 2m
+    group_interval: 30m
+    repeat_interval: 24h
+    routes:
+      - receiver: slack-critical
+        object_matchers:
+          - [severity, "=", critical]
+        group_wait: 30s
+        group_interval: 5m
+        repeat_interval: 4h

@@ -410,6 +410,22 @@ visible anywhere obvious.
 If you add a new dashboard and it doesn't appear, check both of these before assuming
 your ConfigMap or JSON is wrong.
 
+### SNMP scrape of a remote NAS times out {#snmp-remote-nas-timeout}
+
+**Symptom:** `snmp-exporter` logs `request timeout (after 3 retries)` for one NAS while another NAS
+(and SNMP from a laptop, and even `snmpwalk` on small subtrees) works fine; TCP to the NAS is fine,
+firewall zone policies already allow the traffic, a UDP SNMP discovery probe gets a reply.
+
+**Cause:** the exporter asks for 25 rows per GETBULK. For the hrStorage subtree (long mount paths)
+the NAS replies with a UDP datagram bigger than the path MTU; the resulting IP fragments never
+arrive over the site-to-site link (ICMP larger than ~1400 bytes also fails end to end), so the
+request times out every time — deterministic, independent of the timeout value. 10 rows per
+request (or fewer) always fits.
+
+**Fix in place:** `max_repetitions: 10` on the `synology` module. If a *new* module times out
+mysteriously on one device only, test the same walk with `snmpbulkwalk -Cr25` vs `-Cr10` from a pod
+before blaming the firewall.
+
 ### Local `helm template` can lie about what ArgoCD will actually render {#helm-4-local-render-gap}
 
 ArgoCD's rendering plugin is pinned to Helm 3, so a newer major Helm locally can differ

@@ -1,0 +1,177 @@
+# Log-based alert rules (Grafana-managed, Loki datasource). Routed by notifications.yaml.
+# Metric alerts do NOT live here — see templates/prometheusrules.yaml.
+#
+# Why per-workload thresholds are relative: noisy-but-normal workloads (csi-snapshotter, alloy,
+# mobileraker...) log ~100 error lines per 15 min all day. An absolute threshold would page
+# constantly; "N times louder than the same window yesterday, and above a floor" only fires on a
+# real change. Apps with no baseline series (brand new) are not evaluated by the ratio rules.
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: logs
+    folder: Homelab
+    interval: 5m
+    rules:
+      - uid: nas-failed-logins
+        title: NAS failed logins
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: P8E80F9AEF21F6940
+            relativeTimeRange: {from: 600, to: 0}
+            model:
+              datasource: {type: loki, uid: P8E80F9AEF21F6940}
+              editorMode: code
+              expr: 'sum by (hostname) (count_over_time({job="syslog", service_name="Connection"} |= `failed to sign in` [10m]))'
+              queryType: instant
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              datasource: {type: __expr__, uid: __expr__}
+              type: reduce
+              expression: A
+              reducer: last
+              settings: {mode: dropNN}
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              datasource: {type: __expr__, uid: __expr__}
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: {type: gt, params: [4]}
+              refId: C
+        noDataState: OK
+        execErrState: KeepLast
+        for: 0s
+        isPaused: false
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: 'NAS {{ $labels.hostname }}: repeated failed sign-ins'
+          description: '{{ $values.B }} failed DSM sign-ins on {{ $labels.hostname }} in the last 10 minutes (threshold: more than 4). Possible brute-force attempt or a client with a stale password.'
+      - uid: log-error-surge
+        title: Log error surge
+        condition: E
+        data:
+          - refId: A
+            datasourceUid: P8E80F9AEF21F6940
+            relativeTimeRange: {from: 900, to: 0}
+            model:
+              datasource: {type: loki, uid: P8E80F9AEF21F6940}
+              editorMode: code
+              expr: 'sum by (namespace, app) (count_over_time({namespace=~".+"} |~ `(?i)(error|panic|fatal|exception)` [15m]))'
+              queryType: instant
+              refId: A
+          - refId: B
+            datasourceUid: P8E80F9AEF21F6940
+            relativeTimeRange: {from: 900, to: 0}
+            model:
+              datasource: {type: loki, uid: P8E80F9AEF21F6940}
+              editorMode: code
+              expr: 'sum by (namespace, app) (count_over_time({namespace=~".+"} |~ `(?i)(error|panic|fatal|exception)` [15m] offset 1d))'
+              queryType: instant
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              datasource: {type: __expr__, uid: __expr__}
+              type: reduce
+              expression: A
+              reducer: last
+              settings: {mode: dropNN}
+              refId: C
+          - refId: D
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              datasource: {type: __expr__, uid: __expr__}
+              type: reduce
+              expression: B
+              reducer: last
+              settings: {mode: dropNN}
+              refId: D
+          - refId: E
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              datasource: {type: __expr__, uid: __expr__}
+              type: math
+              expression: '$C > 400 && $C > 5 * $D'
+              refId: E
+        noDataState: OK
+        execErrState: KeepLast
+        for: 5m
+        isPaused: false
+        labels:
+          severity: warning
+          category: logs
+        annotations:
+          summary: '{{ $labels.namespace }}/{{ $labels.app }} is logging far more errors than usual'
+          description: '{{ $labels.namespace }}/{{ $labels.app }} logged {{ $values.C }} error/panic/fatal lines in 15 minutes — over 400 and at least 5x the same window yesterday ({{ $values.D }}). Something probably broke; check the pod logs.'
+      - uid: log-volume-surge
+        title: Log volume surge
+        condition: E
+        data:
+          - refId: A
+            datasourceUid: P8E80F9AEF21F6940
+            relativeTimeRange: {from: 900, to: 0}
+            model:
+              datasource: {type: loki, uid: P8E80F9AEF21F6940}
+              editorMode: code
+              expr: 'sum by (namespace, app) (count_over_time({namespace=~".+"} [15m]))'
+              queryType: instant
+              refId: A
+          - refId: B
+            datasourceUid: P8E80F9AEF21F6940
+            relativeTimeRange: {from: 900, to: 0}
+            model:
+              datasource: {type: loki, uid: P8E80F9AEF21F6940}
+              editorMode: code
+              expr: 'sum by (namespace, app) (count_over_time({namespace=~".+"} [15m] offset 1d))'
+              queryType: instant
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              datasource: {type: __expr__, uid: __expr__}
+              type: reduce
+              expression: A
+              reducer: last
+              settings: {mode: dropNN}
+              refId: C
+          - refId: D
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              datasource: {type: __expr__, uid: __expr__}
+              type: reduce
+              expression: B
+              reducer: last
+              settings: {mode: dropNN}
+              refId: D
+          - refId: E
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              datasource: {type: __expr__, uid: __expr__}
+              type: math
+              expression: '$C > 40000 && $C > 4 * $D'
+              refId: E
+        noDataState: OK
+        execErrState: KeepLast
+        for: 10m
+        isPaused: false
+        labels:
+          severity: warning
+          category: logs
+        annotations:
+          summary: '{{ $labels.namespace }}/{{ $labels.app }} is spamming logs'
+          description: '{{ $labels.namespace }}/{{ $labels.app }} wrote {{ $values.C }} log lines in 15 minutes — over 40k and at least 4x the same window yesterday ({{ $values.D }}). Likely a crash-loop or a debug flag left on; it also fills Loki.'
