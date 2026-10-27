@@ -25,14 +25,29 @@ config:
   OC_LOG_LEVEL: info
   # Pilot only: lets curl/rclone test WebDAV without a browser OIDC flow. Real clients use OIDC; drop this for production.
   PROXY_ENABLE_BASIC_AUTH: "true"
-  # Plain tree on disk: user data is browsable files, changes made on disk are picked up via inotify.
-  STORAGE_USERS_DRIVER: posix
-  STORAGE_USERS_POSIX_ROOT: /var/lib/opencloud/storage/users
-  STORAGE_USERS_POSIX_WATCH_FS: "true"
-  # PosixFS needs a shared ID cache store for the watcher.
-  STORAGE_USERS_ID_CACHE_STORE: nats-js-kv
-  # `.CURRENT` / `.REV.*` files; server-side versioning (no retention cleanup upstream yet).
-  STORAGE_USERS_POSIX_ENABLE_FS_REVISIONS: "true"
+  # Decomposed driver: blobs + metadata on a plain POSIX volume. OpenCloud hardcodes the `messagepack` metadata
+  # backend for it (sidecar files, no user xattrs), so it can run on the Synology NFS 4.1 share where PosixFS cannot.
+  # Trade-off: the tree is node-id based (not browsable), no fs watcher, nothing may edit it behind OpenCloud's back.
+  STORAGE_USERS_DRIVER: decomposed
+  STORAGE_USERS_DECOMPOSED_ROOT: /var/lib/opencloud/storage/users
+
+# Only the user data (storage/users) lives on the NAS; embedded NATS/IDM/search index stay on Longhorn
+# (bolt/leveldb files do not belong on NFS). The NAS squashes ids, so the folder is created 0777 by root.
+initContainers:
+  - name: nfs-dir
+    image: busybox:1.37.0
+    command:
+      - /bin/sh
+      - -c
+      - |
+        mkdir -p /nfs/opencloud-pilot/decomposed
+        chmod 0777 /nfs/opencloud-pilot /nfs/opencloud-pilot/decomposed
+        ls -lnd /nfs/opencloud-pilot/*
+    securityContext:
+      runAsUser: 0
+    volumeMounts:
+      - name: opencloud-nfs
+        mountPath: /nfs
 
 # Memory limit sized for the all-in-one process (search index + embedded NATS).
 resources:
@@ -47,19 +62,12 @@ ingress_internal_secure:
   host: opencloud.<secret:kv/data/shared/domains~domain>
   port: http
 
-# RESULT 2026-10-26: PosixFS cannot run on the Synology NFS export. DSM offers NFSv4.1 only (v4.2 mount: "Protocol
-# not supported"), v4.1 has no user xattrs, and OpenCloud refuses to start ("extended attributes not supported").
-# Kept for retesting on a future NAS: to try one, add a storage entry of type existingClaim with
-# claimName opencloud-pilot-nfs-<variant> and subPath opencloud-pilot/<variant> (mkdir the folder first).
-# Test matrix for PosixFS-on-NFS (opencloud#1596). `nosharecache` is needed so the option sets are not
-# silently merged with the arr stack's existing mount of the same export on the same node.
+# HISTORY: PosixFS cannot run on the Synology (NFSv4.1 only, no user xattrs; SMB also refuses user.*). Retest matrix for
+# posix-on-NFS lives in git history (nfsVariants). This pilot tests the decomposed driver on the same share instead.
 nfsVariants:
   v41: [vers=4.1, hard, nosharecache]
-  v42: [vers=4.2, hard, nosharecache]
-  v41-lowcache: [vers=4.1, hard, nosharecache, acregmin=1, acregmax=5, acdirmin=1, acdirmax=5]
-  v41-noac: [vers=4.1, hard, nosharecache, noac]
 
-# Block storage on a node disk (PosixFS needs xattrs + coherent caching; see the NFS result above and opencloud#1596).
+# /var/lib/opencloud (NATS, IDM, search index) on a node disk; user data is mounted on top from the NAS below.
 # replicas: 1 keeps it effectively local; backup/protect off so the pilot is disposable.
 storage:
   - mountPath: /var/lib/opencloud
@@ -81,3 +89,8 @@ storage:
     labels:
       pilot: "true"
     nameSuffix: config
+  - mountPath: /var/lib/opencloud/storage/users
+    type: existingClaim
+    claimName: opencloud-pilot-nfs-v41
+    nameSuffix: nfs
+    subPath: opencloud-pilot/decomposed
