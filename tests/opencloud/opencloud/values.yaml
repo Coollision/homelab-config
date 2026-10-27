@@ -29,7 +29,7 @@ config:
   # backend for it (sidecar files, no user xattrs), so it can run on the Synology NFS 4.1 share where PosixFS cannot.
   # Trade-off: the tree is node-id based (not browsable), no fs watcher, nothing may edit it behind OpenCloud's back.
   STORAGE_USERS_DRIVER: decomposed
-  STORAGE_USERS_DECOMPOSED_ROOT: /var/lib/opencloud/storage/local-ab
+  STORAGE_USERS_DECOMPOSED_ROOT: /var/lib/opencloud/storage/users
 
 # Only the user data (storage/users) lives on the NAS; embedded NATS/IDM/search index stay on Longhorn
 # (bolt/leveldb files do not belong on NFS). The NAS squashes ids, so the folder is created 0777 by root.
