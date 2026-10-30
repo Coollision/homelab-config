@@ -54,7 +54,11 @@ UseRoutes=yes
 ```
 
 VLAN links: the existing `vlan.netdev.j2`, plus a new `.network` per VLAN with `LinkLocalAddressing=ipv6`,
-`IPv6AcceptRA=yes` (Matter, Thread and mDNS paths rely on it), `DHCP=no`, `ConfigureWithoutCarrier=yes`.
+`IPv6AcceptRA=no`, `DHCP=no`, `ConfigureWithoutCarrier=yes`. The node must take no IPv6 on the VLANs: only pods use
+them (macvlan children with their own sysctls, so Matter, Thread and mDNS in the pods are unaffected). Accepting RAs
+there gives the node SLAAC addresses on IoT/Intern and a default route per VLAN, and the kernel picked the IoT one for
+egress on 2026-10-30 (outbound IPv6 timed out, see [Ansible housekeeping](ansible-housekeeping.md)). networkd overrides
+the kernel `accept_ra*` sysctls, so the ifupdown `post-up` lines do not carry over: it has to be in the `.network`.
 
 Keep networkd away from the Kubernetes links with a `networkd.conf.d` drop-in: `ManageForeignRoutes=no` and
 `ManageForeignRoutingPolicyRules=no`, and never a catch-all `[Match] Name=*`. `cni0`, `flannel.1`, `veth*` and the
@@ -98,7 +102,8 @@ monitor, then the netboot node restore (stated as available, **not verified**: t
 | Lock-out of a bare-metal node | low | high | revert timer, console, netboot restore |
 | networkd flushes CNI routes or links | low with the drop-in | high | `ManageForeignRoutes=no`, narrow `[Match]` |
 | resolved mDNS/LLMNR clashes with reflector or Matter | medium | medium | disable both in resolved.conf |
-| VLAN IPv6 adverts lost, Matter/Thread break | medium | medium | `IPv6AcceptRA=yes` on VLANs, run the Matter debug checks afterwards |
+| Matter/Thread break in pods | low (pods own their RA handling) | medium | run the Matter debug checks afterwards |
+| VLAN RAs give the node addresses/default routes, outbound IPv6 breaks | high without the setting | high (image pulls, VLAN separation) | `IPv6AcceptRA=no` on VLANs; check `ip -6 route show default` has only the uplink and `ip -6 addr` only link-local on VLANs |
 | Control-plane reboot = API outage | certain | low (about 5 min) | quiet window, etcd snapshot first |
 
 ## Is staying on ifupdown viable?

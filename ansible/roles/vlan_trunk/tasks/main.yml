@@ -250,27 +250,6 @@
     - _vlan_trunk_interfaces | length > 0
     - _vlan_trunk_active_network_manager == 'ifupdown'
 
-- name: Stop VLAN sub-interfaces from taking an IPv6 default route from router advertisements (runtime)
-  # The ifupdown stanza (post-up) covers boot; this applies the same to a running host.
-  become: true
-  ansible.builtin.shell: |
-    if ip link show {{ item.interface_name }} >/dev/null 2>&1; then
-      cur=$(sysctl -n net.ipv6.conf.{{ item.interface_name }}.accept_ra_defrtr 2>/dev/null || echo 0)
-      if [ "$cur" != "0" ]; then sysctl -qw net.ipv6.conf.{{ item.interface_name }}.accept_ra_defrtr=0; echo changed; fi
-      ip -6 route del default dev {{ item.interface_name }} 2>/dev/null || true
-    fi
-  args:
-    executable: /bin/bash
-  register: _vlan_no_ra_defrtr
-  changed_when: "'changed' in _vlan_no_ra_defrtr.stdout"
-  loop: "{{ _vlan_trunk_interfaces }}"
-  loop_control:
-    label: "{{ item.parent_interface }} -> {{ item.interface_name }}"
-  when:
-    - _vlan_trunk_interfaces | length > 0
-    - not (vlan_trunk_ra_default_route | bool)
-    - _vlan_trunk_active_network_manager in ['ifupdown', 'systemd-networkd']
-
 # NetworkManager branch (e.g. fresh Raspberry Pi OS / Debian 13): create the VLAN
 # sub-interfaces as NM connections with no node IP, mirroring the other branches.
 # Uses the nmcli CLI so no extra python libs are needed on the target.
@@ -281,13 +260,13 @@
     name={{ item.interface_name }}
     if nmcli -g NAME connection show | grep -qx "$name"; then
       cur=$(nmcli -g vlan.id,vlan.parent,ipv4.method,ipv6.method connection show "$name" | tr '\n' ' ')
-      want="{{ item.id }} {{ item.parent_interface }} disabled ignore"
+      want="{{ item.id }} {{ item.parent_interface }} disabled {{ 'ignore' if (vlan_trunk_host_ipv6 | bool) else 'disabled' }}"
       [ "$cur" = "$want" ] && { echo unchanged; exit 0; }
       nmcli connection delete "$name"
     fi
     nmcli connection add type vlan con-name "$name" ifname "$name" \
       dev {{ item.parent_interface }} id {{ item.id }} \
-      ipv4.method disabled ipv6.method ignore connection.autoconnect yes
+      ipv4.method disabled ipv6.method {{ 'ignore' if (vlan_trunk_host_ipv6 | bool) else 'disabled' }} connection.autoconnect yes
     nmcli connection up "$name"
     echo changed
   args:
@@ -300,6 +279,48 @@
   when:
     - _vlan_trunk_interfaces | length > 0
     - _vlan_trunk_active_network_manager == 'NetworkManager'
+
+# NetworkManager: the connections above use ipv6.method=disabled, which sets
+# disable_ipv6=1 whenever NM brings the VLAN up (survives boot; per-interface
+# sysctl.d keys do not: systemd-sysctl runs before NM creates the device).
+# ifupdown uses post-up instead, and systemd-networkd does not need it
+# (LinkLocalAddressing=no, sets accept_ra=0 itself).
+- name: Remove obsolete no-host-IPv6 sysctl files
+  become: true
+  ansible.builtin.file:
+    path: "/etc/sysctl.d/{{ item }}"
+    state: absent
+  loop:
+    - 98-vlan-no-ra-defrtr.conf
+    - 98-vlan-no-host-ipv6.conf
+  when: _vlan_trunk_interfaces | length > 0
+
+- name: Stop the node taking IPv6 on VLAN sub-interfaces (runtime)
+  # post-up (ifupdown) and ipv6.method=disabled (NetworkManager) cover boot; this applies the same to a
+  # running host. Runs after the NM connections are (re)created, which resets the keys.
+  become: true
+  ansible.builtin.shell: |
+    i={{ item.interface_name }}
+    ip link show $i >/dev/null 2>&1 || exit 0
+    for k in accept_ra autoconf; do
+      if [ "$(sysctl -n net.ipv6.conf.$i.$k)" != "0" ]; then sysctl -qw net.ipv6.conf.$i.$k=0; echo changed; fi
+    done
+    if [ -n "$(ip -6 addr show dev $i scope global)" ]; then ip -6 addr flush dev $i scope global; echo changed; fi
+    # RA-learnt default (proto ra) and on-link prefix (proto kernel, not fe80::/64) routes
+    for r in $(ip -6 route show dev $i | awk '$1 != "fe80::/64" {print $1}'); do
+      ip -6 route del "$r" dev $i && echo changed
+    done
+  args:
+    executable: /bin/bash
+  register: _vlan_no_host_ipv6
+  changed_when: "'changed' in _vlan_no_host_ipv6.stdout"
+  loop: "{{ _vlan_trunk_interfaces }}"
+  loop_control:
+    label: "{{ item.parent_interface }} -> {{ item.interface_name }}"
+  when:
+    - _vlan_trunk_interfaces | length > 0
+    - not (vlan_trunk_host_ipv6 | bool)
+    - _vlan_trunk_active_network_manager in ['ifupdown', 'systemd-networkd', 'NetworkManager']
 
 # Thread/Matter IPv6: Thread Border Routers send IPv6 RAs to advertise routes;
 # these let the host and pods accept them for proper Thread routing.
@@ -318,7 +339,9 @@
     content: |
       # Thread/Matter IPv6 configuration for Router Advertisement support
       net.ipv6.conf.all.forwarding = 0
-      {% if _vlan_trunk_active_network_manager | default('') != 'ifupdown' -%}
+      {% if not ((vlan_trunk_enable_thread_ipv6 | bool) and (vlan_trunk_host_ipv6 | bool)) -%}
+      # host-level Thread RA acceptance disabled (vlan_trunk_host_ipv6 / vlan_trunk_enable_thread_ipv6)
+      {% elif _vlan_trunk_active_network_manager | default('') != 'ifupdown' -%}
       {% for iface in vlan_trunk_thread_interfaces -%}
       net.ipv6.conf.{{ iface }}.accept_ra = 1
       net.ipv6.conf.{{ iface }}.accept_ra_rt_info_max_plen = 64
@@ -329,8 +352,6 @@
   notify: Apply sysctl settings
   when:
     - _vlan_trunk_interfaces | length > 0
-    - vlan_trunk_enable_thread_ipv6 | bool
-    - vlan_trunk_thread_interfaces | length > 0
 
 - name: Apply the Thread IPv6 settings to running VLAN interfaces (ifupdown)
   # The post-up lines cover boot; this applies the same to a running host.
@@ -350,4 +371,5 @@
   when:
     - _vlan_trunk_interfaces | length > 0
     - vlan_trunk_enable_thread_ipv6 | bool
+    - vlan_trunk_host_ipv6 | bool
     - _vlan_trunk_active_network_manager == 'ifupdown'
