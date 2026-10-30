@@ -1,0 +1,6 @@
+[Unit]
+Description=Revert the node network stack to ifupdown (networkd migration safety net)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/networkd-migrate-revert

@@ -294,7 +294,7 @@ takes the VLAN 40 and VLAN 5 addresses via MACVLAN.
 # First, find the actual physical interface name on the node:
 ip link show
 # Look for the interface with the VLAN 30 IP — e.g. uplink0, ens3, eth0.
-# On every node this is uplink0 (pinned by the Ansible uplink-name role; see wiki/06-todo/uplink-name.md).
+# On every node this is uplink0 (pinned by the Ansible uplink-name role; see the Networking wiki page, section "One uplink name on every node").
 
 # Create the sub-interfaces (VLAN IDs 40 and 5)
 sudo ip link add link uplink0 name vlan40 type vlan id 40

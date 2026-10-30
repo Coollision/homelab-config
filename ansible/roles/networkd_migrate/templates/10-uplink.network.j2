@@ -1,0 +1,20 @@
+# Managed by Ansible (networkd_migrate). The uplink is named by 10-uplink.link.
+[Match]
+Name={{ networkd_migrate_uplink_iface }}
+
+[Network]
+DHCP={{ networkd_migrate_dhcp }}
+IPv6AcceptRA=yes
+KeepConfiguration=dhcp-on-stop
+{% for vlan in networkd_migrate_vlans %}
+VLAN={{ vlan.interface_name | default('vlan' ~ vlan.id) }}
+{% endfor %}
+{% for dns in networkd_migrate_extra_dns %}
+DNS={{ dns }}
+{% endfor %}
+
+[DHCPv4]
+ClientIdentifier={{ networkd_migrate_client_identifier }}
+UseDNS=yes
+UseNTP=yes
+UseRoutes=yes

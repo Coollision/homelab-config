@@ -26,6 +26,13 @@
   # A failure on any node stops the run so the release play never frees the lock.
   any_errors_fatal: true
   become: true
+  pre_tasks:
+    # The trunk parent must be the pinned uplink name on every node.
+    - name: Uniformity guard
+      ansible.builtin.include_role:
+        name: uplink_name
+      vars:
+        uplink_name_phase: guard
   roles:
     - vlan_trunk
 

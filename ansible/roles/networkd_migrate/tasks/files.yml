@@ -1,0 +1,20 @@
+---
+# The networkd files this role owns: rendered into state_dir/staged at stage, copied into
+# place at cutover. VLAN files use the same names and templates as vlan_trunk, so a later
+# vlan_trunk run on the networkd stack is a no-op.
+- name: Networkd migrate - file set
+  ansible.builtin.set_fact:
+    networkd_migrate_files: >-
+      {%- set out = [
+        {'name': '10-uplink.network', 'dest': '/etc/systemd/network/10-uplink.network', 'src': '10-uplink.network.j2', 'item': {}},
+        {'name': '10-k8s-foreign.conf', 'dest': '/etc/systemd/networkd.conf.d/10-k8s-foreign.conf', 'src': 'networkd.conf.j2', 'item': {}},
+        {'name': '10-no-mdns.conf', 'dest': '/etc/systemd/resolved.conf.d/10-no-mdns.conf', 'src': 'resolved.conf.j2', 'item': {}}
+      ] -%}
+      {%- for v in networkd_migrate_vlans -%}
+      {%- set vi = v | combine({'interface_name': v.interface_name | default('vlan' ~ v.id)}) -%}
+      {%- set _ = out.append({'name': '40-vlan' ~ v.id ~ '.netdev', 'dest': '/etc/systemd/network/40-vlan' ~ v.id ~ '.netdev',
+                              'src': '../../vlan_trunk/templates/vlan.netdev.j2', 'item': vi}) -%}
+      {%- set _ = out.append({'name': '41-vlan' ~ v.id ~ '.network', 'dest': '/etc/systemd/network/41-vlan' ~ v.id ~ '.network',
+                              'src': '../../vlan_trunk/templates/vlan.network.j2', 'item': vi}) -%}
+      {%- endfor -%}
+      {{ out }}

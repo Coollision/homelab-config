@@ -241,6 +241,13 @@
     - not (node_update_gpu_need_backports | bool)
     - not (node_update_distro_upgrade | bool)
 
+- name: "Uplink-name guard, static part: inventory + pin file (valid before the rename reboot) [{{ k3s_node_name }}]"
+  ansible.builtin.include_role:
+    name: uplink_name
+  vars:
+    uplink_name_phase: guard
+    uplink_name_guard_live: false
+
 - name: "Distro-upgrade preflight (distro_upgrade.yml only) [{{ k3s_node_name }}]"
   ansible.builtin.include_tasks: distro_preflight.yml
   when: node_update_distro_upgrade | bool
@@ -566,6 +573,12 @@
     - name: "Distro-upgrade post-boot gates (before uncordon) [{{ k3s_node_name }}]"
       ansible.builtin.include_tasks: distro_postboot.yml
       when: node_update_distro_active | default(false)
+
+    - name: "Uplink-name guard after the reboot: the NIC kept its pinned name (before uncordon) [{{ k3s_node_name }}]"
+      ansible.builtin.include_role:
+        name: uplink_name
+      vars:
+        uplink_name_phase: guard
 
     - name: "Post-reboot iGPU check (render node + H.264/HEVC decode and encode) [{{ k3s_node_name }}]"
       ansible.builtin.include_tasks: gpu_check.yml

@@ -1,0 +1,25 @@
+#!/bin/bash
+# Managed by Ansible (networkd_migrate). Back to ifupdown + dhclient + a real resolv.conf, then reboot.
+# Needs no network and no DNS. Fired by networkd-migrate-revert.timer after boot, or run by hand.
+set -u
+S={{ networkd_migrate_state_dir }}
+B=$S/backup
+log() { echo "networkd-migrate-revert: $*"; logger -t networkd-migrate-revert "$*" 2>/dev/null || true; }
+
+log "reverting to ifupdown"
+systemctl disable systemd-networkd.service systemd-networkd.socket systemd-resolved.service 2>/dev/null || true
+systemctl disable networkd-migrate-revert.timer 2>/dev/null || true
+
+if [ -f "$S/installed.list" ]; then
+  while read -r f; do rm -f -- "$f"; done < "$S/installed.list"
+fi
+
+rm -rf /etc/network/interfaces.d && cp -a "$B/interfaces.d" /etc/network/interfaces.d
+cp -a "$B/interfaces" /etc/network/interfaces
+rm -f /etc/resolv.conf && cp -a "$B/resolv.conf" /etc/resolv.conf
+
+systemctl enable networking.service
+touch "$S/reverted"
+sync
+log "rebooting"
+systemctl reboot

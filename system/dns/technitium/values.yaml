@@ -142,7 +142,7 @@ primary:
   # GUAs for any of them anywhere — that is the mistake this comment exists to prevent.
   # IPv4 via static DHCP lease in UniFi for MAC 02:53:00:00:00:01.
   # parentInterface: uplink0 = the node uplink (native, untagged VLAN 30; no vlan30 sub-interface
-  # needed). Every node pins its primary NIC to this name (wiki/06-todo/uplink-name.md).
+  # needed). Every node pins its primary NIC to this name (wiki/01-platform/networking.md#uplink-name).
   multusNetworks:
     - name: technitium-primary-vlan30
       interface: net1

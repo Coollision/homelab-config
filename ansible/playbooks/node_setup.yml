@@ -4,6 +4,9 @@
 #   ansible-playbook playbooks/node_setup.yml --limit <node>
 # Safe to re-run on a live node: the initial apt upgrade is skipped once k3s
 # runs there (OS upgrades then go through cluster_update.yml).
+# New nodes also get the primary NIC pinned to uplink0 here (role uplink_name) and are
+# rebooted once, so k3s_setup.yml always starts on the uniform name. A live node that
+# is not pinned is refused: use playbooks/uplink_name.yml (drained reboot) instead.
 # DNS record injection lives in playbooks/dns.yml (runs after the cluster is up).
 
 - name: Node setup - maintenance lock soft check
@@ -35,3 +38,50 @@
   become: true
   roles:
     - role: rpi_common
+
+- name: Pin the uplink NIC name (new nodes, before k3s exists)
+  hosts: k3scluster
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Is the node already pinned?
+      ansible.builtin.stat:
+        path: /etc/systemd/network/10-uplink.link
+      register: _uplink_pin
+
+    - name: Is k3s already running on this node?
+      ansible.builtin.shell: systemctl is-active --quiet k3s.service || systemctl is-active --quiet k3s-node.service
+      register: _uplink_k3s_active
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Refuse to reboot a live, unpinned node from here
+      ansible.builtin.fail:
+        msg: >-
+          {{ inventory_hostname }} runs k3s but is not pinned to uplink0. Pin it with playbooks/uplink_name.yml
+          and reboot through cluster_update.yml -e node_update_force_reboot=true (drained, one node at a time).
+      when: not _uplink_pin.stat.exists and _uplink_k3s_active.rc == 0
+
+    - name: Pin the NIC name and reboot into it (bootstrap)
+      when: not _uplink_pin.stat.exists and _uplink_k3s_active.rc != 0
+      block:
+        - name: Stage the pin
+          ansible.builtin.include_role:
+            name: uplink_name
+          vars:
+            uplink_name_phase: stage
+            uplink_name_bootstrap: true
+
+        - name: Reboot into the new name
+          ansible.builtin.reboot:
+            post_reboot_delay: 15
+            test_command: uptime
+          when: not ansible_check_mode
+
+    - name: Uniformity guard (static + running system)
+      ansible.builtin.include_role:
+        name: uplink_name
+      vars:
+        uplink_name_phase: guard
+      when: not ansible_check_mode

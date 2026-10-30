@@ -1,0 +1,6 @@
+# Managed by Ansible (networkd_migrate). Leave the Kubernetes links (cni0, flannel.1, veth*,
+# macvlan children) and their routes/rules alone.
+[Network]
+ManageForeignRoutes=no
+ManageForeignRoutingPolicyRules=no
+ManageForeignNextHops=no

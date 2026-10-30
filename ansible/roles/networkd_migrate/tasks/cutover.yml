@@ -1,0 +1,154 @@
+---
+# One node per run. Arms the revert timer, swaps the stack, reboots, runs the gates and only
+# then cancels the timer. If anything after the reboot goes wrong (or the node never comes
+# back) the timer reverts to ifupdown by itself, 15 minutes after that boot.
+- name: Networkd migrate - single-node, confirmed
+  ansible.builtin.assert:
+    that:
+      - ansible_play_hosts_all | length == 1
+      - networkd_migrate_confirm == inventory_hostname
+    fail_msg: >-
+      Cutover is one node per run: use --limit <node> and -e networkd_migrate_confirm=<node>
+      (play hosts: {{ ansible_play_hosts_all | length }}).
+    quiet: true
+
+- name: Networkd migrate - staged and not yet cut over
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ networkd_migrate_state_dir }}/installed.list"
+    - "{{ networkd_migrate_state_dir }}/cutover.done"
+  register: networkd_migrate_markers
+  check_mode: false
+
+- name: Networkd migrate - gate on staging
+  ansible.builtin.assert:
+    that:
+      - networkd_migrate_markers.results[0].stat.exists
+      - not networkd_migrate_markers.results[1].stat.exists
+    fail_msg: "{{ inventory_hostname }}: run the stage phase first (or the node is already cut over)."
+    quiet: true
+
+- name: Networkd migrate - file set
+  ansible.builtin.include_tasks: files.yml
+
+- name: Networkd migrate - drain the node (storage must be healthy first)
+  when: networkd_migrate_drain | bool
+  block:
+    - name: Networkd migrate - Longhorn volumes that are attached but not healthy
+      ansible.builtin.shell: |
+        set -o pipefail
+        kubectl --context {{ networkd_migrate_kubectl_context }} -n storage get volumes.longhorn.io \
+          -o custom-columns=N:.metadata.name,S:.status.state,R:.status.robustness --no-headers \
+          | awk '$2 == "attached" && $3 != "healthy" {print $1}'
+      args:
+        executable: /bin/bash
+      delegate_to: localhost
+      become: false
+      register: networkd_migrate_unhealthy
+      changed_when: false
+      check_mode: false
+
+    - name: Networkd migrate - refuse to drain while storage is degraded
+      ansible.builtin.assert:
+        that: networkd_migrate_unhealthy.stdout_lines | length == 0
+        fail_msg: "Longhorn volumes not healthy: {{ networkd_migrate_unhealthy.stdout_lines }}. Fix storage before draining."
+        quiet: true
+
+    - name: Networkd migrate - cordon
+      ansible.builtin.command: "kubectl --context {{ networkd_migrate_kubectl_context }} cordon {{ k3s_node_name }}"
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
+    - name: Networkd migrate - drain
+      ansible.builtin.command: >-
+        kubectl --context {{ networkd_migrate_kubectl_context }} drain {{ k3s_node_name }}
+        --ignore-daemonsets --delete-emptydir-data --disable-eviction --timeout={{ networkd_migrate_drain_timeout }}s
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
+- name: Networkd migrate - record the pre-cutover IPv4 identity
+  ansible.builtin.shell: |
+    set -eo pipefail
+    a=$(ip -o -4 addr show dev {{ networkd_migrate_uplink_iface }} scope global | awk '{print $4}' | head -n1)
+    g=$(ip -o -4 route show default dev {{ networkd_migrate_uplink_iface }} | awk '{print $3}' | head -n1)
+    [ -n "$a" ] && [ -n "$g" ]
+    printf 'ADDR=%s\nGW=%s\n' "$a" "$g" > {{ networkd_migrate_state_dir }}/pre.env
+    cat {{ networkd_migrate_state_dir }}/pre.env
+  args:
+    executable: /bin/bash
+  register: networkd_migrate_prestate
+  changed_when: true
+
+- name: Networkd migrate - arm the revert timer (before anything is swapped)
+  ansible.builtin.systemd:
+    name: networkd-migrate-revert.timer
+    enabled: true
+    daemon_reload: true
+
+# The package's postinst turns /etc/resolv.conf into a stub symlink immediately (no upstreams until the
+# reboot), so this comes after the backup and the armed timer, and before anything needs DNS again.
+- name: Networkd migrate - install systemd-resolved
+  ansible.builtin.apt:
+    name: systemd-resolved
+    state: present
+    install_recommends: false  # no libnss-resolve / libnss-myhostname: they edit nsswitch.conf
+
+- name: Networkd migrate - install the networkd files
+  ansible.builtin.shell: |
+    set -e
+    S={{ networkd_migrate_state_dir }}/staged
+    {% for f in networkd_migrate_files %}
+    install -D -m 0644 "$S/{{ f.name }}" "{{ f.dest }}"
+    {% endfor %}
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: Networkd migrate - hand the stack over (takes effect at the reboot)
+  ansible.builtin.shell: |
+    set -e
+    systemctl disable networking.service
+    printf 'auto lo\niface lo inet loopback\n' > /etc/network/interfaces
+    rm -rf /etc/network/interfaces.d && mkdir /etc/network/interfaces.d
+    ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+    systemctl enable systemd-networkd.service systemd-resolved.service
+    touch {{ networkd_migrate_state_dir }}/cutover.started
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: Networkd migrate - reboot
+  ansible.builtin.reboot:
+    reboot_timeout: "{{ networkd_migrate_reboot_timeout }}"
+    msg: "networkd migration cutover"
+
+- name: Networkd migrate - gates
+  ansible.builtin.include_tasks: verify.yml
+
+- name: Networkd migrate - gates passed, cancel the revert timer
+  ansible.builtin.systemd:
+    name: networkd-migrate-revert.timer
+    enabled: false
+    state: stopped
+
+- name: Networkd migrate - mark done
+  ansible.builtin.file:
+    path: "{{ networkd_migrate_state_dir }}/cutover.done"
+    state: touch
+    mode: "0600"
+
+- name: Networkd migrate - uncordon and wait for pods and Longhorn to settle
+  when: networkd_migrate_drain | bool
+  block:
+    - name: Networkd migrate - uncordon
+      ansible.builtin.command: "kubectl --context {{ networkd_migrate_kubectl_context }} uncordon {{ k3s_node_name }}"
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
+    - name: Networkd migrate - wait for the cluster to settle (hard barrier before the next node)
+      ansible.builtin.include_role:
+        name: cluster_wait_stable

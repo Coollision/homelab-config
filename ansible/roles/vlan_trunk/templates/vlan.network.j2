@@ -1,7 +1,11 @@
 # VLAN {{ item.id }} sub-interface — no IP assigned to the node.
 # The pod receives its VLAN {{ item.id }} address via Multus MACVLAN.
+# No IPv6 for the node either (RA/SLAAC would add a per-VLAN default route).
 [Match]
 Name={{ item.interface_name }}
 
 [Network]
 LinkLocalAddressing=no
+IPv6AcceptRA=no
+DHCP=no
+ConfigureWithoutCarrier=yes
