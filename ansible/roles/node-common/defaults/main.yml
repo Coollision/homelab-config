@@ -1,4 +1,0 @@
-hostname_name: "{{ inventory_hostname }}"
-set_expected_state: present
-inotify_max_user_instances: 512
-inotify_max_user_watches: 524288

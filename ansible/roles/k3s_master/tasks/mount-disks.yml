@@ -1,29 +1,59 @@
+---
+# longhorn_disk_device: prefer a stable path (/dev/disk/by-id/... or
+# /dev/disk/by-partuuid/...); kernel names like /dev/sda3 can change between boots.
+# The disk is mounted by filesystem UUID. It is only formatted when it has no
+# filesystem AND longhorn_disk_allow_format is true.
+- name: Resolve Longhorn disk device
+  ansible.builtin.stat:
+    path: "{{ longhorn_disk_device }}"
+    follow: true
+  register: k3s_master_disk_stat
+
+- name: Assert Longhorn disk device exists and is a block device
+  ansible.builtin.assert:
+    that:
+      - k3s_master_disk_stat.stat.exists
+      - k3s_master_disk_stat.stat.isblk | default(false)
+    fail_msg: "longhorn_disk_device {{ longhorn_disk_device }} does not exist or is not a block device."
+    quiet: true
+
 - name: Ensure mount directory exists
-  become: true
-  file:
+  ansible.builtin.file:
     path: /mnt/longhorn
     state: directory
-    mode: '0755'
+    mode: "0755"
 
-- name: Check if disk is already formatted
-  become: true
-  command: blkid -o value -s TYPE "{{ longhorn_disk_device }}"
-  register: disk_format_check
+- name: Read existing filesystem type
+  ansible.builtin.command: blkid -o value -s TYPE {{ longhorn_disk_device | quote }}
+  register: k3s_master_disk_fstype
   failed_when: false
   changed_when: false
 
+- name: Refuse to format unless explicitly allowed
+  ansible.builtin.fail:
+    msg: >-
+      {{ longhorn_disk_device }} has no filesystem. Set longhorn_disk_allow_format: true
+      for this host (after double-checking the device) to format it as ext4.
+  when:
+    - k3s_master_disk_fstype.stdout | trim == ""
+    - not (longhorn_disk_allow_format | default(false) | bool)
+
 - name: Format disk with ext4 filesystem
-  become: true
-  filesystem:
+  community.general.filesystem:
     fstype: ext4
     dev: "{{ longhorn_disk_device }}"
-  when: disk_format_check.rc != 0 or disk_format_check.stdout == ""
+  when: k3s_master_disk_fstype.stdout | trim == ""
 
-- name: Mount disk and add to fstab
-  become: true
-  mount:
+- name: Read filesystem UUID
+  ansible.builtin.command: blkid -o value -s UUID {{ longhorn_disk_device | quote }}
+  register: k3s_master_disk_uuid
+  changed_when: false
+  failed_when: k3s_master_disk_uuid.rc != 0 or (k3s_master_disk_uuid.stdout | trim) == ""
+
+- name: Mount disk by UUID and add to fstab
+  ansible.posix.mount:
     path: /mnt/longhorn
-    src: "{{ longhorn_disk_device }}"
-    fstype: ext4
+    src: "UUID={{ k3s_master_disk_uuid.stdout | trim }}"
+    fstype: "{{ (k3s_master_disk_fstype.stdout | trim) or 'ext4' }}"
     opts: defaults,nofail
     state: mounted

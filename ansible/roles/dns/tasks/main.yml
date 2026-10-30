@@ -1,7 +1,13 @@
+---
 - name: Ensure required DNS variables are defined
-  ansible.builtin.fail:
-    msg: "Missing required DNS variables: dns_key_name, dns_key_secret, dns_server_ip, dns_zone_name."
-  when: dns_key_name is not defined or dns_key_secret is not defined or dns_server_ip is not defined or dns_zone_name is not defined
+  ansible.builtin.assert:
+    that:
+      - dns_key_name is defined
+      - dns_key_secret is defined
+      - dns_server_ip is defined
+      - dns_zone_name is defined
+    fail_msg: "Missing required DNS variables: dns_key_name, dns_key_secret, dns_server_ip, dns_zone_name (set them in the private inventory)."
+    quiet: true
 
 - name: Add records to DNS
   become: false
@@ -15,3 +21,4 @@
     ttl: 3600
     type: "{{ dns_record_type }}"
   delegate_to: localhost
+  no_log: true

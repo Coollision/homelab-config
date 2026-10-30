@@ -1,233 +1,407 @@
 ---
 # Careful, SINGLE cordon/drain/uncordon pass per node covering both OS/kernel
-# packages and the k3s binary bump (toggle either off with patch_os=false /
-# upgrade_k3s=false, but the node is still only drained once).
+# packages and the k3s binary bump (toggle either off with node_update_patch_os=false /
+# node_update_upgrade_k3s=false, but the node is still only drained once).
 #
 # kubectl always runs delegate_to: localhost (nodes carry no kubeconfig,
-# see memory: cluster_access) against the {{ kubectl_context }} context.
+# see memory: cluster_access) against the {{ node_update_kubectl_context }} context.
 
 # ---------------------------------------------------------------------------
-# 1. Reporting — always runs, mutates nothing, works even with dry_run=true.
+# 1. Reporting — always runs, mutates nothing, works even with node_update_dry_run=true.
 # ---------------------------------------------------------------------------
 
-- name: "[{{ k3s_node_name }}] Current node status"
-  ansible.builtin.command: "kubectl --context {{ kubectl_context }} get node {{ k3s_node_name }} --no-headers"
+- name: "Current node status [{{ k3s_node_name }}]"
+  ansible.builtin.command: "kubectl --context {{ node_update_kubectl_context }} get node {{ k3s_node_name }} --no-headers"
   delegate_to: localhost
   become: false
   changed_when: false
-  register: node_status_before
+  register: node_update_node_status_before
 
-- name: "[{{ k3s_node_name }}] {{ node_status_before.stdout }}"
+- name: "Node status [{{ k3s_node_name ~ ', ' ~ (node_update_node_status_before.stdout) }}]"
   ansible.builtin.debug:
-    msg: "{{ node_status_before.stdout }}"
+    msg: "{{ node_update_node_status_before.stdout }}"
 
-- name: "[{{ k3s_node_name }}] Check for pre-existing unhealthy Longhorn volumes"
+- name: "Remember whether the node was already cordoned before this run [{{ k3s_node_name }}]"
+  # The rescue only uncordons a node THIS run cordoned; a node cordoned by
+  # hand (or by an earlier node_update_keep_cordoned run) is left as it was found.
+  ansible.builtin.set_fact:
+    node_update_node_cordoned_before: "{{ 'SchedulingDisabled' in node_update_node_status_before.stdout }}"
+    node_update_node_cordoned_by_run: false
+    node_update_node_uncordoned_by_run: false
+
+- name: "Guard: node_update_keep_cordoned is a single-node hand-off to distro_upgrade.yml [{{ k3s_node_name }}]"
+  ansible.builtin.assert:
+    that: ansible_play_hosts_all | length == 1
+    fail_msg: >-
+      node_update_keep_cordoned=true leaves the node drained for a follow-up distro_upgrade.yml run;
+      it only makes sense for exactly one node. Add --limit <node> (play has {{ ansible_play_hosts_all | length }} hosts).
+    quiet: true
+  when: node_update_keep_cordoned | bool
+
+- name: "Guard: k3s_version must be set (private inventory group_vars) [{{ k3s_node_name }}]"
+  ansible.builtin.assert:
+    that:
+      - k3s_version is defined
+      - k3s_version | string | length > 0
+    fail_msg: >-
+      k3s_version is not defined. It has no default in the repo: set it (e.g. "v1.36.3+k3s1")
+      in the private inventory group_vars (same value k3s_setup.yml installs),
+      or pass -e node_update_upgrade_k3s=false.
+    quiet: true
+  when: node_update_upgrade_k3s | bool
+
+- name: "Check for pre-existing unhealthy Longhorn volumes [{{ k3s_node_name }}]"
   ansible.builtin.shell: >
     set -o pipefail &&
-    kubectl --context {{ kubectl_context }} get volumes.longhorn.io -A -o json |
-    jq -r '.items[] | select((.status.robustness | ascii_downcase) as $r | $r == "degraded" or $r == "faulted") | (.metadata.namespace + "/" + .metadata.name + ": " + .status.robustness)'
+    kubectl --context {{ node_update_kubectl_context }} get volumes.longhorn.io -A -o json |
+    jq -r '.items[] | select((.status.robustness | ascii_downcase) as $r | $r == "degraded" or $r == "faulted")
+    | (.metadata.namespace + "/" + .metadata.name + ": " + .status.robustness)'
   args:
     executable: /bin/bash
   delegate_to: localhost
   become: false
   changed_when: false
-  register: longhorn_unhealthy
+  register: node_update_longhorn_unhealthy
 
-- name: "[{{ k3s_node_name }}] Check for bare/unmanaged pods on this node (drain refuses these without --force)"
+- name: "Check for bare/unmanaged pods on this node (drain refuses these without --force) [{{ k3s_node_name }}]"
   ansible.builtin.shell: >
     set -o pipefail &&
-    kubectl --context {{ kubectl_context }} get pods -A --field-selector spec.nodeName={{ k3s_node_name }} -o json |
+    kubectl --context {{ node_update_kubectl_context }} get pods -A --field-selector spec.nodeName={{ k3s_node_name }} -o json |
     jq -r '.items[] | select((.metadata.ownerReferences // []) | length == 0) | (.metadata.namespace + "/" + .metadata.name)'
   args:
     executable: /bin/bash
   delegate_to: localhost
   become: false
   changed_when: false
-  register: bare_pods
+  register: node_update_bare_pods
 
-- name: "[{{ k3s_node_name }}] Check for PodDisruptionBudgets currently allowing zero disruptions"
+- name: "Check for PodDisruptionBudgets currently allowing zero disruptions [{{ k3s_node_name }}]"
   ansible.builtin.shell: >
     set -o pipefail &&
-    kubectl --context {{ kubectl_context }} get pdb -A -o json |
+    kubectl --context {{ node_update_kubectl_context }} get pdb -A -o json |
     jq -r '.items[] | select(.status.disruptionsAllowed == 0) | (.metadata.namespace + "/" + .metadata.name)'
   args:
     executable: /bin/bash
   delegate_to: localhost
   become: false
   changed_when: false
-  register: blocking_pdbs
+  register: node_update_blocking_pdbs
 
-- name: "[{{ k3s_node_name }}] Warn about potential drain blockers"
+- name: "Warn about potential drain blockers [{{ k3s_node_name }}]"
   ansible.builtin.debug:
     msg: >-
       Potential drain blockers on {{ k3s_node_name }}: bare/unmanaged pods=
-      {{ bare_pods.stdout_lines }}; PDBs at zero allowed disruptions cluster-wide=
-      {{ blocking_pdbs.stdout_lines }}. Drain uses --disable-eviction, so ALL of
+      {{ node_update_bare_pods.stdout_lines }}; PDBs at zero allowed disruptions cluster-wide=
+      {{ node_update_blocking_pdbs.stdout_lines }}. Drain uses --disable-eviction, so ALL of
       these PDBs (Longhorn instance-manager, CNPG, anything else) are bypassed
       entirely rather than negotiated with — safe here only because the
       earlier "storage already degraded" check guarantees full replica
       redundancy exists elsewhere for every volume first. Bare pods are
       handled explicitly by an ansible-level check, not by drain itself (which
       no longer refuses them on its own under --disable-eviction) — this run
-      will hard-fail before touching the node unless force_drain=true (which
+      will hard-fail before touching the node unless node_update_force_drain=true (which
       then deletes them for good, no controller to recreate them).
-  when: (bare_pods.stdout_lines | length > 0) or (blocking_pdbs.stdout_lines | length > 0)
+  when: (node_update_bare_pods.stdout_lines | length > 0) or (node_update_blocking_pdbs.stdout_lines | length > 0)
 
-- name: "[{{ k3s_node_name }}] Find single-instance CNPG clusters pinned to this node (no failover target)"
+- name: "Find single-instance CNPG clusters pinned to this node (no failover target) [{{ k3s_node_name }}]"
   ansible.builtin.shell: >
     set -o pipefail &&
     comm -12
-    <(kubectl --context {{ kubectl_context }} get pods -A -l cnpg.io/cluster --field-selector spec.nodeName={{ k3s_node_name }} -o json | jq -r '.items[] | .metadata.namespace + "/" + .metadata.labels["cnpg.io/cluster"]' | sort -u)
-    <(kubectl --context {{ kubectl_context }} get clusters.postgresql.cnpg.io -A -o json | jq -r '.items[] | select(.spec.instances == 1) | .metadata.namespace + "/" + .metadata.name' | sort -u)
+    <(kubectl --context {{ node_update_kubectl_context }} get pods -A -l cnpg.io/cluster
+    --field-selector spec.nodeName={{ k3s_node_name }} -o json
+    | jq -r '.items[] | .metadata.namespace + "/" + .metadata.labels["cnpg.io/cluster"]' | sort -u)
+    <(kubectl --context {{ node_update_kubectl_context }} get clusters.postgresql.cnpg.io -A -o json
+    | jq -r '.items[] | select(.spec.instances == 1) | .metadata.namespace + "/" + .metadata.name' | sort -u)
   args:
     executable: /bin/bash
   delegate_to: localhost
   become: false
   changed_when: false
-  register: cnpg_pinned_singletons
+  register: node_update_cnpg_pinned_singletons
 
-- name: "[{{ k3s_node_name }}] Warn about single-instance CNPG primaries pinned here"
+- name: "Warn about single-instance CNPG primaries pinned here [{{ k3s_node_name }}]"
   ansible.builtin.debug:
     msg: >-
-      Single-instance CNPG cluster(s) {{ cnpg_pinned_singletons.stdout_lines }}
+      Single-instance CNPG cluster(s) {{ node_update_cnpg_pinned_singletons.stdout_lines }}
       have no replica to fail over to, so their PDB (minAvailable:1) would
       otherwise block the drain indefinitely. We'll flip
       spec.nodeMaintenanceWindow (inProgress+reusePVC) on before draining so
       CNPG allows a controlled restart on another node instead — expect a
       short Postgres restart for these, then it flips back off afterwards.
-  when: cnpg_pinned_singletons.stdout_lines | length > 0
+  when: node_update_cnpg_pinned_singletons.stdout_lines | length > 0
 
-- name: "[{{ k3s_node_name }}] apt-get update (metadata refresh only)"
+- name: "Apt: apt-get update (metadata refresh only) [{{ k3s_node_name }}]"
   ansible.builtin.apt:
     update_cache: true
     cache_valid_time: 0
   become: true
-  when: patch_os | bool
+  when: node_update_patch_os | bool
 
-- name: "[{{ k3s_node_name }}] Simulate dist-upgrade (no changes made)"
+- name: "Simulate dist-upgrade (no changes made) [{{ k3s_node_name }}]"
+  # noqa: command-instead-of-module -- apt module has no simulate-and-list mode
   ansible.builtin.command: apt-get -s dist-upgrade
   become: true
   changed_when: false
-  register: apt_simulation
-  when: patch_os | bool
+  register: node_update_apt_simulation
+  when: node_update_patch_os | bool
 
-- name: "[{{ k3s_node_name }}] Packages that would be upgraded"
+- name: "Packages that would be upgraded [{{ k3s_node_name }}]"
   ansible.builtin.debug:
-    msg: "{{ apt_simulation.stdout_lines | select('match', '^Inst ') | list }}"
-  when: patch_os | bool
+    msg: "{{ node_update_apt_simulation.stdout_lines | select('match', '^Inst ') | list }}"
+  when: node_update_patch_os | bool
 
-- name: "[{{ k3s_node_name }}] Check currently installed k3s version"
+- name: "Check currently installed k3s version [{{ k3s_node_name }}]"
   ansible.builtin.command: /usr/local/bin/k3s --version
   changed_when: false
-  register: k3s_version_before
-  when: upgrade_k3s | bool
+  register: node_update_k3s_version_before
+  when: node_update_upgrade_k3s | bool
 
-- name: "[{{ k3s_node_name }}] k3s version report"
+- name: "K3s version report [{{ k3s_node_name }}]"
   ansible.builtin.debug:
-    msg: "installed: {{ k3s_version_before.stdout_lines[0] }} | target: {{ k3s_target_version }}"
-  when: upgrade_k3s | bool
+    msg: "installed: {{ node_update_k3s_version_before.stdout_lines[0] }} | target: {{ k3s_version }}"
+  when: node_update_upgrade_k3s | bool
 
-- name: "[{{ k3s_node_name }}] Check whether a reboot is already pending"
+- name: "Check whether a reboot is already pending [{{ k3s_node_name }}]"
   # A prior interrupted run can leave a new kernel fully installed (dpkg ii)
   # but never booted into -- apt then has nothing left to offer, so without
-  # this check will_patch_os/will_upgrade_k3s both go false and the node
+  # this check node_update_will_patch_os/node_update_will_upgrade_k3s both go false and the node
   # gets skipped as "nothing to do" forever, never actually rebooting.
   # Same dpkg-vs-uname comparison as the later in-block check (see there for
   # why /var/run/reboot-required alone doesn't work on this OS image).
   ansible.builtin.shell: >
     set -o pipefail &&
     running="$(uname -r)";
-    latest="$(dpkg -l 'linux-image-*' 2>/dev/null | awk '$1=="ii" && $2 ~ /^linux-image-[0-9]/ {print $2}' | sed 's/^linux-image-//' | sort -V | tail -1)";
-    if [ -f /var/run/reboot-required ] || [ -n "$latest" ] && [ "$running" != "$latest" ]; then echo true; else echo false; fi
+    {{ node_update_newest_kernel_sh }} latest="$newest";
+    if [ -f /var/run/reboot-required ] || { [ -n "$latest" ] && [ "$running" != "$latest" ]; }; then echo true; else echo false; fi
   args:
     executable: /bin/bash
-  register: reboot_check_before
+  register: node_update_reboot_check_before
   changed_when: false
 
-- name: "[{{ k3s_node_name }}] Compute what actually needs doing"
+- name: "Auto-detect Intel iGPU (PCI IDs) [{{ k3s_node_name }}]"
+  # Read-only. Hosts without an Intel GPU (VM, Raspberry Pi) yield nothing and
+  # skip every iGPU step. Disable with node_update_intel_gpu_autofix=false.
+  ansible.builtin.shell: >
+    set -o pipefail;
+    lspci -nn -d 8086: 2>/dev/null | grep -Ei 'VGA|Display' | grep -o '8086:[0-9a-f]\{4\}' | cut -d: -f2 | tr a-f A-F || true
+  args:
+    executable: /bin/bash
+  register: node_update_gpu_ids
+  changed_when: false
+  failed_when: false
+  # Never run Intel GPU logic on a Pi/arm64 node, whatever lspci says.
+  when:
+    - node_update_intel_gpu_autofix | bool
+    - ansible_facts['architecture'] == 'x86_64'
+
+- name: "Does the newest installed kernel know the iGPU, and which iGPU packages are missing? [{{ k3s_node_name }}]"
+  ansible.builtin.shell: >
+    set -o pipefail &&
+    {{ node_update_newest_kernel_sh }}
+    known=true;
+    for id in {{ node_update_gpu_ids.stdout_lines | join(' ') }}; do
+    grep -q "v00008086d0000${id}sv" /lib/modules/$newest/modules.alias || known=false; done;
+    echo "kernel_knows=$known";
+    for p in {{ node_update_intel_gpu_packages | join(' ') }}; do
+    dpkg-query -W -f='${db:Status-Status}' "$p" 2>/dev/null | grep -qx installed || echo "missing=$p"; done
+  args:
+    executable: /bin/bash
+  become: true
+  register: node_update_gpu_probe
+  changed_when: false
+  when: (node_update_gpu_ids.stdout_lines | default([])) | length > 0
+
+- name: "Derive iGPU plan [{{ k3s_node_name }}]"
   ansible.builtin.set_fact:
-    will_patch_os: "{{ (patch_os | bool) and (apt_simulation.stdout_lines | default([]) | select('match', '^Inst ') | list | length > 0) }}"
-    will_upgrade_k3s: "{{ (upgrade_k3s | bool) and (k3s_target_version not in (k3s_version_before.stdout | default(''))) }}"
-    will_reboot: "{{ reboot_check_before.stdout == 'true' }}"
+    node_update_intel_gpu_present: "{{ (node_update_gpu_ids.stdout_lines | default([])) | length > 0 }}"
+    node_update_gpu_kernel_unknown: >-
+      {{ ((node_update_gpu_ids.stdout_lines | default([])) | length > 0)
+         and ('kernel_knows=false' in (node_update_gpu_probe.stdout_lines | default([]))) }}
+    # The backports kernel is only an automatic fix on bookworm/x86_64. On any
+    # other release, or during a distro upgrade (where the target release's
+    # own kernel is the fix), an unknown PCI ID is a hard stop decided by hand.
+    node_update_gpu_need_backports: >-
+      {{ ((node_update_gpu_ids.stdout_lines | default([])) | length > 0)
+         and ('kernel_knows=false' in (node_update_gpu_probe.stdout_lines | default([])))
+         and ansible_facts['distribution_release'] == 'bookworm'
+         and ansible_facts['architecture'] == 'x86_64'
+         and not (node_update_distro_upgrade | bool) }}
+    node_update_gpu_missing_pkgs: >-
+      {{ (node_update_gpu_probe.stdout_lines | default([])) | select('match', '^missing=')
+         | map('regex_replace', '^missing=', '') | list }}
 
-- name: "[{{ k3s_node_name }}] Nothing to do — OS up to date{{ ' and k3s already on target' if (upgrade_k3s | bool) else '' }}"
+- name: "Refuse an unknown iGPU on a release without an automatic kernel fix [{{ k3s_node_name }}]"
+  ansible.builtin.fail:
+    msg: >-
+      The newest kernel on {{ k3s_node_name }} ({{ ansible_facts['distribution_release'] }}) has no i915 alias
+      for PCI IDs {{ node_update_gpu_ids.stdout_lines }}. The automatic backports fix only exists for bookworm;
+      decide by hand (e.g. {{ ansible_facts['distribution_release'] }}-backports) instead of letting the play guess.
+  when:
+    - node_update_gpu_kernel_unknown | bool
+    - not (node_update_gpu_need_backports | bool)
+    - not (node_update_distro_upgrade | bool)
+
+- name: "Distro-upgrade preflight (distro_upgrade.yml only) [{{ k3s_node_name }}]"
+  ansible.builtin.include_tasks: distro_preflight.yml
+  when: node_update_distro_upgrade | bool
+
+- name: "Compute what actually needs doing [{{ k3s_node_name }}]"
+  ansible.builtin.set_fact:
+    node_update_will_install_gpu: "{{ node_update_intel_gpu_present and ((node_update_gpu_missing_pkgs | length > 0) or node_update_gpu_need_backports) }}"
+    node_update_will_patch_os: >-
+      {{ (node_update_patch_os | bool)
+         and (node_update_apt_simulation.stdout_lines | default([]) | select('match', '^Inst ') | list | length > 0) }}
+    node_update_will_upgrade_k3s: "{{ (node_update_upgrade_k3s | bool) and (k3s_version not in (node_update_k3s_version_before.stdout | default(''))) }}"
+    node_update_will_reboot: "{{ node_update_reboot_check_before.stdout == 'true' or (node_update_force_reboot | bool) }}"
+
+- name: "A cordoned node with nothing pending only needs an uncordon [{{ k3s_node_name }}]"
+  # e.g. the follow-up after a node_update_keep_cordoned run: skipping it would strand the
+  # node out of scheduling. node_update_keep_cordoned itself leaves it alone.
+  ansible.builtin.set_fact:
+    node_update_will_uncordon_only: >-
+      {{ (node_update_node_cordoned_before | bool)
+         and not (node_update_will_patch_os or node_update_will_upgrade_k3s or node_update_will_reboot
+                  or node_update_will_install_gpu or (node_update_distro_active | default(false) | bool))
+         and not (node_update_keep_cordoned | bool) }}
+
+- name: "Plan: iGPU [{{ k3s_node_name }}]"
+  ansible.builtin.debug:
+    msg: >-
+      Intel iGPU PCI IDs {{ node_update_gpu_ids.stdout_lines }}; missing packages={{ node_update_gpu_missing_pkgs }};
+      newest kernel lacks the PCI ID (backports kernel needed)={{ node_update_gpu_need_backports }}.
+      {{ 'Would install ' + node_update_gpu_missing_pkgs | join(', ')
+         + (' plus the backports kernel' if node_update_gpu_need_backports else '')
+         + ', force a reboot and verify /dev/dri + vainfo before uncordon.'
+         if node_update_will_install_gpu else 'iGPU already healthy on the installed kernel, nothing to do.' }}
+  when: node_update_intel_gpu_present
+
+- name: "Nothing to do — OS up to date [{{ k3s_node_name ~ (', k3s already on target' if (node_update_upgrade_k3s | bool) else '') }}]"
   ansible.builtin.meta: end_host
-  when: not (will_patch_os or will_upgrade_k3s or will_reboot)
+  when: >-
+    not (node_update_will_patch_os or node_update_will_upgrade_k3s or node_update_will_reboot
+         or node_update_will_install_gpu or node_update_will_uncordon_only or (node_update_distro_active | default(false)))
 
-- name: "[{{ k3s_node_name }}] DRY RUN — stopping here, no changes made"
+- name: "DRY RUN — stopping here, no changes made [{{ k3s_node_name }}]"
+  ansible.builtin.debug:
+    msg: >-
+      DRY RUN for {{ k3s_node_name }}: see the "Distro: plan" line above for what a real run does.
+      Re-run with -e node_update_dry_run=false to actually do this.
+  when:
+    - node_update_dry_run | bool
+    - node_update_distro_active | default(false) | bool
+
+- name: "DRY RUN — stopping here, no changes made [{{ k3s_node_name }}]"
   ansible.builtin.debug:
     msg: >-
       DRY RUN for {{ k3s_node_name }}: would cordon + drain ONCE, then
-      {{ 'apply dist-upgrade' if will_patch_os else 'skip OS packages (up to date or patch_os=false)' }},
-      {{ 'download k3s ' + k3s_target_version + ' and restart ' + k3s_service_name + '.service'
-         if will_upgrade_k3s else 'skip k3s bump (already current or upgrade_k3s=false)' }},
+      {{ 'apply dist-upgrade' if node_update_will_patch_os else 'skip OS packages (up to date or node_update_patch_os=false)' }},
+      {{ 'download k3s ' + k3s_version + ' and restart ' + node_update_k3s_service_name + '.service'
+         if node_update_will_upgrade_k3s else 'skip k3s bump (already current or node_update_upgrade_k3s=false)' }},
       {{ 'reboot (already pending from an earlier run, or a new kernel just installed)'
-         if will_reboot else 'no reboot needed' }}, wait for Ready, uncordon,
-      then wait for pods + Longhorn to settle. Re-run with -e dry_run=false to
+         if node_update_will_reboot else 'no reboot needed' }}, wait for Ready, uncordon,
+      then wait for pods + Longhorn to settle. Re-run with -e node_update_dry_run=false to
       actually do this.
-  when: dry_run | bool
+  when:
+    - node_update_dry_run | bool
+    - not (node_update_distro_active | default(false) | bool)
+    - not (node_update_will_uncordon_only | bool)
 
-- name: "[{{ k3s_node_name }}] End dry run"
+- name: "DRY RUN — stopping here, no changes made [{{ k3s_node_name }}]"
+  ansible.builtin.debug:
+    msg: >-
+      DRY RUN for {{ k3s_node_name }}: nothing pending but the node is cordoned; a real run
+      only uncordons it and waits for pods + Longhorn to settle.
+  when:
+    - node_update_dry_run | bool
+    - node_update_will_uncordon_only | bool
+
+- name: "End dry run [{{ k3s_node_name }}]"
   ansible.builtin.meta: end_host
-  when: dry_run | bool
+  when: node_update_dry_run | bool
+
+- name: "Uncordon-only pass (nothing else pending) [{{ k3s_node_name }}]"
+  when: node_update_will_uncordon_only | bool
+  block:
+    - name: "Uncordon node [{{ k3s_node_name }}]"
+      ansible.builtin.command: "kubectl --context {{ node_update_kubectl_context }} uncordon {{ k3s_node_name }}"
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
+    - name: "Wait for cluster to settle before moving on [{{ k3s_node_name }}]"
+      ansible.builtin.include_role:
+        name: cluster_wait_stable
+
+    - name: "Uncordon-only pass done [{{ k3s_node_name }}]"
+      ansible.builtin.meta: end_host
 
 # ---------------------------------------------------------------------------
-# 2. Real run — everything below only runs when dry_run=false AND something
+# 2. Real run — everything below only runs when node_update_dry_run=false AND something
 #    is actually pending. One cordon/drain/uncordon cycle covers both OS and
-#    k3s. On any failure, the rescue block uncordons the node again so a
-#    stuck drain doesn't leave it stranded out of the scheduler.
+#    k3s. On a failure inside the block, the rescue uncordons the node again
+#    (only if THIS run cordoned it, and not past a distro point of no return)
+#    so a stuck drain doesn't leave it stranded out of the scheduler.
 # ---------------------------------------------------------------------------
 
-- name: "[{{ k3s_node_name }}] Refuse to proceed if storage is already degraded"
+- name: "Refuse to proceed if storage is already degraded [{{ k3s_node_name }}]"
   ansible.builtin.fail:
     msg: >-
       Refusing to touch {{ k3s_node_name }}: Longhorn already reports unhealthy
-      volumes ({{ longhorn_unhealthy.stdout_lines | join(', ') }}). Fix storage
+      volumes ({{ node_update_longhorn_unhealthy.stdout_lines | join(', ') }}). Fix storage
       health before draining any more nodes.
-  when: longhorn_unhealthy.stdout_lines | length > 0
+  # A distro run resuming on a node it already cordoned is exempt: the degraded
+  # volumes are this node's own replicas, which only heal after it is uncordoned.
+  when:
+    - node_update_longhorn_unhealthy.stdout_lines | length > 0
+    - not ((node_update_distro_active | default(false) | bool) and (node_update_distro_cordoned | default(false) | bool))
 
-- name: "[{{ k3s_node_name }}] Refuse to proceed if bare/unmanaged pods are present without force_drain"
+- name: "Refuse to proceed if bare/unmanaged pods are present without node_update_force_drain [{{ k3s_node_name }}]"
   # --disable-eviction bypasses the Eviction API entirely, which is what used
   # to make drain refuse a bare pod on its own. This is now the ONLY thing
   # standing between a bare pod and a silent, permanent deletion.
   ansible.builtin.fail:
     msg: >-
       Refusing to touch {{ k3s_node_name }}: bare/unmanaged pod(s)
-      {{ bare_pods.stdout_lines }} have no controller to recreate them, and
+      {{ node_update_bare_pods.stdout_lines }} have no controller to recreate them, and
       --disable-eviction will delete them for good with no warning. Either
-      give them a controller, or re-run with -e force_drain=true if that's
+      give them a controller, or re-run with -e node_update_force_drain=true if that's
       genuinely fine.
   when:
-    - bare_pods.stdout_lines | length > 0
-    - not (force_drain | bool)
+    - node_update_bare_pods.stdout_lines | length > 0
+    - not (node_update_force_drain | bool)
 
-- block:
-    - name: "[{{ k3s_node_name }}] Cordon node"
-      ansible.builtin.command: "kubectl --context {{ kubectl_context }} cordon {{ k3s_node_name }}"
+- name: "Cordon, drain, update, reboot and uncordon [{{ k3s_node_name }}]"
+  block:
+    - name: "Cordon node [{{ k3s_node_name }}]"
+      ansible.builtin.command: "kubectl --context {{ node_update_kubectl_context }} cordon {{ k3s_node_name }}"
       delegate_to: localhost
       become: false
-      changed_when: true
+      changed_when: not (node_update_node_cordoned_before | bool)
 
-    - name: "[{{ k3s_node_name }}] Enable CNPG nodeMaintenanceWindow for pinned single-instance clusters"
+    - name: "Remember that this run cordoned the node [{{ k3s_node_name }}]"
+      ansible.builtin.set_fact:
+        node_update_node_cordoned_by_run: "{{ not (node_update_node_cordoned_before | bool) }}"
+
+    - name: "Enable CNPG nodeMaintenanceWindow for pinned single-instance clusters [{{ k3s_node_name }}]"
       # Not about bypassing CNPG's PDB (drain's --disable-eviction already
       # does that for everything) — this tells CNPG's own reconciliation to
       # reuse the existing PVC when it notices the primary pod is gone,
       # rather than treating it as a failure needing a fresh bootstrap.
       ansible.builtin.command: >
-        kubectl --context {{ kubectl_context }} patch cluster.postgresql.cnpg.io
+        kubectl --context {{ node_update_kubectl_context }} patch cluster.postgresql.cnpg.io
         {{ item.split('/')[1] }} -n {{ item.split('/')[0] }} --type merge
         -p '{"spec":{"nodeMaintenanceWindow":{"inProgress":true,"reusePVC":true}}}'
-      loop: "{{ cnpg_pinned_singletons.stdout_lines }}"
+      loop: "{{ node_update_cnpg_pinned_singletons.stdout_lines }}"
       delegate_to: localhost
       become: false
       changed_when: true
 
-    - name: "[{{ k3s_node_name }}] Grace period for CNPG to observe the maintenance window before draining"
+    - name: "Grace period for CNPG to observe the maintenance window before draining [{{ k3s_node_name }}]"
       ansible.builtin.pause:
-        seconds: "{{ longhorn_eviction_grace }}"
-      when: cnpg_pinned_singletons.stdout_lines | length > 0
+        seconds: "{{ node_update_cnpg_maintenance_grace }}"
+      when: node_update_cnpg_pinned_singletons.stdout_lines | length > 0
 
-    - name: "[{{ k3s_node_name }}] Drain node (ignore daemonsets, evict emptyDir pods, bypass PDBs directly)"
+    - name: "Drain node (ignore daemonsets, evict emptyDir pods, bypass PDBs directly) [{{ k3s_node_name }}]"
       # --disable-eviction: skip the Eviction API and delete pods directly,
       # bypassing every PDB (Longhorn instance-manager, CNPG, anything else)
       # instead of negotiating with them. Safe here ONLY because "Refuse to
@@ -240,35 +414,78 @@
       # overkill for a short reboot anyway (the same data reattaches when
       # the node comes back, instead of a needless rebuild-elsewhere-and-back).
       ansible.builtin.command: >
-        kubectl --context {{ kubectl_context }} drain {{ k3s_node_name }}
-        --ignore-daemonsets --delete-emptydir-data --disable-eviction --timeout={{ drain_timeout }}s
-        {{ '--force' if (force_drain | bool) else '' }}
+        kubectl --context {{ node_update_kubectl_context }} drain {{ k3s_node_name }}
+        --ignore-daemonsets --delete-emptydir-data --disable-eviction --timeout={{ node_update_drain_timeout }}s
+        {{ '--force' if (node_update_force_drain | bool) else '' }}
       delegate_to: localhost
       become: false
       changed_when: true
 
-    - name: "[{{ k3s_node_name }}] Record running kernel before upgrade"
+    - name: "Record running kernel before upgrade [{{ k3s_node_name }}]"
       ansible.builtin.command: uname -r
       changed_when: false
-      register: kernel_before
+      register: node_update_kernel_before
 
-    - name: "[{{ k3s_node_name }}] Apply dist-upgrade + autoremove + autoclean"
+    - name: "Enable the backports source [{{ k3s_node_name ~ ', ' ~ (ansible_facts['distribution_release']) ~ '-backports' }}]"
+      # node_update_gpu_need_backports is only ever true on bookworm/x86_64 (see above),
+      # and the file name now comes from the same release as its contents.
+      ansible.builtin.copy:
+        dest: "/etc/apt/sources.list.d/{{ ansible_facts['distribution_release'] }}-backports.list"
+        content: "deb http://deb.debian.org/debian {{ ansible_facts['distribution_release'] }}-backports main non-free-firmware\n"
+        mode: "0644"
+      become: true
+      when: node_update_will_install_gpu and node_update_gpu_need_backports
+
+    - name: "Install Intel iGPU firmware, VA tooling and (optionally) the backports kernel [{{ k3s_node_name }}]"
+      ansible.builtin.apt:
+        update_cache: true
+        name: "{{ node_update_intel_gpu_packages }}"
+        state: present
+      become: true
+      when: node_update_will_install_gpu
+      register: node_update_gpu_install
+
+    - name: "Install backports kernel (stays on the 6.12 line via later dist-upgrades) [{{ k3s_node_name }}]"
+      ansible.builtin.apt:
+        name: linux-image-amd64
+        default_release: "{{ ansible_facts['distribution_release'] }}-backports"
+        state: latest  # noqa: package-latest -- intentionally tracks the newest backports kernel
+      become: true
+      when: node_update_will_install_gpu and node_update_gpu_need_backports
+
+    - name: "Pre-reboot gate: newest installed kernel must know this GPU's PCI ID [{{ k3s_node_name }}]"
+      # Never reboot into a kernel that still can't drive the GPU.
+      ansible.builtin.shell: >
+        set -o pipefail &&
+        {{ node_update_newest_kernel_sh }}
+        for id in $(lspci -nn -d 8086: | grep -Ei 'VGA|Display' | grep -o '8086:[0-9a-f]\{4\}' | cut -d: -f2 | tr a-f A-F); do
+        grep -q "v00008086d0000${id}sv" /lib/modules/$newest/modules.alias || { echo "kernel $newest has no i915 alias for $id"; exit 1; }; done;
+        echo "kernel $newest knows the iGPU"
+      args:
+        executable: /bin/bash
+      become: true
+      changed_when: false
+      when: node_update_intel_gpu_present
+
+    - name: "Apply dist-upgrade + autoremove + autoclean [{{ k3s_node_name }}]"
       ansible.builtin.apt:
         upgrade: dist
         autoremove: true
         autoclean: true
       become: true
-      when: will_patch_os
+      when: node_update_will_patch_os
 
-    - name: "[{{ k3s_node_name }}] Download target k3s binary"
+    - name: "Debian release upgrade (distro_upgrade.yml only) [{{ k3s_node_name }}]"
+      ansible.builtin.include_tasks: distro_release_upgrade.yml
+      when: node_update_distro_active | default(false)
+
+    - name: "Download target k3s binary [{{ k3s_node_name }}]"
       ansible.builtin.include_role:
         name: k3s_pre
         tasks_from: download
-      vars:
-        k3s_pre_version: "{{ k3s_target_version }}"
-      when: will_upgrade_k3s
+      when: node_update_will_upgrade_k3s
 
-    - name: "[{{ k3s_node_name }}] Check whether a reboot is now required"
+    - name: "Check whether a reboot is now required [{{ k3s_node_name }}]"
       # NOT /var/run/reboot-required: that flag is only ever created by
       # update-notifier-common's kernel postinst hook, which isn't installed
       # on this minimal preseeded Debian (confirmed empty
@@ -282,32 +499,38 @@
       ansible.builtin.shell: >
         set -o pipefail &&
         running="$(uname -r)";
-        latest="$(dpkg -l 'linux-image-*' 2>/dev/null | awk '$1=="ii" && $2 ~ /^linux-image-[0-9]/ {print $2}' | sed 's/^linux-image-//' | sort -V | tail -1)";
-        if [ -f /var/run/reboot-required ] || [ -n "$latest" ] && [ "$running" != "$latest" ]; then echo true; else echo false; fi
+        {{ node_update_newest_kernel_sh }} latest="$newest";
+        if [ -f /var/run/reboot-required ] || { [ -n "$latest" ] && [ "$running" != "$latest" ]; }; then echo true; else echo false; fi
       args:
         executable: /bin/bash
-      register: reboot_check
+      register: node_update_reboot_check
       changed_when: false
 
-    - name: "[{{ k3s_node_name }}] Reboot and wait for the node to come back up (also starts k3s fresh on the new binary)"
+    - name: "Reboot and wait for the node to come back up (also starts k3s fresh on the new binary) [{{ k3s_node_name }}]"
       ansible.builtin.reboot:
-        reboot_timeout: "{{ reboot_timeout }}"
+        node_update_reboot_timeout: "{{ node_update_reboot_timeout }}"
         post_reboot_delay: 15
         test_command: uptime
       become: true
-      when: reboot_check.stdout == "true"
+      register: node_update_node_reboot
+      when: >-
+        node_update_reboot_check.stdout == "true" or (node_update_force_reboot | bool)
+        or (node_update_gpu_install.changed | default(false)) or (node_update_distro_active | default(false))
 
-    - name: "[{{ k3s_node_name }}] Restart {{ k3s_service_name }}.service to pick up new k3s binary (no reboot needed)"
+    - name: "Restart the k3s service to pick up new k3s binary (no reboot needed) [{{ k3s_node_name ~ ', ' ~ (node_update_k3s_service_name) ~ '.service' }}]"
       ansible.builtin.systemd:
-        name: "{{ k3s_service_name }}"
+        name: "{{ node_update_k3s_service_name }}"
         state: restarted
         daemon_reload: true
       become: true
       when:
-        - will_upgrade_k3s
-        - reboot_check.stdout != "true"
+        - node_update_will_upgrade_k3s
+        - node_update_reboot_check.stdout != "true"
+        - not (node_update_force_reboot | bool)
+        - not (node_update_gpu_install.changed | default(false))
+        - not (node_update_distro_active | default(false))
 
-    - name: "[{{ k3s_node_name }}] Wait for node to report Ready again"
+    - name: "Wait for node to report Ready again [{{ k3s_node_name }}]"
       # NOTE: the jsonpath value MUST be quoted as one shell token. Without
       # the outer quotes, ansible.builtin.command's shlex parsing treats the
       # embedded =="Ready" double-quotes as its own quoting and STRIPS them,
@@ -317,86 +540,208 @@
       # this is what was actually behind node updates repeatedly "failing"
       # after the real OS/kernel/k3s work had already succeeded.
       ansible.builtin.command: >
-        kubectl --context {{ kubectl_context }} get node {{ k3s_node_name }}
+        kubectl --context {{ node_update_kubectl_context }} get node {{ k3s_node_name }}
         -o 'jsonpath={.status.conditions[?(@.type=="Ready")].status}'
       delegate_to: localhost
       become: false
-      register: node_ready_check
-      until: node_ready_check.stdout == "True"
-      retries: "{{ (node_ready_timeout | int / 10) | round(0, 'ceil') | int }}"
+      register: node_update_node_ready_check
+      until: node_update_node_ready_check.stdout == "True"
+      retries: "{{ (node_update_node_ready_timeout | int / 10) | round(0, 'ceil') | int }}"
       delay: 10
       changed_when: false
 
-    - name: "[{{ k3s_node_name }}] Wait for kubelet to report the target k3s version"
+    - name: "Wait for kubelet to report the target k3s version [{{ k3s_node_name }}]"
       ansible.builtin.command: >
-        kubectl --context {{ kubectl_context }} get node {{ k3s_node_name }}
+        kubectl --context {{ node_update_kubectl_context }} get node {{ k3s_node_name }}
         -o 'jsonpath={.status.nodeInfo.kubeletVersion}'
       delegate_to: localhost
       become: false
-      register: kubelet_version_check
-      until: k3s_target_version.split('+')[0] in kubelet_version_check.stdout
-      retries: "{{ (node_ready_timeout | int / 10) | round(0, 'ceil') | int }}"
+      register: node_update_kubelet_version_check
+      until: k3s_version.split('+')[0] in node_update_kubelet_version_check.stdout
+      retries: "{{ (node_update_node_ready_timeout | int / 10) | round(0, 'ceil') | int }}"
       delay: 10
       changed_when: false
-      when: will_upgrade_k3s
+      when: node_update_will_upgrade_k3s
 
-    - name: "[{{ k3s_node_name }}] Uncordon node"
-      ansible.builtin.command: "kubectl --context {{ kubectl_context }} uncordon {{ k3s_node_name }}"
+    - name: "Distro-upgrade post-boot gates (before uncordon) [{{ k3s_node_name }}]"
+      ansible.builtin.include_tasks: distro_postboot.yml
+      when: node_update_distro_active | default(false)
+
+    - name: "Post-reboot iGPU check (render node + H.264/HEVC decode and encode) [{{ k3s_node_name }}]"
+      ansible.builtin.include_tasks: gpu_check.yml
+      when: node_update_intel_gpu_present
+
+    - name: "Uncordon node [{{ k3s_node_name }}]"
+      ansible.builtin.command: "kubectl --context {{ node_update_kubectl_context }} uncordon {{ k3s_node_name }}"
       delegate_to: localhost
       become: false
       changed_when: true
+      when: not (node_update_keep_cordoned | bool)
 
-    - name: "[{{ k3s_node_name }}] Wait for cluster to settle before moving on"
-      ansible.builtin.include_role:
-        name: cluster_wait_stable
-
-    - name: "[{{ k3s_node_name }}] Update summary"
-      ansible.builtin.debug:
-        msg: >-
-          {{ k3s_node_name }}: kernel {{ kernel_before.stdout }} ->
-          {{ 'rebooted onto new kernel' if reboot_check.stdout == "true"
-             else ('k3s service restarted on new binary' if will_upgrade_k3s else 'no reboot needed') }}.
-          Uncordoned and stable.
+    - name: "Remember the uncordon [{{ k3s_node_name }}]"
+      ansible.builtin.set_fact:
+        node_update_node_uncordoned_by_run: "{{ not (node_update_keep_cordoned | bool) }}"
 
   rescue:
-    - name: "[{{ k3s_node_name }}] Update failed — gather diagnostics on remaining pods"
+    - name: "Update failed — gather diagnostics on remaining pods [{{ k3s_node_name }}]"
       ansible.builtin.command: >
-        kubectl --context {{ kubectl_context }} get pods -A -o wide
+        kubectl --context {{ node_update_kubectl_context }} get pods -A -o wide
         --field-selector spec.nodeName={{ k3s_node_name }}
       delegate_to: localhost
       become: false
       changed_when: false
       failed_when: false
-      register: failure_pods
+      register: node_update_failure_pods
 
-    - name: "[{{ k3s_node_name }}] Roll back: uncordon so the node isn't stranded out of scheduling"
-      ansible.builtin.command: "kubectl --context {{ kubectl_context }} uncordon {{ k3s_node_name }}"
+    - name: "Distro: restore the previous apt sources (before the point of no return) [{{ k3s_node_name }}]"
+      ansible.builtin.shell: >
+        set -o pipefail;
+        b={{ node_update_distro_backup_dir }}/sources-pre;
+        rm -f /etc/apt/sources.list.d/debian.sources;
+        for f in $b/*; do [ -f "$f" ] || continue;
+        if [ "$(basename "$f")" = sources.list ]; then cp -a "$f" /etc/apt/sources.list; else cp -a "$f" /etc/apt/sources.list.d/; fi; done;
+        apt-get update -qq
+      args:
+        executable: /bin/bash
+      become: true
+      changed_when: true
+      failed_when: false
+      when:
+        - node_update_distro_sources_rewritten | default(false)
+        - not (node_update_distro_point_of_no_return | default(false))
+
+    - name: "Distro: past the point of no return, collect dpkg/apt state [{{ k3s_node_name }}]"
+      # Roll forward, not back. One attempt to finish dpkg, then stop with the
+      # node CORDONED (its pods already run elsewhere). If an apt phase hit
+      # node_update_distro_apt_timeout, the process list shows whether dpkg is waiting.
+      # noqa: risky-shell-pipe -- best-effort diagnostics, failed_when: false; pipe status is irrelevant
+      ansible.builtin.shell: >
+        ps -eo pid,etime,args | grep -E '[d]pkg|[a]pt-get' ;
+        DEBIAN_FRONTEND=noninteractive UCF_FORCE_CONFFOLD=1 timeout 1800 dpkg --configure -a ;
+        dpkg --audit
+      become: true
+      changed_when: true
+      failed_when: false
+      register: node_update_distro_rescue_state
+      when: node_update_distro_point_of_no_return | default(false)
+
+    - name: "Roll back: uncordon so the node isn't stranded out of scheduling [{{ k3s_node_name }}]"
+      # Only a node THIS run cordoned (a node cordoned before the run stays
+      # cordoned), and NOT after a distro upgrade passed its point of no
+      # return: a half-upgraded node must stay out of scheduling until fixed.
+      ansible.builtin.command: "kubectl --context {{ node_update_kubectl_context }} uncordon {{ k3s_node_name }}"
       delegate_to: localhost
       become: false
       changed_when: true
       failed_when: false
+      register: node_update_rescue_uncordon
+      when:
+        - node_update_node_cordoned_by_run | bool
+        - not (node_update_node_uncordoned_by_run | bool)
+        - not (node_update_distro_point_of_no_return | default(false))
 
-    - name: "[{{ k3s_node_name }}] Abort with diagnostics"
+    - name: "Distro: abort, node left CORDONED [{{ k3s_node_name }}]"
       ansible.builtin.fail:
         msg: >-
-          Update failed on {{ k3s_node_name }} and was rolled back (node
-          uncordoned again, any CNPG maintenance windows reverted). Pods
-          still on the node:
-          {{ failure_pods.stdout_lines | default(['(could not list)']) }}.
-          Likely cause: drain itself timed out (--disable-eviction bypasses
-          PDBs, so this would be something else entirely stalling it), or
-          CNPG failover just needed longer than {{ drain_timeout }}s +
-          {{ longhorn_eviction_grace }}s grace. Fix the root cause, then
-          re-run with --limit {{ inventory_hostname }}.
+          Distro upgrade failed on {{ k3s_node_name }} AFTER the point of no return. The node stays cordoned.
+          Failed task: {{ ansible_failed_task.name | default('?') }}: {{ ansible_failed_result.msg | default('') }}
+          {{ ansible_failed_result.stdout_lines | default([]) }}.
+          dpkg/apt state: {{ node_update_distro_rescue_state.stdout_lines | default([]) }}.
+          On-node backups: {{ node_update_distro_backup_dir }} (etc tarball, selections, net-before, sources-pre).
+          Fix over SSH (console if unreachable; previous kernel is in the GRUB Advanced menu), then
+          re-run distro_upgrade.yml --limit {{ inventory_hostname }}: it resumes. See wiki distro-upgrade page.
+      when: node_update_distro_point_of_no_return | default(false)
+
+    - name: "Abort with diagnostics [{{ k3s_node_name }}]"
+      ansible.builtin.fail:
+        msg: >-
+          Update failed on {{ k3s_node_name }} at "{{ ansible_failed_task.name | default('?') }}":
+          {{ ansible_failed_result.msg | default('') }}.
+          Node state: {{
+            'uncordoned again by the rescue'
+            if (node_update_rescue_uncordon is defined and node_update_rescue_uncordon is not skipped
+                and node_update_rescue_uncordon.rc | default(1) == 0)
+            else ('already uncordoned by this run before the failure' if (node_update_node_uncordoned_by_run | bool)
+            else ('left CORDONED: it was already cordoned before this run' if (node_update_node_cordoned_before | bool)
+            else ('left CORDONED: the rescue uncordon failed, uncordon by hand' if (node_update_node_cordoned_by_run | bool)
+            else 'never cordoned (failed before the cordon)'))) }}.
+          CNPG maintenance windows are reverted by the always block. Pods still on the node:
+          {{ node_update_failure_pods.stdout_lines | default(['(could not list)']) }}.
+          If the drain timed out (--disable-eviction bypasses PDBs, so something else stalled it), or
+          CNPG failover needed longer than {{ node_update_drain_timeout }}s + {{ node_update_cnpg_maintenance_grace }}s grace:
+          fix the root cause, then re-run with --limit {{ inventory_hostname }}.
 
   always:
-    - name: "[{{ k3s_node_name }}] Revert CNPG nodeMaintenanceWindow for pinned single-instance clusters"
+    - name: "Revert CNPG nodeMaintenanceWindow for pinned single-instance clusters [{{ k3s_node_name }}]"
       ansible.builtin.command: >
-        kubectl --context {{ kubectl_context }} patch cluster.postgresql.cnpg.io
+        kubectl --context {{ node_update_kubectl_context }} patch cluster.postgresql.cnpg.io
         {{ item.split('/')[1] }} -n {{ item.split('/')[0] }} --type merge
         -p '{"spec":{"nodeMaintenanceWindow":{"inProgress":false}}}'
-      loop: "{{ cnpg_pinned_singletons.stdout_lines }}"
+      loop: "{{ node_update_cnpg_pinned_singletons.stdout_lines }}"
       delegate_to: localhost
       become: false
       changed_when: true
       failed_when: false
+
+# ---------------------------------------------------------------------------
+# 3. After the uncordon — outside the block on purpose: a settle/heal timeout
+#    here is a plain failure with the node already back in scheduling, not
+#    something for the rescue to "roll back". node_update_keep_cordoned skips all of it
+#    (settle wait, distro soak + re-check, image prune).
+# ---------------------------------------------------------------------------
+
+- name: "Wait for cluster to settle before moving on [{{ k3s_node_name }}]"
+  ansible.builtin.include_role:
+    name: cluster_wait_stable
+  when: not (node_update_keep_cordoned | bool)
+
+- name: "Distro soak before the next node [{{ k3s_node_name }}]"
+  ansible.builtin.pause:
+    minutes: "{{ node_update_distro_soak_minutes }}"
+  when:
+    - node_update_distro_active | default(false)
+    - node_update_distro_soak_minutes | int > 0
+    - not (node_update_keep_cordoned | bool)
+
+- name: "Re-check the Longhorn/pod barrier after the soak [{{ k3s_node_name }}]"
+  ansible.builtin.include_role:
+    name: cluster_wait_stable
+  when:
+    - node_update_distro_active | default(false)
+    - node_update_distro_soak_minutes | int > 0
+    - not (node_update_keep_cordoned | bool)
+
+- name: "Prune unused container images [{{ k3s_node_name }}]"
+  # Renovate image churn is the usual DiskPressure cause. After the settle
+  # wait so running pods already hold the images they need. Non-fatal.
+  ansible.builtin.command: /usr/local/bin/k3s crictl rmi --prune
+  become: true
+  register: node_update_image_prune_result
+  changed_when: node_update_image_prune_result.rc == 0 and ('Deleted' in node_update_image_prune_result.stdout)
+  failed_when: false
+  when:
+    - node_update_image_prune | bool
+    - not (node_update_keep_cordoned | bool)
+
+- name: "Image prune failed (non-fatal) [{{ k3s_node_name }}]"
+  ansible.builtin.debug:
+    msg: "crictl rmi --prune rc={{ node_update_image_prune_result.rc }}: {{ node_update_image_prune_result.stderr | default('') }}"
+  when:
+    - node_update_image_prune_result is not skipped
+    - node_update_image_prune_result.rc | default(0) != 0
+
+- name: "Update summary [{{ k3s_node_name }}]"
+  ansible.builtin.debug:
+    msg: >-
+      {{ k3s_node_name }}: kernel {{ node_update_kernel_before.stdout }} ->
+      {{ ('rebooted (' + ([] + (['kernel/reboot pending'] if node_update_reboot_check.stdout == 'true' else [])
+                              + (['node_update_force_reboot'] if (node_update_force_reboot | bool) else [])
+                              + (['iGPU packages'] if (node_update_gpu_install.changed | default(false)) else [])
+                              + (['distro upgrade'] if (node_update_distro_active | default(false) | bool) else [])) | join(', ') + ')')
+         if (node_update_node_reboot is defined and node_update_node_reboot is not skipped)
+         else ('k3s service restarted on new binary' if node_update_will_upgrade_k3s else 'no reboot needed') }}.
+      {{ 'Left CORDONED (node_update_keep_cordoned): the follow-up distro_upgrade.yml run on this node uncordons it.'
+         if (node_update_keep_cordoned | bool) else 'Uncordoned and stable.' }}
+      {{ ('Image prune: ' ~ (node_update_image_prune_result.stdout_lines | select('search', 'Deleted') | list | length) ~ ' image(s) removed.')
+         if (node_update_image_prune_result is defined and node_update_image_prune_result is not skipped
+             and node_update_image_prune_result.rc | default(1) == 0) else '' }}

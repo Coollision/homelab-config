@@ -1,0 +1,79 @@
+---
+# Cluster-side maintenance lock shared by every node-maintenance playbook
+# (cluster_update, distro_upgrade, uplink_name, vlan_trunk_setup/teardown;
+# node_setup/k3s_setup only check it): a ConfigMap in kube-system.
+# `kubectl create` is atomic, so two runs (from any machine) can't both hold
+# it. Run on localhost with node_update_maint_lock_action:
+#   acquire - take the lock; refuse if held, fail loudly on any other error
+#   release - drop the lock
+#   check   - soft check for bootstrap playbooks: refuse if the API answers
+#             and the lock exists; proceed silently if there is no cluster/API
+#
+# The lock is released only by the final play of a successful run. A failed
+# run leaves it in place ON PURPOSE (a node may be cordoned mid-upgrade);
+# inspect, then break it with -e maint_lock_break=true.
+- name: "Maintenance lock: {{ node_update_maint_lock_action }}"
+  ansible.builtin.assert:
+    that: node_update_maint_lock_action in ['acquire', 'release', 'check']
+    quiet: true
+
+- name: Maintenance lock - break a stale lock on request
+  ansible.builtin.command: "kubectl --context {{ node_update_kubectl_context }} -n kube-system delete configmap {{ maint_lock_name }} --ignore-not-found"
+  changed_when: true
+  when:
+    - node_update_maint_lock_action == 'acquire'
+    - maint_lock_break | default(false) | bool
+
+- name: Maintenance lock - acquire
+  ansible.builtin.command: >
+    kubectl --context {{ node_update_kubectl_context }} -n kube-system create configmap {{ maint_lock_name }}
+    --from-literal=playbook={{ node_update_maint_lock_playbook }}
+    --from-literal=owner={{ lookup('env', 'USER') | default('unknown', true) }}
+    --from-literal=started={{ now(utc=true).isoformat() }}
+  register: node_update_maint_lock_create
+  changed_when: node_update_maint_lock_create.rc == 0
+  failed_when: false
+  when: node_update_maint_lock_action == 'acquire'
+
+- name: Maintenance lock - fail on any error other than "lock already held"
+  ansible.builtin.fail:
+    msg: "Could not create the maintenance lock (kubectl rc={{ node_update_maint_lock_create.rc }}): {{ node_update_maint_lock_create.stderr }}"
+  when:
+    - node_update_maint_lock_action == 'acquire'
+    - node_update_maint_lock_create.rc != 0
+    - "'AlreadyExists' not in node_update_maint_lock_create.stderr"
+
+- name: Maintenance lock - read the current holder
+  ansible.builtin.command: "kubectl --context {{ node_update_kubectl_context }} -n kube-system get configmap {{ maint_lock_name }} -o jsonpath={.data}"
+  register: node_update_maint_lock_holder
+  changed_when: false
+  failed_when: false
+  check_mode: false  # read-only; must also answer under --check
+  when: >-
+    (node_update_maint_lock_action == 'acquire' and node_update_maint_lock_create.rc != 0)
+    or node_update_maint_lock_action == 'check'
+
+- name: Maintenance lock - refuse when another run holds it
+  ansible.builtin.fail:
+    msg: >-
+      Another node-maintenance run holds the lock ({{ node_update_maint_lock_holder.stdout | default('') }}).
+      Wait for it, or if it is stale (failed run, Ctrl-C): check every node is uncordoned / healthy, then
+      re-run with -e maint_lock_break=true{{
+        ' (on a playbook that acquires it, e.g. cluster_update.yml)'
+        if node_update_maint_lock_action == 'check' else '' }}.
+  when: >-
+    (node_update_maint_lock_action == 'acquire' and node_update_maint_lock_create.rc != 0)
+    or (node_update_maint_lock_action == 'check' and node_update_maint_lock_holder.rc == 0)
+
+- name: Maintenance lock - no cluster API reachable, nothing to check
+  ansible.builtin.debug:
+    msg: "Lock check skipped: {{ node_update_maint_lock_holder.stderr | default('') | truncate(200) }}"
+  when:
+    - node_update_maint_lock_action == 'check'
+    - node_update_maint_lock_holder.rc != 0
+    - "'NotFound' not in node_update_maint_lock_holder.stderr"
+
+- name: Maintenance lock - release
+  ansible.builtin.command: "kubectl --context {{ node_update_kubectl_context }} -n kube-system delete configmap {{ maint_lock_name }} --ignore-not-found"
+  changed_when: true
+  when: node_update_maint_lock_action == 'release'

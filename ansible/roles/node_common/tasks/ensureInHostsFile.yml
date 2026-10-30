@@ -1,0 +1,13 @@
+# set_addresses: list of single-entry dicts {address: name}; one line per entry.
+- name: Update /etc/hosts  # noqa no-tabs
+  become: true
+  ansible.builtin.lineinfile:
+    dest: /etc/hosts
+    # \s+ so entries that already exist space-separated are rewritten, not duplicated.
+    regexp: '^{{ item.key | replace(".", "\.") }}\s+{{ item.value | regex_escape }}(\s|$)'
+    line: "{{ item.key }}{{ '\t' }}{{ item.value }}"
+    backup: true
+    state: "{{ node_common_set_expected_state }}"
+  loop: "{{ set_addresses | map('dict2items') | flatten }}"
+  loop_control:
+    label: "{{ item.key }} {{ item.value }}"

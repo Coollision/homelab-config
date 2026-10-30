@@ -1,0 +1,50 @@
+# Nodes whose uplink is owned by ifupdown but where Debian 13 also enables
+# systemd-networkd: networkd-wait-online finds no managed link, fails after a 2 minute
+# timeout on every boot (and leaves systemd "degraded"). Let ifupdown's own wait-online
+# (it also waits for allow-hotplug interfaces) provide network-online instead.
+- name: Does ifupdown own any interface?
+  ansible.builtin.shell: set -o pipefail; /usr/sbin/ifquery -X lo --list --allow=auto; /usr/sbin/ifquery -X lo --list --allow=hotplug
+  args:
+    executable: /bin/bash
+  register: node_common_ifupdown_ifaces
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Is the networkd wait-online unit enabled?
+  ansible.builtin.command: systemctl is-enabled systemd-networkd-wait-online.service  # noqa: command-instead-of-module
+  register: node_common_networkd_wait_enabled
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+# ifupdown-wait-online.service only ships with trixie's ifupdown; never
+# disable networkd's wait-online without a replacement unit present.
+- name: Does the ifupdown-wait-online unit exist?
+  ansible.builtin.command: systemctl list-unit-files --no-legend ifupdown-wait-online.service  # noqa: command-instead-of-module
+  register: node_common_ifupdown_wait_unit
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Use ifupdown-wait-online instead of systemd-networkd-wait-online
+  become: true
+  when:
+    - node_common_ifupdown_ifaces.stdout | trim | length > 0
+    - node_common_networkd_wait_enabled.stdout | trim == 'enabled'
+    - node_common_ifupdown_wait_unit.stdout | trim | length > 0
+  block:
+    - name: Enable ifupdown-wait-online
+      ansible.builtin.systemd:
+        name: ifupdown-wait-online.service
+        enabled: true
+
+    - name: Disable systemd-networkd-wait-online
+      ansible.builtin.systemd:
+        name: systemd-networkd-wait-online.service
+        enabled: false
+
+    - name: Clear the failed state
+      ansible.builtin.command: systemctl reset-failed systemd-networkd-wait-online.service
+      changed_when: false
+      failed_when: false

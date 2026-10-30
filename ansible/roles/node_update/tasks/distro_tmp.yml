@@ -1,0 +1,32 @@
+---
+# /tmp handling for releases that mount /tmp as tmpfs by default (trixie+).
+# Default (decided 2026-10-30): keep /tmp on disk like before the upgrade.
+- name: "Distro: validate /tmp mode [{{ k3s_node_name }}]"
+  ansible.builtin.assert:
+    that: node_update_distro_upgrade_tmp_mode in ['disk', 'tmpfs_capped', 'tmpfs_default']
+    quiet: true
+
+- name: "Distro: keep /tmp on disk (mask tmp.mount) [{{ k3s_node_name }}]"
+  # systemctl (not the systemd module): masking works even when the unit
+  # file is not present yet, which the module refuses.
+  # noqa: command-instead-of-module
+  ansible.builtin.command: "systemctl {{ 'mask' if node_update_distro_upgrade_tmp_mode == 'disk' else 'unmask' }} tmp.mount"
+  become: true
+  changed_when: true
+
+- name: "Distro: tmpfs size cap drop-in [{{ k3s_node_name }}]"
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/tmp.mount.d/size.conf
+    content: |
+      [Mount]
+      Options=mode=1777,strictatime,nosuid,nodev,size={{ node_update_distro_tmpfs_size }}
+    mode: "0644"
+  become: true
+  when: node_update_distro_upgrade_tmp_mode == 'tmpfs_capped'
+
+- name: "Distro: no size cap unless tmpfs_capped [{{ k3s_node_name }}]"
+  ansible.builtin.file:
+    path: /etc/systemd/system/tmp.mount.d/size.conf
+    state: absent
+  become: true
+  when: node_update_distro_upgrade_tmp_mode != 'tmpfs_capped'

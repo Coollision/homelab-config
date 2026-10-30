@@ -1,0 +1,35 @@
+---
+- name: Configure journald retention limits
+  become: true
+  ansible.builtin.template:
+    src: journald.conf.j2
+    dest: /etc/systemd/journald.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  notify: Restart journald
+
+- name: Measure journal disk usage (bytes)
+  become: true
+  ansible.builtin.shell: >
+    set -o pipefail;
+    du -sbc /var/log/journal /run/log/journal 2>/dev/null | awk 'END {print $1}'
+  args:
+    executable: /bin/bash
+  register: journald_config_usage
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: journald_config_vacuum_now | bool
+
+# Only when the journal is over the cap; changed only if something was freed.
+- name: Vacuum journal logs to enforce size limit
+  become: true
+  ansible.builtin.command:
+    cmd: "journalctl --vacuum-size={{ journald_config_vacuum_size }}"
+  register: journald_config_vacuum
+  changed_when: (journald_config_vacuum.stderr ~ journald_config_vacuum.stdout) is not search('freed 0B ')
+  when:
+    - journald_config_vacuum_now | bool
+    - (journald_config_usage.stdout | default('0') | int) > (journald_config_vacuum_size | human_to_bytes)

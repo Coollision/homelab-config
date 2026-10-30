@@ -1,14 +1,15 @@
+{% set _regs = k3s_registries | default({}, true) %}
 mirrors:
-{% for regName, val in k3s_registries.items() %}
+{% for regName, val in _regs.items() %}
   {{ regName }}:
-    endpoint: 
+    endpoint:
 {{ val.endpoints | to_nice_yaml | indent(6, true) -}}
 {% endfor %}
 configs:
-{% for regName, val in k3s_registries.items() %}
+{% for regName, val in _regs.items() %}
 {% if val.auth is defined %}
   {{ regName }}:
-    auth: 
+    auth:
 {{ val.auth | to_nice_yaml | indent(6, true) -}}
 {%- endif %}
 {% endfor %}

@@ -1,22 +1,23 @@
+---
 - name: Disable services
   ansible.builtin.systemd:
     name: "{{ item }}"
     state: stopped
     enabled: false
   failed_when: false
-  with_items:
+  loop:
     - k3s
     - k3s-node
 
 - name: Pkill -9 -f "k3s/data/[^/]+/bin/containerd-shim-runc"
-  register: pkill_containerd_shim_runc
+  register: k3s_teardown_pkill_containerd_shim_runc
   ansible.builtin.command: pkill -9 -f "k3s/data/[^/]+/bin/containerd-shim-runc"
-  changed_when: "pkill_containerd_shim_runc.rc == 0"
+  changed_when: "k3s_teardown_pkill_containerd_shim_runc.rc == 0"
   failed_when: false
 
 - name: Umount k3s filesystems
   ansible.builtin.include_tasks: umount_with_children.yml
-  with_items:
+  loop:
     - /run/k3s
     - /var/lib/kubelet
     - /run/netns
@@ -24,17 +25,50 @@
   loop_control:
     loop_var: mounted_fs
 
+- name: Delete leftover CNI / flannel network links
+  ansible.builtin.shell: |
+    set -o pipefail
+    for l in cni0 flannel.1 flannel-v6.1 flannel-wg flannel-wg-v6; do
+      if ip link show "$l" >/dev/null 2>&1; then ip link delete "$l" && echo "deleted $l"; fi
+    done
+  args:
+    executable: /bin/bash
+  register: k3s_teardown_links
+  changed_when: "'deleted' in k3s_teardown_links.stdout"
+
+# Same filter k3s-killall.sh uses: drop KUBE-*, CNI-* and flannel rules,
+# leave everything else (host firewall) untouched. Only rewrites when needed.
+- name: Remove kube/CNI/flannel iptables rules
+  ansible.builtin.shell: |
+    set -o pipefail
+    for t in iptables ip6tables; do
+      command -v "$t-save" >/dev/null 2>&1 || continue
+      if "$t-save" | grep -qiE 'KUBE-|CNI-|flannel'; then
+        "$t-save" | grep -v KUBE- | grep -v CNI- | grep -iv flannel | "$t-restore"
+        echo "cleaned $t"
+      fi
+    done
+  args:
+    executable: /bin/bash
+  register: k3s_teardown_iptables
+  changed_when: "'cleaned' in k3s_teardown_iptables.stdout"
+
 - name: Remove service files, binaries and data
   ansible.builtin.file:
     name: "{{ item }}"
     state: absent
-  with_items:
+  loop:
     - /usr/local/bin/k3s
+    - /usr/local/bin/kubectl
+    - /usr/local/bin/crictl
     - "{{ systemd_dir }}/k3s.service"
     - "{{ systemd_dir }}/k3s-node.service"
     - /etc/rancher/k3s
+    - /etc/rancher/node
     - /var/lib/kubelet
     - /var/lib/rancher/k3s
+    - /var/lib/cni
+    - /run/flannel
 
 - name: Daemon_reload
   ansible.builtin.systemd:

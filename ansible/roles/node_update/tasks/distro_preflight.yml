@@ -1,0 +1,296 @@
+---
+# Distro-upgrade preflight. Included by main.yml (before the dry-run stop)
+# only when node_update_distro_upgrade=true. Does not change the installed system, but it
+# is not strictly read-only: it refreshes the apt lists (apt-get update), runs
+# the optional scratch apt simulation under /tmp (node_update_distro_simulate), and on a
+# real run persists the inotify limits (node_common's task).
+#
+# Outcome: `meta: end_host` (node already done), node_update_distro_active unset with the
+# node clean but cordoned (main.yml then runs an uncordon-only pass), a hard
+# fail (unsafe or unsupported state), or node_update_distro_active=true with node_update_distro_mode
+# fresh|resume.
+
+- name: "Distro: target release must be known [{{ k3s_node_name }}]"
+  ansible.builtin.assert:
+    that:
+      - (node_update_distro_to_major | string) in node_update_distro_releases
+      - ((node_update_distro_to_major | int) - 1) | string in node_update_distro_releases
+    fail_msg: "node_update_distro_to_major={{ node_update_distro_to_major }} or its predecessor is missing from node_update_distro_releases"
+    quiet: true
+
+- name: "Distro: the distro upgrade never bumps k3s or mixes in a patch run [{{ k3s_node_name }}]"
+  ansible.builtin.assert:
+    that:
+      - not (node_update_upgrade_k3s | bool)
+      - not (node_update_patch_os | bool)
+    fail_msg: "node_update_distro_upgrade=true requires node_update_upgrade_k3s=false and node_update_patch_os=false (playbooks/distro_upgrade.yml sets both)."
+    quiet: true
+
+- name: "Distro: probe flavour, dpkg and sources state [{{ k3s_node_name }}]"
+  # Not a duplicate of main.yml's "apt-get update": that one only runs with
+  # node_update_patch_os=true, which the distro flow forbids (asserted above).
+  ansible.builtin.shell: >
+    set -o pipefail;
+    apt-get update -qq >/dev/null 2>&1;
+    if [ -e /etc/apt/sources.list.d/raspi.sources ] || [ -e /etc/apt/sources.list.d/raspi.list ]; then echo "flavor=raspios"; else echo "flavor=debian"; fi;
+    echo "audit_lines=$(dpkg --audit 2>&1 | wc -l)";
+    echo "kernel=$(uname -r)";
+    if grep -qsw '{{ node_update_distro_target.codename }}'
+    /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources;
+    then echo "sources_target=true"; else echo "sources_target=false"; fi;
+    echo "pending=$(apt-get -s -o Debug::NoLocking=1 full-upgrade 2>/dev/null | grep -c '^Inst ' || true)";
+    echo "holds=$(apt-mark showhold | tr '\n' ' ')";
+    echo "root_free_mb=$(df --output=avail -m / | tail -1 | tr -d ' ')";
+    if dpkg-query -W -f='${db:Status-Status}' grub-pc 2>/dev/null | grep -qx installed; then echo "grub_pc=true"; else echo "grub_pc=false"; fi
+  args:
+    executable: /bin/bash
+  vars:
+    node_update_distro_target: "{{ node_update_distro_releases[node_update_distro_to_major | string] }}"
+  become: true
+  changed_when: false
+  register: node_update_distro_probe
+
+- name: "Distro: derive state [{{ k3s_node_name }}]"
+  ansible.builtin.set_fact:
+    node_update_distro_target: "{{ node_update_distro_releases[node_update_distro_to_major | string] }}"
+    node_update_distro_source: "{{ node_update_distro_releases[((node_update_distro_to_major | int) - 1) | string] }}"
+    node_update_distro_p: "{{ dict(node_update_distro_probe.stdout_lines | select('search', '=') | map('split', '=', 1)) }}"
+    node_update_distro_is_control_plane: "{{ node_update_k3s_service_name == 'k3s' }}"
+    node_update_distro_cordoned: "{{ node_update_node_cordoned_before }}"
+
+# "Done" is NOT just major>=target: base-files is upgraded early, so a run that
+# died mid full-upgrade already reports 13. Done means all of: major on target,
+# dpkg clean, nothing pending, running the target release's kernel (+debNN),
+# and the node schedulable again. Anything else on a target-sources node is a
+# resume.
+- name: "Distro: classify node [{{ k3s_node_name }}]"
+  ansible.builtin.set_fact:
+    node_update_distro_clean: >-
+      {{ (ansible_facts['distribution_major_version'] | int) >= (node_update_distro_to_major | int)
+         and node_update_distro_p.audit_lines | int == 0
+         and node_update_distro_p.pending | int == 0
+         and (node_update_distro_p.flavor == 'raspios' or ('+deb' ~ node_update_distro_to_major) in node_update_distro_p.kernel) }}
+
+- name: "Distro: done = clean and schedulable [{{ k3s_node_name }}]"
+  ansible.builtin.set_fact:
+    node_update_distro_done: "{{ (node_update_distro_clean | bool) and not (node_update_distro_cordoned | bool) }}"
+    node_update_distro_mode: >-
+      {{ 'resume' if ((ansible_facts['distribution_major_version'] | int) >= (node_update_distro_to_major | int)
+                      or node_update_distro_p.sources_target == 'true')
+         else ('fresh' if (ansible_facts['distribution_major_version'] | int) == (node_update_distro_to_major | int) - 1 else 'unsupported') }}
+
+- name: "Distro: already on the target release and clean, skipping [{{ k3s_node_name ~ ', ' ~ (node_update_distro_target.codename) }}]"
+  ansible.builtin.meta: end_host
+  when: node_update_distro_done | bool
+
+# Clean on the target but still cordoned (e.g. the run died after the post-boot
+# gates, or node_update_keep_cordoned): nothing left to upgrade, so no resume and no reboot.
+# node_update_distro_active stays unset and main.yml's uncordon-only pass takes over.
+- name: "Distro: clean on the target release but cordoned, only an uncordon is pending [{{ k3s_node_name ~ ', ' ~ (node_update_distro_target.codename) }}]"
+  ansible.builtin.debug:
+    msg: "{{ k3s_node_name }} is upgraded and clean but cordoned; skipping the upgrade, it will only be uncordoned."
+  when: node_update_distro_clean | bool
+
+- name: "Distro: checks and plan for a node with upgrade work [{{ k3s_node_name }}]"
+  when: not (node_update_distro_clean | bool)
+  block:
+    - name: "Distro: refuse unsupported states [{{ k3s_node_name }}]"
+      ansible.builtin.fail:
+        msg: >-
+          {{ k3s_node_name }}: {{
+            'Raspberry Pi OS in-place upgrades are not implemented (reflash with rpi-imager, then node_setup.yml; see wiki distro-upgrade page).'
+            if node_update_distro_p.flavor == 'raspios' else
+            'node is on Debian ' ~ ansible_facts['distribution_major_version'] ~ ', target is ' ~ node_update_distro_to_major
+            ~ '. The play never skips a release; upgrade one major at a time.' }}
+      when: node_update_distro_p.flavor == 'raspios' or node_update_distro_mode == 'unsupported'
+
+    - name: "Distro: refuse a fresh upgrade on an unclean bookworm-side system [{{ k3s_node_name }}]"
+      ansible.builtin.fail:
+        msg: >-
+          {{ k3s_node_name }} is not ready for a fresh
+          {{ node_update_distro_source.codename }} -> {{ node_update_distro_target.codename }} upgrade:
+          dpkg --audit lines={{ node_update_distro_p.audit_lines }},
+          pending {{ node_update_distro_source.codename }} upgrades={{ node_update_distro_p.pending }}
+          (run cluster_update.yml -e node_update_upgrade_k3s=false first so the two upgrades stay apart),
+          unexpected holds='{{ node_update_distro_p.holds }}',
+          root free={{ node_update_distro_p.root_free_mb }}MB (need {{ node_update_distro_min_free_root_mb }}).
+      when:
+        - node_update_distro_mode == 'fresh'
+        - not (node_update_dry_run | bool)
+        - (node_update_distro_p.audit_lines | int > 0)
+          or (node_update_distro_p.pending | int > 0)
+          or ((node_update_distro_p.holds | trim).split() | difference(node_update_distro_hold_packages) | length > 0)
+          or (node_update_distro_p.root_free_mb | int < node_update_distro_min_free_root_mb | int)
+
+    - name: "Distro: BIOS grub-pc needs a recorded install device (else debconf would prompt) [{{ k3s_node_name }}]"
+      ansible.builtin.shell: "set -o pipefail; debconf-show grub-pc | grep -E 'grub-pc/install_devices:' | grep -q '/dev/'"
+      args:
+        executable: /bin/bash
+      become: true
+      changed_when: false
+      when: node_update_distro_p.grub_pc == 'true'
+
+    - name: "Distro: network snapshot (primary iface, IP, gateway, DHCP client) [{{ k3s_node_name }}]"
+      # Primary NICs use `inet dhcp`. trixie's ifupdown prefers dhcpcd-base, whose
+      # DUID client-id can make the DHCP server hand out a NEW address, breaking
+      # k3s node-ip / etcd advertise URLs / DNS. Keeping isc-dhcp-client keeps the
+      # same client and lease; the post-boot gate checks the IP is unchanged.
+      ansible.builtin.shell: >
+        set -o pipefail;
+        dev=$(ip -4 route show default | awk '{for(i=1;i<=NF;i++) if($i=="dev"){print $(i+1); exit}}');
+        echo "iface=$dev";
+        echo "ip=$(ip -4 -o addr show dev "$dev" scope global | awk '{print $4}' | head -1)";
+        echo "gw=$(ip -4 route show default | awk '{print $3; exit}')";
+        if grep -Eqs "^\s*iface\s+$dev\s+inet\s+dhcp" /etc/network/interfaces /etc/network/interfaces.d/*; then echo "dhcp=true"; else echo "dhcp=false"; fi;
+        echo "networking=$(systemctl is-active networking 2>/dev/null)";
+        if dpkg-query -W -f='${db:Status-Status}' isc-dhcp-client 2>/dev/null | grep -qx installed; then echo "isc=true"; else echo "isc=false"; fi;
+        echo "links=$(ip -br link | awk '$1 !~ /^(lo|veth|cni|flannel|lxc|kube|vxlan|tunl|cali|docker)/ {print $1}' | sort | tr '\n' ' ')"
+      args:
+        executable: /bin/bash
+      become: true
+      changed_when: false
+      register: node_update_distro_net_probe
+
+    - name: "Distro: remember network snapshot [{{ k3s_node_name }}]"
+      ansible.builtin.set_fact:
+        node_update_distro_net_before: "{{ dict(node_update_distro_net_probe.stdout_lines | select('search', '=') | map('split', '=', 1)) }}"
+
+    - name: "Distro: DHCP continuity gate [{{ k3s_node_name }}]"
+      ansible.builtin.fail:
+        msg: >-
+          {{ k3s_node_name }}'s primary interface {{ node_update_distro_net_before.iface }} uses DHCP but isc-dhcp-client is
+          not installed, so trixie's ifupdown would use dhcpcd (different client-id, possibly a new IP).
+          Install isc-dhcp-client first, or confirm MAC-based reservations and pass -e node_update_distro_allow_dhcp_client_change=true.
+      when:
+        - node_update_distro_net_before.dhcp == 'true'
+        - node_update_distro_net_before.isc != 'true'
+        - not (node_update_distro_allow_dhcp_client_change | bool)
+
+    - name: "Distro: VM snapshot acknowledgement [{{ k3s_node_name }}]"
+      ansible.builtin.fail:
+        msg: "{{ k3s_node_name }} is a VM: take a hypervisor snapshot first, then re-run with -e node_update_distro_snapshot_taken=true."
+      when:
+        - ansible_facts['virtualization_role'] | default('') == 'guest'
+        - not (node_update_distro_snapshot_taken | bool)
+        - not (node_update_dry_run | bool)
+
+    - name: "Distro: control-plane prerequisites [{{ k3s_node_name }}]"
+      when: node_update_distro_is_control_plane | bool
+      block:
+        - name: "Distro: other nodes must already run the target release [{{ k3s_node_name }}]"
+          ansible.builtin.command: >
+            kubectl --context {{ node_update_kubectl_context }} get nodes
+            -o 'jsonpath={range .items[*]}{.metadata.name}={.status.nodeInfo.osImage}{"\n"}{end}'
+          delegate_to: localhost
+          become: false
+          changed_when: false
+          register: node_update_distro_cluster_os
+
+        - name: "Distro: refuse the control plane before the workers [{{ k3s_node_name }}]"
+          ansible.builtin.fail:
+            msg: >-
+              Control plane goes LAST. Not yet on Debian {{ node_update_distro_to_major }}:
+              {{ node_update_distro_cluster_os.stdout_lines | reject('search', '^' ~ k3s_node_name ~ '=')
+                 | reject('search', 'GNU/Linux ' ~ node_update_distro_to_major) | list }}.
+              Override with -e node_update_distro_allow_control_plane_first=true.
+          when:
+            - not (node_update_distro_allow_control_plane_first | bool)
+            - >-
+              node_update_distro_cluster_os.stdout_lines | reject('search', '^' ~ k3s_node_name ~ '=')
+              | reject('search', 'GNU/Linux ' ~ node_update_distro_to_major) | list | length > 0
+
+        - name: "Distro: off-node backup dir must be set, absolute, outside the repo and exist [{{ k3s_node_name }}]"
+          ansible.builtin.stat:
+            path: "{{ node_update_distro_offnode_backup_dir if node_update_distro_offnode_backup_dir | length > 0 else '/nonexistent' }}"
+          delegate_to: localhost
+          become: false
+          register: node_update_distro_offnode_stat
+
+        - name: "Distro: check off-node backup dir [{{ k3s_node_name }}]"
+          ansible.builtin.fail:
+            msg: >-
+              Control plane needs -e node_update_distro_offnode_backup_dir=/abs/path (existing directory on the controller,
+              e.g. a NAS mount, NOT inside this git repo). It receives the etcd snapshot, server token and
+              k3s config. Got '{{ node_update_distro_offnode_backup_dir }}'.
+          when:
+            - not (node_update_dry_run | bool)
+            - not node_update_distro_offnode_stat.stat.isdir | default(false)
+              or not node_update_distro_offnode_backup_dir.startswith('/')
+              or (node_update_distro_offnode_backup_dir | realpath).startswith((playbook_dir ~ '/../..') | realpath)
+
+    - name: "Distro: persist the inotify limits where trixie reads them (/etc/sysctl.d) [{{ k3s_node_name }}]"
+      # bookworm kept them in /etc/sysctl.conf, which Debian 13 no longer reads: after the
+      # first trixie boot they fall back to 128 instances and e.g. .NET file watchers die.
+      # Same task + values as node_setup.yml (roles/node_common); public so the
+      # post-boot gate sees the same inotify_* values.
+      ansible.builtin.include_role:
+        name: node_common
+        tasks_from: updateInotifyLimits
+        public: true
+      when: not (node_update_dry_run | bool)
+
+    - name: "Distro: simulate the upgrade (scratch apt dir under /tmp) [{{ k3s_node_name ~ ', ' ~ (node_update_distro_target.codename) }}]"
+      when:
+        - node_update_distro_simulate | bool
+        - node_update_distro_mode == 'fresh'
+      block:
+        - name: "Distro: scratch dir [{{ k3s_node_name }}]"
+          ansible.builtin.tempfile:
+            state: directory
+            prefix: distro-sim.
+          become: true
+          register: node_update_distro_sim_dir
+
+        - name: "Distro: scratch sources [{{ k3s_node_name }}]"
+          ansible.builtin.template:
+            src: debian.sources.j2
+            dest: "{{ node_update_distro_sim_dir.path }}/target.sources"
+            mode: "0644"
+          become: true
+
+        - name: "Distro: simulated full-upgrade [{{ k3s_node_name }}]"
+          ansible.builtin.shell: >
+            set -o pipefail;
+            d={{ node_update_distro_sim_dir.path }};
+            mkdir -p $d/parts $d/lists/partial $d/cache/archives/partial && mv $d/target.sources $d/parts/;
+            o="-o Dir::Etc::sourcelist=/dev/null -o Dir::Etc::sourceparts=$d/parts -o Dir::State::Lists=$d/lists -o Dir::Cache=$d/cache -o Debug::NoLocking=1";
+            apt-get $o -qq update >/dev/null &&
+            apt-get $o -s --no-install-recommends full-upgrade
+          args:
+            executable: /bin/bash
+          become: true
+          changed_when: false
+          register: node_update_distro_sim
+
+        - name: "Distro: simulation summary [{{ k3s_node_name }}]"
+          ansible.builtin.debug:
+            msg:
+              - "upgrade/install: {{ node_update_distro_sim.stdout_lines | select('match', '^Inst ') | list | length }},
+                remove: {{ node_update_distro_sim.stdout_lines | select('match', '^Remv ') | list | length }}"
+              - "kernel: {{ node_update_distro_sim.stdout_lines | select('match', '^Inst linux-image-')
+                | map('regex_replace', '^Inst (\\S+).*$', '\\1') | list }}"
+              - "watch-list (new multipath/dhcpcd/iptables would fail the real run):
+                {{ node_update_distro_sim.stdout_lines | select('match', '^Inst (multipath-tools|dhcpcd-base|iptables) ') | list }}"
+              - "removals: {{ node_update_distro_sim.stdout_lines | select('match', '^Remv ') | map('regex_replace', '^Remv (\\S+).*$', '\\1') | list }}"
+      always:
+        - name: "Distro: remove scratch dir [{{ k3s_node_name }}]"
+          ansible.builtin.file:
+            path: "{{ node_update_distro_sim_dir.path }}"
+            state: absent
+          become: true
+          when: node_update_distro_sim_dir.path is defined
+
+    - name: "Distro: plan [{{ k3s_node_name }}]"
+      ansible.builtin.debug:
+        msg: >-
+          {{ node_update_distro_mode | upper }} {{ node_update_distro_source.codename }} -> {{ node_update_distro_target.codename }} on {{ k3s_node_name }}
+          (kernel {{ node_update_distro_p.kernel }}, pending={{ node_update_distro_p.pending }}, dpkg audit lines={{ node_update_distro_p.audit_lines }},
+          primary {{ node_update_distro_net_before.iface }} {{ node_update_distro_net_before.ip }}
+          dhcp={{ node_update_distro_net_before.dhcp }} isc={{ node_update_distro_net_before.isc }}).
+          Real run: cordon+drain, backup /etc, {{ 'etcd snapshot + token/config off-node, ' if node_update_distro_is_control_plane | bool else '' }}deb822
+          sources, minimal then full upgrade (--no-install-recommends), kernel/boot gates, reboot, post-boot gates, uncordon,
+          Longhorn heal, soak {{ node_update_distro_soak_minutes }} min. k3s binary is NOT touched.
+
+    - name: "Distro: active [{{ k3s_node_name }}]"
+      ansible.builtin.set_fact:
+        node_update_distro_active: true

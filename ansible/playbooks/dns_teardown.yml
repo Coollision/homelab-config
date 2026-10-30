@@ -1,0 +1,29 @@
+---
+# Removes the per-node A/AAAA records (<inventory_hostname>.<zone>) that
+# playbooks/dns.yml creates. Formerly playbooks/node_teardown.yml (hosts: vm).
+# Control-plane records are handled by playbooks/k3s_teardown.yml.
+#
+# Run:  ansible-playbook playbooks/dns_teardown.yml --limit <node>
+- name: Teardown per-node DNS records
+  hosts: nodes
+  gather_facts: false
+  pre_tasks:
+    - name: Require an explicit --limit
+      ansible.builtin.assert:
+        that:
+          - ansible_limit is defined
+          - (ansible_limit | trim | length) > 0
+        fail_msg: "Pass --limit <node> to choose whose DNS records to remove."
+        quiet: true
+      run_once: true  # noqa: run-once[task] - plays use the default linear strategy
+  roles:
+    - role: dns_teardown
+      vars:
+        dns_teardown_record: "{{ inventory_hostname }}"
+        dns_teardown_record_value: "{{ host_ip_address }}"
+    - role: dns_teardown
+      vars:
+        dns_teardown_record: "{{ inventory_hostname }}"
+        dns_teardown_record_value: "{{ host_ipv6_address }}"
+        dns_teardown_record_type: "AAAA"
+      when: (host_ipv6_address | default('') | length) > 0

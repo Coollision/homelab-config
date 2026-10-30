@@ -1,0 +1,26 @@
+---
+# Controller-side kube context; follows roles/node_update's (so a single
+# -e node_update_kubectl_context=<ctx> covers both roles).
+cluster_wait_stable_kubectl_context: "{{ node_update_kubectl_context | default(k3s_cluster_name | default('k3s')) }}"
+
+cluster_wait_stable_stabilize_retries: 18
+cluster_wait_stable_stabilize_delay: 10          # seconds -> up to 3 min waiting for pods to settle
+
+# A reboot degrades every 3-replica volume that had a copy on that node (normal
+# on this 3-node cluster — see docs/cluster-update-playbook.md), and Longhorn
+# rate-limits how many replicas it rebuilds at once, so this needs a much more
+# patient budget than pod-settling. This is a hard barrier before the next
+# node starts, specifically so two nodes' rebuild I/O never overlaps — bump
+# these (-e cluster_wait_stable_longhorn_heal_retries=... -e cluster_wait_stable_longhorn_heal_delay=...) if a run
+# legitimately needs longer, rather than letting nodes overlap.
+cluster_wait_stable_longhorn_heal_retries: 120
+cluster_wait_stable_longhorn_heal_delay: 15      # seconds -> up to 30 min waiting for Longhorn to heal
+# A release upgrade drains for much longer (and the node is down longer), so the
+# rebuild backlog afterwards is bigger: the first real run hit the 30 min budget
+# with the node itself long healthy. Distro mode uses this many retries instead
+# (same delay) -> up to 2 h.
+cluster_wait_stable_distro_heal_retries: 480
+
+# Follows roles/node_update's node_update_distro_active (set_fact during a distro
+# upgrade; switches to cluster_wait_stable_distro_heal_retries).
+cluster_wait_stable_distro_active: "{{ node_update_distro_active | default(false) }}"

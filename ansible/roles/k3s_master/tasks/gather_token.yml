@@ -1,36 +1,19 @@
+---
 - name: Wait for node-token
   ansible.builtin.wait_for:
     path: "/var/lib/rancher/k3s/server/node-token"
 
-- name: Register node-token file access mode
-  ansible.builtin.stat:
-    path: "/var/lib/rancher/k3s/server/node-token"
-  register: p
-
-- name: Change file access node-token
-  ansible.builtin.file:
-    path: "/var/lib/rancher/k3s/server/node-token"
-    mode: "g+rx,o+rx"
-
 - name: Read node-token from master
   ansible.builtin.slurp:
     path: "/var/lib/rancher/k3s/server/node-token"
-  register: k3s_token
+  register: k3s_master_node_token
+  no_log: true
 
 - name: Validate node-token exists and is not empty
   ansible.builtin.fail:
     msg: "Node token is missing or empty. K3s may not be properly installed on master node."
   when:
-    - k3s_token.content is not defined or k3s_token.content | b64decode | trim == ""
-
-- name: Store Master node-token
-  ansible.builtin.set_fact:
-    token: "/var/lib/rancher/k3s/server/node-token"
-
-- name: Restore node-token file access
-  ansible.builtin.file:
-    path: "/var/lib/rancher/k3s/server/node-token"
-    mode: "{{ p.stat.mode }}"
+    - k3s_master_node_token.content is not defined or k3s_master_node_token.content | b64decode | trim == ""
 
 - name: Create kubectl symlink
   ansible.builtin.file:

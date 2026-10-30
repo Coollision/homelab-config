@@ -1,0 +1,85 @@
+{#- Single k3s config template for every node type so server/agent settings cannot drift.
+    Rendered by k3s_master (k3s_config_role = primary | secondary) and k3s_worker (agent).
+    Requires: k3s_node_name, host_ip_address, k3s_master_domain_name; k3s_token for secondary/agent. -#}
+{% set _server = k3s_config_role in ['primary', 'secondary'] %}
+{% set _metrics_ip = k3s_metrics_bind_address | default(host_ip_address) %}
+{% set _ext_ips = [host_ip_address] + ([host_ipv6_address] if (host_ipv6_address | default('') | length) > 0 else []) %}
+node-name: {{ k3s_node_name }}
+{% if k3s_config_role == 'primary' %}
+cluster-init: true
+{% else %}
+server: https://{{ k3s_master_domain_name }}:6443
+token: {{ k3s_token }}
+{% endif %}
+{% if _server %}
+write-kubeconfig-mode: "0600"
+{% endif %}
+
+node-external-ip: {{ _ext_ips | join(',') }}
+{% if _server %}
+flannel-backend: "vxlan"
+{% endif %}
+flannel-iface: "{{ k3s_flannel_iface | default('uplink0') }}"
+{% if _server %}
+flannel-external-ip: true
+
+disable:
+  - traefik
+  - servicelb
+
+tls-san:
+  - {{ k3s_master_domain_name }}
+{% endif %}
+
+{# longhorn=true on every node: Longhorn attaches volumes only via nodes running longhorn-manager,
+   so a node without it can't run any Longhorn-backed pod. Disks are opt-in via node.longhorn.io/create-default-disk. #}
+node-label:
+{% for label in (['longhorn=true'] + (k3s_node_label | default([]))) | unique %}
+  - "{{ label }}"
+{% endfor %}
+{% if k3s_node_taint | default([]) | length > 0 %}
+
+node-taint:
+{% for taint in k3s_node_taint %}
+  - "{{ taint }}"
+{% endfor %}
+{% endif %}
+
+kubelet-arg:
+  - "image-gc-high-threshold=65"
+  - "image-gc-low-threshold=60"
+  - "kube-reserved={{ k3s_kube_reserved | default('cpu=200m,memory=200Mi,ephemeral-storage=2Gi' if _server else 'cpu=100m,memory=100Mi,ephemeral-storage=2Gi') }}"
+  - "system-reserved={{ k3s_system_reserved | default('cpu=100m,memory=100Mi,ephemeral-storage=2Gi') }}"
+  - "eviction-hard=imagefs.available<5%,imagefs.inodesFree<3%,memory.available<500Mi,nodefs.available<5%,nodefs.inodesFree<3%,pid.available<5%"
+  - "max-pods={{ k3s_max_pods | default(90) }}"
+  - "node-status-update-frequency={{ k3s_node_status_update_frequency | default('10s') }}"
+{% if k3s_node_lease_duration_seconds is defined %}
+
+node-lease-duration-seconds: {{ k3s_node_lease_duration_seconds }}
+{% endif %}
+
+# Metrics endpoints bind to the node IP (not 0.0.0.0) so they are only reachable
+# on the node network that Prometheus scrapes.
+kube-proxy-arg:
+  - "metrics-bind-address={{ _metrics_ip }}:10249"
+{% if _server %}
+kube-controller-manager-arg:
+  - "bind-address={{ _metrics_ip }}"
+  - "node-monitor-grace-period=5m"
+kube-scheduler-arg:
+  - "bind-address={{ _metrics_ip }}"
+
+etcd-expose-metrics: true
+etcd-snapshot-compress: true
+
+# Keep etcd DB healthy: periodic compaction every 1h to avoid fragmentation.
+# listen-metrics-urls keeps loopback and adds the node IP instead of 0.0.0.0.
+etcd-arg:
+  - "auto-compaction-mode=periodic"
+  - "auto-compaction-retention=1h"
+  - "listen-metrics-urls=http://127.0.0.1:2381,http://{{ _metrics_ip }}:2381"
+
+disable-cloud-controller: true
+{% endif %}
+
+prefer-bundled-bin: true

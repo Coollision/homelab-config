@@ -1,0 +1,38 @@
+---
+# Drop the fallback once the node is verified. The old name is explicit on purpose
+# (no hidden state): -e uplink_legacy_name=<old>.
+- name: Uplink name - cleanup needs the old name
+  ansible.builtin.assert:
+    that: uplink_legacy_name is defined and uplink_legacy_name | length > 0
+    fail_msg: "Pass -e uplink_legacy_name=<old NIC name>."
+
+- name: Uplink name - the node must already run on the new name
+  ansible.builtin.include_tasks: verify.yml
+
+# The iface line plus its indented option lines (hwaddress, post-up, ...);
+# the allow-hotplug/auto line is removed by the next task.
+- name: Uplink name - remove the old ifupdown iface block
+  ansible.builtin.replace:
+    path: /etc/network/interfaces
+    regexp: '^iface {{ uplink_legacy_name | regex_escape }}(?:[ \t][^\n]*)?\n(?:[ \t]+[^\n]*(?:\n|\Z))*'
+    replace: ''
+
+- name: Uplink name - remove the old ifupdown allow-hotplug/auto line
+  ansible.builtin.lineinfile:
+    path: /etc/network/interfaces
+    regexp: '^(allow-hotplug|auto|iface) {{ uplink_legacy_name }}( |$)'
+    state: absent
+
+- name: Uplink name - remove the old NetworkManager wired profile
+  ansible.builtin.shell: |
+    set -o pipefail
+    command -v nmcli >/dev/null || exit 0
+    for c in $(nmcli -t -f NAME,TYPE connection show | awk -F: '$2=="802-3-ethernet" {print $1}'); do
+      if [ "$(nmcli -g connection.interface-name connection show "$c")" = "{{ uplink_legacy_name }}" ]; then
+        nmcli connection delete "$c"; echo changed
+      fi
+    done
+  args:
+    executable: /bin/bash
+  register: uplink_name_nm_clean
+  changed_when: "'changed' in uplink_name_nm_clean.stdout"

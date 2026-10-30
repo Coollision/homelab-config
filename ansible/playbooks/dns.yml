@@ -35,12 +35,14 @@
     - role: dns
       vars:
         dns_set_record: "{{ k3s_master_domain_name }}"
-        dns_set_record_value: "{% set hostIps = []%}{% for host in ansible_play_hosts %}{{ hostIps.append(hostvars[host].host_ip_address) }}{% endfor %}{{hostIps}}"
+        dns_set_record_value: "{{ ansible_play_hosts | map('extract', hostvars, 'host_ip_address') | list }}"
       run_once: true
     - role: dns
       vars:
         dns_set_record: "{{ k3s_master_domain_name }}"
-        dns_set_record_value: "{% set hostIps = []%}{% for host in ansible_play_hosts %}{% if (hostvars[host].host_ipv6_address | default('') | length) > 0 %}{{ hostIps.append(hostvars[host].host_ipv6_address) }}{% endif %}{% endfor %}{{hostIps}}"
+        dns_set_record_value: >-
+          {{ ansible_play_hosts | map('extract', hostvars) | selectattr('host_ipv6_address', 'defined')
+             | map(attribute='host_ipv6_address') | select | list }}
         dns_record_type: "AAAA"
       when: (hostvars[k3s_primary_master].host_ipv6_address | default('') | length) > 0
       run_once: true

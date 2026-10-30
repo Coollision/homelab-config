@@ -1,0 +1,25 @@
+---
+# No-change smoke test for the Intel iGPU (render node + vainfo profiles).
+# Run after any kernel update: ansible-playbook playbooks/gpu_check.yml
+# The vainfo part needs internet on the node (pulls node_update_intel_gpu_check_image and
+# apt-installs vainfo inside it); offline: -e node_update_intel_gpu_check_vainfo=false.
+# Same detection as roles/node_update (Intel PCI vendor, VGA or Display class).
+- name: Intel iGPU check
+  hosts: k3scluster
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Detect Intel iGPU
+      ansible.builtin.shell: "set -o pipefail; lspci -nn -d 8086: 2>/dev/null | grep -Ei 'VGA|Display' || true"
+      args:
+        executable: /bin/bash
+      register: igpu
+      changed_when: false
+    - name: Remember result
+      ansible.builtin.set_fact:
+        node_update_intel_gpu_present: "{{ igpu.stdout | length > 0 }}"
+    - name: Check hosts that expect an iGPU
+      ansible.builtin.include_role:
+        name: node_update
+        tasks_from: gpu_check
+      when: node_update_intel_gpu_present | default(false) | bool

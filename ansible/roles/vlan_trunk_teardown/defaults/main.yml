@@ -1,0 +1,7 @@
+---
+# Each setting follows the vlan_trunk role's variable (same inventory drives setup
+# and teardown); override the teardown_* name only to diverge for a teardown run.
+vlan_trunk_teardown_interfaces: "{{ vlan_trunk_interfaces | default([]) }}"
+vlan_trunk_teardown_validate_network_manager: "{{ vlan_trunk_validate_network_manager | default(true) }}"
+vlan_trunk_teardown_expected_network_manager: "{{ vlan_trunk_expected_network_manager | default('auto') }}"
+vlan_trunk_teardown_fail_when_networkmanager_active: "{{ vlan_trunk_fail_when_networkmanager_active | default(true) }}"

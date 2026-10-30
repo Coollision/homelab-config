@@ -1,12 +1,15 @@
 ---
-host_ip_address: 123.456.789.123
+host_ip_address: 192.0.2.20
 host_ipv6_address: "2001:db8::20"
 ansible_user: user
-dns_record_name: node-r.pi
+dns_record_name: node-r.example.internal
 dns_record_value: "{{ host_ip_address }}"
 ansible_python_interpreter: /usr/bin/python3
 
 k3s_node_name: worker-r
+
+# Every node pins its primary NIC to this name (role uplink_name).
+k3s_flannel_iface: uplink0
 
 k3s_node_label:
   - kubefledged.io/cache=true

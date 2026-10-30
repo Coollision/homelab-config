@@ -1,6 +1,8 @@
 ---
+# Adds ssh_public_key to the ansible user's authorized_keys.
+# Rotation (drop all other keys): -e setup_ssh_key_exclusive=true
 - name: Setup SSH keys on nodes
   hosts: nodes
-  gather_facts: yes # Ensure hostname is available
+  gather_facts: false
   roles:
-    - setup-ssh-key
+    - setup_ssh_key

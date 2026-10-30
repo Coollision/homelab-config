@@ -1,0 +1,12 @@
+[Journal]
+# Limit journal disk usage to prevent k3s disk pressure events
+SystemMaxUse={{ journald_config_system_max_use }}
+SystemKeepFree={{ journald_config_system_keep_free }}
+SystemMaxFileSize={{ journald_config_system_max_file_size }}
+MaxRetentionSec={{ journald_config_max_retention_sec }}
+
+# Forward to syslog for compatibility (optional)
+ForwardToSyslog=no
+
+# Compress logs to save space
+Compress=yes

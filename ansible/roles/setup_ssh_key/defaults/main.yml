@@ -1,0 +1,4 @@
+---
+# ssh_public_key has no default on purpose: set it in the private inventory.
+# true = remove all other keys from authorized_keys (lockout risk, opt-in only).
+setup_ssh_key_exclusive: false

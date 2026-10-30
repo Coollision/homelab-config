@@ -1,0 +1,9 @@
+auto {{ item.interface_name }}
+iface {{ item.interface_name }} inet manual
+    vlan-raw-device {{ item.parent_interface }}
+{% if not (vlan_trunk_ra_default_route | bool) %}
+    post-up sysctl -qw net.ipv6.conf.{{ item.interface_name }}.accept_ra_defrtr=0 && ip -6 route del default dev {{ item.interface_name }} 2>/dev/null || true
+{% endif %}
+{% if (vlan_trunk_enable_thread_ipv6 | bool) and item.interface_name in vlan_trunk_thread_interfaces %}
+    post-up sysctl -qw net.ipv6.conf.{{ item.interface_name }}.accept_ra=1 net.ipv6.conf.{{ item.interface_name }}.accept_ra_rt_info_max_plen=64
+{% endif %}

@@ -1,0 +1,203 @@
+---
+- name: Build VLAN trunk interface list
+  ansible.builtin.set_fact:
+    vlan_trunk_teardown_interfaces_raw: >-
+      {{
+        vlan_trunk_teardown_interfaces
+        if (vlan_trunk_teardown_interfaces | default([]) | length > 0)
+        else ([{"id": vlan_id, "parent_interface": vlan_parent_interface}]
+          if (vlan_id is defined and vlan_parent_interface is defined)
+          else [])
+      }}
+
+- name: Normalize VLAN trunk interface list
+  ansible.builtin.set_fact:
+    vlan_trunk_teardown_interfaces: []
+
+- name: Add default logical interface names
+  ansible.builtin.set_fact:
+    vlan_trunk_teardown_interfaces: >-
+      {{ vlan_trunk_teardown_interfaces
+         + [item | combine({'interface_name': (item.interface_name | default('vlan' ~ (item.id | string)))})] }}
+  loop: "{{ vlan_trunk_teardown_interfaces_raw }}"
+  loop_control:
+    label: "{{ item.parent_interface }} -> {{ item.interface_name | default('vlan' ~ (item.id | string)) }}"
+
+- name: Gather service facts for network manager validation
+  ansible.builtin.service_facts:
+  when:
+    - vlan_trunk_teardown_interfaces | length > 0
+    - vlan_trunk_teardown_validate_network_manager | bool
+
+- name: Validate expected network manager setting
+  ansible.builtin.assert:
+    that:
+      - vlan_trunk_teardown_expected_network_manager in ["auto", "systemd-networkd", "ifupdown", "NetworkManager"]
+    fail_msg: >-
+      Unsupported vlan_trunk_teardown_expected_network_manager={{ vlan_trunk_teardown_expected_network_manager }}.
+      Supported values: auto, systemd-networkd, ifupdown, NetworkManager.
+  when:
+    - vlan_trunk_teardown_interfaces | length > 0
+    - vlan_trunk_teardown_validate_network_manager | bool
+
+# Detection looks at EVERY parent interface, not just the first VLAN's:
+# ifupdown if any parent has an ifupdown stanza, systemd-networkd only if
+# every parent is managed by networkd.
+- name: Check whether a parent interface is configured by ifupdown
+  ansible.builtin.shell: >
+    set -o pipefail;
+    grep -RqsE
+    '(^|[[:space:]])(allow-hotplug|auto|iface)[[:space:]]+({{ _parents_re }})([[:space:]]|$)'
+    /etc/network/interfaces /etc/network/interfaces.d/
+  args:
+    executable: /bin/bash
+  vars:
+    _parents_re: "{{ vlan_trunk_teardown_interfaces | map(attribute='parent_interface') | unique | join('|') }}"
+  register: vlan_trunk_teardown_ifupdown_parent
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - vlan_trunk_teardown_interfaces | length > 0
+    - vlan_trunk_teardown_validate_network_manager | bool
+
+- name: Inspect parent interfaces with networkctl
+  ansible.builtin.shell: >
+    set -o pipefail;
+    rc=0;
+    for p in {{ vlan_trunk_teardown_interfaces | map(attribute='parent_interface') | unique | join(' ') }}; do
+    out=$(networkctl status "$p" 2>/dev/null) || { echo "$p missing"; rc=1; continue; };
+    echo "$out" | grep -qi unmanaged && { echo "$p unmanaged"; rc=1; }; done;
+    exit $rc
+  args:
+    executable: /bin/bash
+  register: vlan_trunk_teardown_parent_networkctl
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - vlan_trunk_teardown_interfaces | length > 0
+    - vlan_trunk_teardown_validate_network_manager | bool
+
+- name: Detect active network manager
+  ansible.builtin.set_fact:
+    vlan_trunk_teardown_active_network_manager: >-
+      {%- if vlan_trunk_teardown_expected_network_manager != 'auto' -%}
+      {{ vlan_trunk_teardown_expected_network_manager }}{%- elif vlan_trunk_teardown_ifupdown_parent.rc == 0 -%}
+      ifupdown{%- elif vlan_trunk_teardown_parent_networkctl.rc == 0 -%}
+      systemd-networkd{%- elif 'NetworkManager.service' in ansible_facts.services and ansible_facts.services['NetworkManager.service'].state == 'running' -%}
+      NetworkManager{%- else -%}
+      unknown{%- endif -%}
+  when:
+    - vlan_trunk_teardown_interfaces | length > 0
+    - vlan_trunk_teardown_validate_network_manager | bool
+
+- name: Fail when NetworkManager is active
+  ansible.builtin.fail:
+    msg: "NetworkManager is active. Disable it or set vlan_trunk_teardown_fail_when_networkmanager_active=false if you intentionally run both managers."
+  when:
+    - vlan_trunk_teardown_interfaces | length > 0
+    - vlan_trunk_teardown_validate_network_manager | bool
+    - vlan_trunk_teardown_fail_when_networkmanager_active | bool
+    - "'NetworkManager.service' in ansible_facts.services"
+    - ansible_facts.services['NetworkManager.service'].state == 'running'
+    - vlan_trunk_teardown_active_network_manager not in ['ifupdown', 'NetworkManager']
+
+- name: Fail when no supported network manager is active
+  ansible.builtin.fail:
+    msg: "Could not detect a supported network manager for VLAN trunk interfaces. Detected={{ vlan_trunk_teardown_active_network_manager }}"
+  when:
+    - vlan_trunk_teardown_interfaces | length > 0
+    - vlan_trunk_teardown_validate_network_manager | bool
+    - vlan_trunk_teardown_active_network_manager not in ['ifupdown', 'systemd-networkd', 'NetworkManager']
+
+# NetworkManager branch: mirror of vlan_trunk's nmcli logic. Deleting the
+# connection also removes the VLAN device NM created for it.
+- name: Delete VLAN connections on NetworkManager-managed hosts
+  become: true
+  ansible.builtin.shell: |
+    set -eo pipefail
+    name={{ item.interface_name }}
+    if nmcli -g NAME connection show | grep -qx "$name"; then
+      nmcli connection delete "$name"
+      echo changed
+    fi
+  args:
+    executable: /bin/bash
+  register: vlan_trunk_teardown_nm_delete
+  changed_when: "'changed' in vlan_trunk_teardown_nm_delete.stdout"
+  loop: "{{ vlan_trunk_teardown_interfaces }}"
+  loop_control:
+    label: "{{ item.parent_interface }} -> {{ item.interface_name }}"
+  when:
+    - vlan_trunk_teardown_interfaces | length > 0
+    - vlan_trunk_teardown_active_network_manager == 'NetworkManager'
+
+- name: Bring VLAN sub-interfaces down via ifupdown
+  become: true
+  ansible.builtin.command: ifdown {{ item.interface_name }}
+  changed_when: false
+  failed_when: false
+  loop: "{{ vlan_trunk_teardown_interfaces }}"
+  loop_control:
+    label: "{{ item.parent_interface }} -> {{ item.interface_name }}"
+  when:
+    - vlan_trunk_teardown_interfaces | length > 0
+    - vlan_trunk_teardown_active_network_manager == 'ifupdown'
+
+- name: Bring VLAN sub-interfaces down
+  become: true
+  ansible.builtin.command: >
+    ip link set {{ item.interface_name }} down
+  changed_when: false
+  failed_when: false
+  loop: "{{ vlan_trunk_teardown_interfaces }}"
+  loop_control:
+    label: "{{ item.parent_interface }} -> {{ item.interface_name }}"
+  when: vlan_trunk_teardown_interfaces | length > 0
+
+- name: Remove ifupdown interface files
+  become: true
+  ansible.builtin.file:
+    path: "/etc/network/interfaces.d/40-vlan{{ item.id }}"
+    state: absent
+  loop: "{{ vlan_trunk_teardown_interfaces }}"
+  loop_control:
+    label: "{{ item.parent_interface }} -> {{ item.interface_name }}"
+  when:
+    - vlan_trunk_teardown_interfaces | length > 0
+    - vlan_trunk_teardown_active_network_manager == 'ifupdown'
+
+- name: Delete VLAN sub-interfaces
+  become: true
+  ansible.builtin.command: >
+    ip link delete {{ item.interface_name }}
+  register: vlan_trunk_teardown_link_delete
+  changed_when: vlan_trunk_teardown_link_delete.rc == 0
+  failed_when: false
+  loop: "{{ vlan_trunk_teardown_interfaces }}"
+  loop_control:
+    label: "{{ item.parent_interface }} -> {{ item.interface_name }}"
+  when: vlan_trunk_teardown_interfaces | length > 0
+
+- name: Remove systemd-networkd .network files
+  become: true
+  ansible.builtin.file:
+    path: "/etc/systemd/network/41-vlan{{ item.id }}.network"
+    state: absent
+  loop: "{{ vlan_trunk_teardown_interfaces }}"
+  loop_control:
+    label: "{{ item.parent_interface }} -> {{ item.interface_name }}"
+  notify: Reload networkd
+  when: vlan_trunk_teardown_interfaces | length > 0
+
+- name: Remove systemd-networkd .netdev files
+  become: true
+  ansible.builtin.file:
+    path: "/etc/systemd/network/40-vlan{{ item.id }}.netdev"
+    state: absent
+  loop: "{{ vlan_trunk_teardown_interfaces }}"
+  loop_control:
+    label: "{{ item.parent_interface }} -> {{ item.interface_name }}"
+  notify: Reload networkd
+  when: vlan_trunk_teardown_interfaces | length > 0

@@ -4,9 +4,9 @@
 # BOTH the OS/kernel dist-upgrade and the k3s binary bump — no double
 # eviction of pods for two separate passes.
 #
-# Safe by default: dry_run defaults to true, so a plain run only reports
+# Safe by default: node_update_dry_run defaults to true, so a plain run only reports
 # what apt/k3s would change, plus any bare-pod/PDB drain blockers — nothing
-# is cordoned, drained, upgraded or rebooted. Pass -e dry_run=false to apply.
+# is cordoned, drained, upgraded or rebooted. Pass -e node_update_dry_run=false to apply.
 #
 # Node order: master first, then workers. With only one control-plane node
 # there's no HA benefit to doing workers first anymore now that the k3s
@@ -18,37 +18,63 @@
 #     ansible-playbook playbooks/cluster_update.yml
 #
 #   Real run, everything:
-#     ansible-playbook playbooks/cluster_update.yml -e dry_run=false
+#     ansible-playbook playbooks/cluster_update.yml -e node_update_dry_run=false
 #
 #   Real run, OS/kernel packages only (skip the k3s version bump):
-#     ansible-playbook playbooks/cluster_update.yml -e dry_run=false -e upgrade_k3s=false
+#     ansible-playbook playbooks/cluster_update.yml -e node_update_dry_run=false -e node_update_upgrade_k3s=false
 #
 #   Real run, k3s binary only (skip OS packages):
-#     ansible-playbook playbooks/cluster_update.yml -e dry_run=false -e patch_os=false
+#     ansible-playbook playbooks/cluster_update.yml -e node_update_dry_run=false -e node_update_patch_os=false
 #
 #   Test against a single node first:
-#     ansible-playbook playbooks/cluster_update.yml -e dry_run=false --limit node-blue
+#     ansible-playbook playbooks/cluster_update.yml -e node_update_dry_run=false --limit <node>
 #
 #   A stuck drain (bare pod with no controller) is refused, NOT forced, and
 #   the node is automatically uncordoned again on failure — see roles/node_update.
-#   Only pass -e force_drain=true once you've confirmed those pods are fine
+#   Only pass -e node_update_force_drain=true once you've confirmed those pods are fine
 #   to lose permanently.
 #
 # If nothing is pending on a node (OS already current AND k3s already on
-# k3s_target_version) that node is skipped entirely — it is never cordoned
-# for a no-op.
+# k3s_version) that node is skipped entirely: it is never cordoned for a
+# no-op. Exception: a node that is already cordoned (e.g. a previous
+# node_update_keep_cordoned run) gets an uncordon-only pass instead of staying cordoned.
 #
-# After a successful non-dry-run run: bump k3s_pre_version in
-# playbooks/k3s_setup.yml to match k3s_target_version below, so fresh node
-# installs stay in sync with the running cluster.
+# k3s_version lives in the private inventory group_vars and is shared with
+# k3s_setup.yml, so fresh installs and upgrades always agree; bump it there.
+# kubectl runs on the controller against -e node_update_kubectl_context=<ctx> (default:
+# the host's k3s_cluster_name, else "k3s").
+#
+# Real runs take the cluster-side maintenance lock (ConfigMap
+# kube-system/homelab-node-maintenance-lock), shared with distro_upgrade.yml,
+# so the two can never run at once. Released only on success; after a
+# failure check the nodes, then re-run with -e maint_lock_break=true.
+#
+# A Debian release upgrade is a separate playbook (distro_upgrade.yml). A k3s
+# version bump is never done inside the distro-upgrade drain: run it here as
+# its own pass, before or after the distro upgrade.
+
+- name: "Cluster update - lock"
+  hosts: k3scluster
+  gather_facts: false
+  tasks:
+    - name: Take the maintenance lock
+      ansible.builtin.include_role:
+        name: node_update
+        tasks_from: maint_lock
+        apply:
+          delegate_to: localhost
+          run_once: true  # noqa: run-once[task] -- plays use the default linear strategy
+      vars:
+        node_update_maint_lock_action: acquire
+        node_update_maint_lock_playbook: cluster_update
+      run_once: true  # noqa: run-once[task] -- plays use the default linear strategy
+      when: not (node_update_dry_run | default(true) | bool)
 
 - name: "Cluster update - master (server first)"
   hosts: k3smaster
   become: true
   serial: 1
   any_errors_fatal: true
-  vars:
-    k3s_service_name: k3s
   roles:
     - node_update
 
@@ -57,21 +83,22 @@
   become: true
   serial: 1
   any_errors_fatal: true
-  vars:
-    k3s_service_name: k3s-node
   roles:
     - node_update
 
-- name: "Cluster update - reminder"
-  hosts: localhost
-  connection: local
+- name: "Cluster update - release lock"
+  hosts: k3scluster
   gather_facts: false
   tasks:
-    - name: Reminder to pin the new k3s version for fresh installs
-      ansible.builtin.debug:
-        msg: >-
-          If this was a real (non-dry-run) run: update k3s_pre_version in
-          playbooks/k3s_setup.yml to {{ hostvars[groups['k3smaster'][0]]['k3s_target_version']
-          | default('the target version') }} so future node_setup runs match
-          the cluster.
-      when: not (dry_run | default(true) | bool)
+    - name: Release the maintenance lock
+      ansible.builtin.include_role:
+        name: node_update
+        tasks_from: maint_lock
+        apply:
+          delegate_to: localhost
+          run_once: true  # noqa: run-once[task] -- plays use the default linear strategy
+      vars:
+        node_update_maint_lock_action: release
+        node_update_maint_lock_playbook: cluster_update
+      run_once: true  # noqa: run-once[task] -- plays use the default linear strategy
+      when: not (node_update_dry_run | default(true) | bool)

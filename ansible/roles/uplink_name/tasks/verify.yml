@@ -1,0 +1,43 @@
+---
+# Read-only, after the reboot. Fails loudly instead of letting the next node go.
+- name: Uplink name - primary NIC is now the new name
+  ansible.builtin.shell: set -o pipefail; ip -o -4 route show default | awk '{print $5}' | sort -u
+  args:
+    executable: /bin/bash
+  register: uplink_name_now
+  changed_when: false
+  check_mode: false
+
+- name: Uplink name - default route runs over the new name
+  ansible.builtin.assert:
+    that: uplink_name_now.stdout_lines == [uplink_name_iface]
+    fail_msg: >-
+      Default route is on {{ uplink_name_now.stdout_lines }}, expected {{ uplink_name_iface }}.
+      The fallback config brought the old name up; check the .link file, stay on this node.
+
+- name: Uplink name - node address unchanged, VLAN sub-interfaces on the new parent, flannel on the new name
+  ansible.builtin.shell: |
+    set -o pipefail
+    ip -o -4 addr show dev {{ uplink_name_iface }} scope global | awk '{print $4}'
+    echo ---
+    ip -o link show type vlan | awk -F': ' '{print $2}'
+    echo ---
+    ip -d link show flannel.1 2>/dev/null | grep -o 'dev [^ ]*' | head -1
+  args:
+    executable: /bin/bash
+  register: uplink_name_state
+  changed_when: false
+  check_mode: false
+  retries: 12
+  delay: 10
+  until: "'dev ' ~ uplink_name_iface in uplink_name_state.stdout"
+
+- name: Uplink name - assertions
+  ansible.builtin.assert:
+    that:
+      - host_ip_address is not defined or (host_ip_address ~ '/') in uplink_name_state.stdout
+      - >-
+        (vlan_trunk_interfaces | default([])) | map(attribute='interface_name')
+        | map('regex_replace', '$', '@' ~ uplink_name_iface)
+        | difference(uplink_name_state.stdout_lines) | length == 0
+    fail_msg: "Unexpected state after the rename: {{ uplink_name_state.stdout_lines }}"

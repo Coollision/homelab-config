@@ -1,0 +1,39 @@
+# Overridable per host/group (was vars/main.yml, which beats inventory vars).
+
+# Lines set in /boot/firmware/config.txt (key=value). Changes notify a reboot.
+rpi_common_config_txt:
+  arm_freq: 2000
+  over_voltage: 5
+  gpu_mem: 16
+
+# Arguments kept in /boot/firmware/cmdline.txt.
+#   replace: true  -> any existing value of this key is replaced by this value
+#   replace: false -> key=value is only added when missing (keys like
+#                     cgroup_enable that legitimately appear several times)
+rpi_common_cmdline_txt:
+  - key: cgroup_disable
+    value: none
+    replace: true
+  - key: cgroup_enable
+    value: memory
+    replace: false
+  - key: cgroup_enable
+    value: cpu
+    replace: false
+  - key: cgroup_enable
+    value: cpuset
+    replace: false
+  - key: cgroup_memory
+    value: 1
+    replace: true
+  - key: swapaccount
+    value: 1
+    replace: true
+
+# Aliases added to the connecting user's ~/.bashrc (on top of node_common's).
+rpi_common_bash_aliases:
+  gettemp: "'vcgencmd measure_temp'"
+  watch: "'watch -n 0.5'"
+  wtemp: "'watch vcgencmd measure_temp'"
+  wcpu: "'watch vcgencmd measure_clock arm'"
+  wthrot: "'watch vcgencmd get_throttled'"

@@ -1,0 +1,353 @@
+---
+- name: Load 8021q kernel module
+  become: true
+  community.general.modprobe:
+    name: 8021q
+    state: present
+    persistent: present
+
+- name: Build VLAN trunk interface list
+  ansible.builtin.set_fact:
+    _vlan_trunk_interfaces_raw: >-
+      {{
+        vlan_trunk_interfaces
+        if (vlan_trunk_interfaces | default([]) | length > 0)
+        else ([{"id": vlan_id, "parent_interface": vlan_parent_interface}]
+          if (vlan_id is defined and vlan_parent_interface is defined)
+          else [])
+      }}
+
+- name: Normalize VLAN trunk interface list
+  ansible.builtin.set_fact:
+    _vlan_trunk_interfaces: []
+
+- name: Add default logical interface names
+  ansible.builtin.set_fact:
+    _vlan_trunk_interfaces: "{{ _vlan_trunk_interfaces + [ item | combine({'interface_name': (item.interface_name | default('vlan' ~ (item.id | string)))}) ] }}"
+  loop: "{{ _vlan_trunk_interfaces_raw }}"
+  loop_control:
+    label: "{{ item.parent_interface }} -> {{ item.interface_name | default('vlan' ~ (item.id | string)) }}"
+
+- name: Install vlan tools
+  become: true
+  ansible.builtin.apt:
+    name: vlan
+    state: present
+    cache_valid_time: 600
+  when: _vlan_trunk_interfaces | length > 0
+
+- name: Gather service facts for network manager validation
+  ansible.builtin.service_facts:
+  when:
+    - _vlan_trunk_interfaces | length > 0
+    - vlan_trunk_validate_network_manager | bool
+
+- name: Validate expected network manager setting
+  ansible.builtin.assert:
+    that:
+      - vlan_trunk_expected_network_manager in ["auto", "systemd-networkd", "ifupdown", "NetworkManager"]
+    fail_msg: >-
+      Unsupported vlan_trunk_expected_network_manager={{ vlan_trunk_expected_network_manager }}.
+      Supported values: auto, systemd-networkd, ifupdown, NetworkManager.
+  when:
+    - _vlan_trunk_interfaces | length > 0
+    - vlan_trunk_validate_network_manager | bool
+
+# Detection looks at EVERY parent interface, not just the first VLAN's:
+# ifupdown if any parent has an ifupdown stanza, systemd-networkd only if
+# every parent is managed by networkd.
+- name: Check whether a parent interface is configured by ifupdown
+  ansible.builtin.shell: >
+    set -o pipefail;
+    grep -RqsE
+    '(^|[[:space:]])(allow-hotplug|auto|iface)[[:space:]]+({{ _parents_re }})([[:space:]]|$)'
+    /etc/network/interfaces /etc/network/interfaces.d/
+  args:
+    executable: /bin/bash
+  vars:
+    _parents_re: "{{ _vlan_trunk_interfaces | map(attribute='parent_interface') | unique | join('|') }}"
+  register: _vlan_trunk_ifupdown_parent
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - _vlan_trunk_interfaces | length > 0
+    - vlan_trunk_validate_network_manager | bool
+
+- name: Inspect parent interfaces with networkctl
+  ansible.builtin.shell: >
+    set -o pipefail;
+    rc=0;
+    for p in {{ _vlan_trunk_interfaces | map(attribute='parent_interface') | unique | join(' ') }}; do
+    out=$(networkctl status "$p" 2>/dev/null) || { echo "$p missing"; rc=1; continue; };
+    echo "$out" | grep -qi unmanaged && { echo "$p unmanaged"; rc=1; }; done;
+    exit $rc
+  args:
+    executable: /bin/bash
+  register: _vlan_trunk_parent_networkctl
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - _vlan_trunk_interfaces | length > 0
+    - vlan_trunk_validate_network_manager | bool
+
+- name: Detect active network manager
+  ansible.builtin.set_fact:
+    _vlan_trunk_active_network_manager: >-
+      {%- if vlan_trunk_expected_network_manager != 'auto' -%}
+      {{ vlan_trunk_expected_network_manager }}{%- elif _vlan_trunk_ifupdown_parent.rc == 0 -%}
+      ifupdown{%- elif _vlan_trunk_parent_networkctl.rc == 0 -%}
+      systemd-networkd{%- elif 'NetworkManager.service' in ansible_facts.services and ansible_facts.services['NetworkManager.service'].state == 'running' -%}
+      NetworkManager{%- else -%}
+      unknown{%- endif -%}
+  when:
+    - _vlan_trunk_interfaces | length > 0
+    - vlan_trunk_validate_network_manager | bool
+
+- name: Fail when NetworkManager is active
+  ansible.builtin.fail:
+    msg: "NetworkManager is active. Disable it or set vlan_trunk_fail_when_networkmanager_active=false if you intentionally run both managers."
+  when:
+    - _vlan_trunk_interfaces | length > 0
+    - vlan_trunk_validate_network_manager | bool
+    - vlan_trunk_fail_when_networkmanager_active | bool
+    - "'NetworkManager.service' in ansible_facts.services"
+    - ansible_facts.services['NetworkManager.service'].state == 'running'
+    - _vlan_trunk_active_network_manager not in ['ifupdown', 'NetworkManager']
+
+- name: Fail when no supported network manager is active
+  ansible.builtin.fail:
+    msg: "Could not detect a supported network manager for VLAN trunk interfaces. Detected={{ _vlan_trunk_active_network_manager }}"
+  when:
+    - _vlan_trunk_interfaces | length > 0
+    - vlan_trunk_validate_network_manager | bool
+    - _vlan_trunk_active_network_manager not in ['ifupdown', 'systemd-networkd', 'NetworkManager']
+
+- name: Ensure systemd-networkd is enabled and running
+  become: true
+  ansible.builtin.systemd:
+    name: systemd-networkd
+    enabled: true
+    state: started
+  when:
+    - _vlan_trunk_interfaces | length > 0
+    - _vlan_trunk_active_network_manager == 'systemd-networkd'
+
+- name: Deploy systemd-networkd .netdev files
+  become: true
+  ansible.builtin.template:
+    src: vlan.netdev.j2
+    dest: "/etc/systemd/network/40-vlan{{ item.id }}.netdev"
+    owner: root
+    group: systemd-network
+    mode: "0640"
+  loop: "{{ _vlan_trunk_interfaces }}"
+  loop_control:
+    label: "{{ item.parent_interface }} -> {{ item.interface_name }}"
+  notify: Reload networkd
+  when:
+    - _vlan_trunk_interfaces | length > 0
+    - _vlan_trunk_active_network_manager == 'systemd-networkd'
+
+- name: Deploy systemd-networkd .network files
+  become: true
+  ansible.builtin.template:
+    src: vlan.network.j2
+    dest: "/etc/systemd/network/41-vlan{{ item.id }}.network"
+    owner: root
+    group: systemd-network
+    mode: "0640"
+  loop: "{{ _vlan_trunk_interfaces }}"
+  loop_control:
+    label: "{{ item.parent_interface }} -> {{ item.interface_name }}"
+  notify: Reload networkd
+  when:
+    - _vlan_trunk_interfaces | length > 0
+    - _vlan_trunk_active_network_manager == 'systemd-networkd'
+
+- name: Create VLAN sub-interfaces immediately for systemd-networkd-managed hosts
+  become: true
+  ansible.builtin.shell: |
+    set -e
+    if ! ip link show {{ item.interface_name }} >/dev/null 2>&1; then
+      ip link add link {{ item.parent_interface }} name {{ item.interface_name }} type vlan id {{ item.id }}
+      echo changed
+    fi
+    if ! ip -o link show dev {{ item.interface_name }} | grep -q '[<,]UP[,>]'; then
+      ip link set {{ item.interface_name }} up
+      echo changed
+    fi
+  args:
+    executable: /bin/bash
+  register: _vlan_networkd_create
+  changed_when: "'changed' in _vlan_networkd_create.stdout"
+  loop: "{{ _vlan_trunk_interfaces }}"
+  loop_control:
+    label: "{{ item.parent_interface }} -> {{ item.interface_name }}"
+  when:
+    - _vlan_trunk_interfaces | length > 0
+    - _vlan_trunk_active_network_manager == 'systemd-networkd'
+
+- name: Deploy ifupdown interface files
+  become: true
+  ansible.builtin.template:
+    src: vlan.interfaces.j2
+    dest: "/etc/network/interfaces.d/40-vlan{{ item.id }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ _vlan_trunk_interfaces }}"
+  loop_control:
+    label: "{{ item.parent_interface }} -> {{ item.interface_name }}"
+  when:
+    - _vlan_trunk_interfaces | length > 0
+    - _vlan_trunk_active_network_manager == 'ifupdown'
+
+- name: Remove stale systemd-networkd VLAN files on ifupdown-managed hosts
+  become: true
+  ansible.builtin.file:
+    path: "/etc/systemd/network/40-vlan{{ item.id }}.netdev"
+    state: absent
+  loop: "{{ _vlan_trunk_interfaces }}"
+  loop_control:
+    label: "{{ item.parent_interface }} -> {{ item.interface_name }}"
+  when:
+    - _vlan_trunk_interfaces | length > 0
+    - _vlan_trunk_active_network_manager == 'ifupdown'
+
+- name: Remove stale systemd-networkd VLAN network files on ifupdown-managed hosts
+  become: true
+  ansible.builtin.file:
+    path: "/etc/systemd/network/41-vlan{{ item.id }}.network"
+    state: absent
+  loop: "{{ _vlan_trunk_interfaces }}"
+  loop_control:
+    label: "{{ item.parent_interface }} -> {{ item.interface_name }}"
+  when:
+    - _vlan_trunk_interfaces | length > 0
+    - _vlan_trunk_active_network_manager == 'ifupdown'
+
+- name: Bring VLAN sub-interfaces up immediately for ifupdown-managed hosts
+  become: true
+  ansible.builtin.shell: |
+    set -e
+    if ! ip link show {{ item.interface_name }} >/dev/null 2>&1; then
+      ifup {{ item.interface_name }}
+      echo changed
+    elif ! ip -o link show dev {{ item.interface_name }} | grep -q '[<,]UP[,>]'; then
+      ip link set {{ item.interface_name }} up
+      echo changed
+    fi
+  args:
+    executable: /bin/bash
+  register: _vlan_ifup_create
+  changed_when: "'changed' in _vlan_ifup_create.stdout"
+  loop: "{{ _vlan_trunk_interfaces }}"
+  loop_control:
+    label: "{{ item.parent_interface }} -> {{ item.interface_name }}"
+  when:
+    - _vlan_trunk_interfaces | length > 0
+    - _vlan_trunk_active_network_manager == 'ifupdown'
+
+- name: Stop VLAN sub-interfaces from taking an IPv6 default route from router advertisements (runtime)
+  # The ifupdown stanza (post-up) covers boot; this applies the same to a running host.
+  become: true
+  ansible.builtin.shell: |
+    if ip link show {{ item.interface_name }} >/dev/null 2>&1; then
+      cur=$(sysctl -n net.ipv6.conf.{{ item.interface_name }}.accept_ra_defrtr 2>/dev/null || echo 0)
+      if [ "$cur" != "0" ]; then sysctl -qw net.ipv6.conf.{{ item.interface_name }}.accept_ra_defrtr=0; echo changed; fi
+      ip -6 route del default dev {{ item.interface_name }} 2>/dev/null || true
+    fi
+  args:
+    executable: /bin/bash
+  register: _vlan_no_ra_defrtr
+  changed_when: "'changed' in _vlan_no_ra_defrtr.stdout"
+  loop: "{{ _vlan_trunk_interfaces }}"
+  loop_control:
+    label: "{{ item.parent_interface }} -> {{ item.interface_name }}"
+  when:
+    - _vlan_trunk_interfaces | length > 0
+    - not (vlan_trunk_ra_default_route | bool)
+    - _vlan_trunk_active_network_manager in ['ifupdown', 'systemd-networkd']
+
+# NetworkManager branch (e.g. fresh Raspberry Pi OS / Debian 13): create the VLAN
+# sub-interfaces as NM connections with no node IP, mirroring the other branches.
+# Uses the nmcli CLI so no extra python libs are needed on the target.
+- name: Create/update VLAN connections for NetworkManager-managed hosts
+  become: true
+  ansible.builtin.shell: |
+    set -e
+    name={{ item.interface_name }}
+    if nmcli -g NAME connection show | grep -qx "$name"; then
+      cur=$(nmcli -g vlan.id,vlan.parent,ipv4.method,ipv6.method connection show "$name" | tr '\n' ' ')
+      want="{{ item.id }} {{ item.parent_interface }} disabled ignore"
+      [ "$cur" = "$want" ] && { echo unchanged; exit 0; }
+      nmcli connection delete "$name"
+    fi
+    nmcli connection add type vlan con-name "$name" ifname "$name" \
+      dev {{ item.parent_interface }} id {{ item.id }} \
+      ipv4.method disabled ipv6.method ignore connection.autoconnect yes
+    nmcli connection up "$name"
+    echo changed
+  args:
+    executable: /bin/bash
+  register: _vlan_nm_create
+  changed_when: _vlan_nm_create.stdout.strip() == 'changed'
+  loop: "{{ _vlan_trunk_interfaces }}"
+  loop_control:
+    label: "{{ item.parent_interface }} -> {{ item.interface_name }}"
+  when:
+    - _vlan_trunk_interfaces | length > 0
+    - _vlan_trunk_active_network_manager == 'NetworkManager'
+
+# Thread/Matter IPv6: Thread Border Routers send IPv6 RAs to advertise routes;
+# these let the host and pods accept them for proper Thread routing.
+# Per-interface keys (net.ipv6.conf.vlanNN.*) in /etc/sysctl.d are applied by
+# systemd-sysctl before the VLAN exists, so on ifupdown hosts they go into the
+# interface stanza as post-up (templates/vlan.interfaces.j2) and are applied
+# to the running host below. sysctl.d keeps only the global key there; other
+# managers (no post-up hook) keep the per-interface lines as before.
+- name: Configure Thread IPv6 settings for Router Advertisement support
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/99-vlan-thread-ipv6.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Thread/Matter IPv6 configuration for Router Advertisement support
+      net.ipv6.conf.all.forwarding = 0
+      {% if _vlan_trunk_active_network_manager | default('') != 'ifupdown' -%}
+      {% for iface in vlan_trunk_thread_interfaces -%}
+      net.ipv6.conf.{{ iface }}.accept_ra = 1
+      net.ipv6.conf.{{ iface }}.accept_ra_rt_info_max_plen = 64
+      {% endfor %}
+      {%- else -%}
+      # per-interface accept_ra settings: post-up in /etc/network/interfaces.d/40-vlanNN
+      {% endif %}
+  notify: Apply sysctl settings
+  when:
+    - _vlan_trunk_interfaces | length > 0
+    - vlan_trunk_enable_thread_ipv6 | bool
+    - vlan_trunk_thread_interfaces | length > 0
+
+- name: Apply the Thread IPv6 settings to running VLAN interfaces (ifupdown)
+  # The post-up lines cover boot; this applies the same to a running host.
+  become: true
+  ansible.builtin.shell: |
+    if ip link show {{ item }} >/dev/null 2>&1; then
+      for kv in accept_ra=1 accept_ra_rt_info_max_plen=64; do
+        k=${kv%%=*}; v=${kv#*=}
+        if [ "$(sysctl -n net.ipv6.conf.{{ item }}.$k)" != "$v" ]; then sysctl -qw net.ipv6.conf.{{ item }}.$k=$v; echo changed; fi
+      done
+    fi
+  args:
+    executable: /bin/bash
+  register: _vlan_thread_runtime
+  changed_when: "'changed' in _vlan_thread_runtime.stdout"
+  loop: "{{ vlan_trunk_thread_interfaces }}"
+  when:
+    - _vlan_trunk_interfaces | length > 0
+    - vlan_trunk_enable_thread_ipv6 | bool
+    - _vlan_trunk_active_network_manager == 'ifupdown'

@@ -1,6 +1,13 @@
 ---
-dns_zone_name: local-domain
+dns_zone_name: example.internal
 dns_record_type: A
-dns_server_ip: 1.1.1.1
+dns_server_ip: 192.0.2.53
 dns_key_name: dnsUpdateAnsible
-dns_key_secret: dns update secret
+dns_key_secret: "<secret: TSIG key, keep in the private inventory / ansible-vault>"
+
+system_timezone: Europe/Brussels
+system_locale: en_US.UTF-8
+
+# Public key pushed by playbooks/setup-ssh-keys.yml (required, no default).
+ssh_public_key: "ssh-ed25519 AAAA...replace-me user@host"
+# setup_ssh_key_exclusive: false   # true = drop every other authorized key

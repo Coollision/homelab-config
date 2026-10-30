@@ -1,17 +1,95 @@
+---
+# DESTRUCTIVE: wipes k3s (incl. etcd data) and VLAN trunks on the targeted nodes.
+#
+# Run (both guards are mandatory):
+#   ansible-playbook playbooks/k3s_teardown.yml --limit <node> -e confirm_teardown=<k3s_cluster_name>
+#
+# k3s_cluster_name comes from the k3smaster group_vars (default "k3s").
+
+- name: K3s-teardown safety guard
+  hosts: k3scluster
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: Require --limit and -e confirm_teardown=<cluster name>
+      vars:
+        _cluster_name: "{{ hostvars[groups['k3smaster'][0]].k3s_cluster_name | default('k3s') }}"
+      ansible.builtin.assert:
+        that:
+          - ansible_limit is defined
+          - (ansible_limit | trim | length) > 0
+          - confirm_teardown | default('') == _cluster_name
+        fail_msg: >-
+          Refusing to tear down. Pass an explicit --limit with the node(s) to wipe AND
+          -e confirm_teardown={{ _cluster_name }}.
+        quiet: true
+      run_once: true  # noqa: run-once[task] - plays use the default linear strategy
+
 - name: K3s-teardown
   hosts: k3scluster
   become: true
   become_user: root
   roles:
     - k3s_teardown
-    - vlan-trunk-teardown
-    - role: dns_teardown
+    - vlan_trunk_teardown
+
+# The control-plane record k3s.<zone> holds one A/AAAA per master. nsupdate
+# state=absent deletes the whole RRset (it ignores `value`), so instead we
+# rewrite the RRset to the masters that remain, and only delete it when none do.
+- name: K3s-teardown - control-plane DNS
+  hosts: k3smaster
+  gather_facts: false
+  tasks:
+    - name: Compute remaining control-plane hosts
+      ansible.builtin.set_fact:
+        k3s_teardown_remaining: "{{ groups['k3smaster'] | difference(ansible_play_hosts_all) }}"
+      run_once: true  # noqa: run-once[task] - plays use the default linear strategy
+
+    - name: Rewrite control-plane A record to the remaining masters
+      ansible.builtin.include_role:
+        name: dns
       vars:
         dns_set_record: "{{ k3s_master_domain_name }}"
-        dns_set_record_value: "{{ host_ip_address }}"
-    - role: dns_teardown
+        dns_set_record_value: "{{ k3s_teardown_remaining | map('extract', hostvars, 'host_ip_address') | list }}"
+        dns_record_type: "A"
+      when: k3s_teardown_remaining | length > 0
+      run_once: true  # noqa: run-once[task] - plays use the default linear strategy
+
+    - name: Remove control-plane A record (no masters remain)
+      ansible.builtin.include_role:
+        name: dns_teardown
+      vars:
+        dns_teardown_record: "{{ k3s_master_domain_name }}"
+        dns_teardown_record_value: "{{ host_ip_address }}"
+        dns_teardown_record_type: "A"
+      when: k3s_teardown_remaining | length == 0
+      run_once: true  # noqa: run-once[task] - plays use the default linear strategy
+
+    - name: Compute remaining control-plane IPv6 addresses
+      ansible.builtin.set_fact:
+        k3s_teardown_remaining_v6: >-
+          {{ k3s_teardown_remaining | map('extract', hostvars) | selectattr('host_ipv6_address', 'defined')
+             | map(attribute='host_ipv6_address') | select | list }}
+      run_once: true  # noqa: run-once[task] - plays use the default linear strategy
+
+    - name: Rewrite control-plane AAAA record to the remaining masters
+      ansible.builtin.include_role:
+        name: dns
       vars:
         dns_set_record: "{{ k3s_master_domain_name }}"
-        dns_set_record_value: "{{ host_ipv6_address }}"
+        dns_set_record_value: "{{ k3s_teardown_remaining_v6 }}"
         dns_record_type: "AAAA"
-      when: (host_ipv6_address | default('') | length) > 0
+      when: k3s_teardown_remaining_v6 | length > 0
+      run_once: true  # noqa: run-once[task] - plays use the default linear strategy
+
+    - name: Remove control-plane AAAA record (no IPv6 masters remain)
+      ansible.builtin.include_role:
+        name: dns_teardown
+      vars:
+        dns_teardown_record: "{{ k3s_master_domain_name }}"
+        dns_teardown_record_value: "{{ host_ipv6_address }}"
+        dns_teardown_record_type: "AAAA"
+      when:
+        - k3s_teardown_remaining_v6 | length == 0
+        - (host_ipv6_address | default('') | length) > 0
+      run_once: true  # noqa: run-once[task] - plays use the default linear strategy

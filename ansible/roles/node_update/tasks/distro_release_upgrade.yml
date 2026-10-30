@@ -1,0 +1,295 @@
+---
+# Distro upgrade proper. Included inside main.yml's block AFTER cordon+drain
+# and BEFORE the reboot. Drain-before-apt is deliberate: open-iscsi/iscsid and
+# friends restart during the upgrade, which is only safe with no Longhorn
+# volumes attached on this node. Do not "optimise" apt to before the drain.
+#
+# Point of no return: node_update_distro_point_of_no_return is set right before the first
+# package upgrade. Before it, the rescue restores the old sources and
+# uncordons. After it, the rescue leaves the node CORDONED (roll forward).
+
+- name: "Distro: a resumed run is past the point of no return from the start [{{ k3s_node_name }}]"
+  # Never restore the old sources onto a partly upgraded system.
+  ansible.builtin.set_fact:
+    node_update_distro_point_of_no_return: true
+  when: node_update_distro_mode == 'resume'
+
+- name: "Distro: backup dir [{{ k3s_node_name }}]"
+  ansible.builtin.file:
+    path: "{{ node_update_distro_backup_dir }}"
+    state: directory
+    mode: "0700"
+  become: true
+
+- name: "Distro: on-node backup of /etc, package state and network (first attempt only) [{{ k3s_node_name }}]"
+  ansible.builtin.shell: >
+    set -o pipefail;
+    cd {{ node_update_distro_backup_dir }};
+    tar czf etc-pre-{{ node_update_distro_target.codename }}.tgz /etc 2>/dev/null;
+    dpkg --get-selections > selections-pre.txt;
+    apt-mark showmanual > manual-pre.txt;
+    dpkg-query -W -f='${db:Status-Status} ${Package}\n' | awk '$1=="installed"{print $2}' > installed-pre.txt;
+    { ip -br link; ip -br addr; ip route; } > net-before.txt
+  args:
+    executable: /bin/bash
+    creates: "{{ node_update_distro_backup_dir }}/etc-pre-{{ node_update_distro_target.codename }}.tgz"
+  become: true
+
+- name: "Distro: control-plane etcd snapshot + token/config copied OFF the node [{{ k3s_node_name }}]"
+  when: node_update_distro_is_control_plane | bool
+  block:
+    - name: "Distro: etcd snapshot [{{ k3s_node_name }}]"
+      ansible.builtin.command: "/usr/local/bin/k3s etcd-snapshot save --name pre-{{ node_update_distro_target.codename }}"
+      become: true
+      changed_when: true
+
+    - name: "Distro: locate newest pre-upgrade snapshot [{{ k3s_node_name }}]"
+      ansible.builtin.shell: "set -o pipefail; ls -1t /var/lib/rancher/k3s/server/db/snapshots/pre-{{ node_update_distro_target.codename }}* | head -1"
+      args:
+        executable: /bin/bash
+      become: true
+      changed_when: false
+      register: node_update_distro_snapshot_file
+
+    - name: "Distro: fetch snapshot, server token and k3s config off-node [{{ k3s_node_name ~ ', ' ~ (node_update_distro_offnode_backup_dir) }}]"
+      ansible.builtin.fetch:
+        src: "{{ item }}"
+        dest: "{{ node_update_distro_offnode_backup_dir }}/{{ inventory_hostname }}/"
+        flat: true
+        fail_on_missing: true
+      loop:
+        - "{{ node_update_distro_snapshot_file.stdout }}"
+        - /var/lib/rancher/k3s/server/token
+        - /etc/rancher/k3s/config.yaml
+      become: true
+
+- name: "Distro: keep the network stack and Longhorn deps manual (autoremove can never take them) [{{ k3s_node_name }}]"
+  ansible.builtin.shell: >
+    set -o pipefail;
+    for p in ifupdown isc-dhcp-client open-iscsi nfs-common cryptsetup dmsetup systemd-timesyncd; do
+    dpkg-query -W -f='${db:Status-Status}' "$p" 2>/dev/null | grep -qx installed && apt-mark manual "$p"; done; true
+  args:
+    executable: /bin/bash
+  become: true
+  changed_when: true
+
+- name: "Distro: hold escape-hatch packages [{{ k3s_node_name }}]"
+  ansible.builtin.command: "apt-mark hold {{ node_update_distro_hold_packages | join(' ') }}"
+  become: true
+  changed_when: true
+  when: node_update_distro_hold_packages | length > 0
+
+- name: "Distro: move old-release source files aside [{{ k3s_node_name }}]"
+  ansible.builtin.shell: >
+    set -o pipefail;
+    mkdir -p {{ node_update_distro_backup_dir }}/sources-pre;
+    for f in /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+    [ -f "$f" ] || continue;
+    [ "$f" = /etc/apt/sources.list.d/debian.sources ] && grep -qw {{ node_update_distro_target.codename }} "$f" && continue;
+    if grep -qw '{{ node_update_distro_source.codename }}' "$f" || [ "$f" = /etc/apt/sources.list ] || [ "$f" = /etc/apt/sources.list.d/debian.sources ]; then
+    cp -a "$f" {{ node_update_distro_backup_dir }}/sources-pre/ && rm -f "$f" && echo "moved $f"; fi; done; true
+  args:
+    executable: /bin/bash
+  become: true
+  register: node_update_distro_sources_moved
+  changed_when: node_update_distro_sources_moved.stdout | length > 0
+
+- name: "Distro: write deb822 sources [{{ k3s_node_name ~ ', ' ~ (node_update_distro_target.codename) }}]"
+  ansible.builtin.template:
+    src: debian.sources.j2
+    dest: /etc/apt/sources.list.d/debian.sources
+    mode: "0644"
+  become: true
+
+- name: "Distro: sources rewritten (rescue restores them until the point of no return) [{{ k3s_node_name }}]"
+  ansible.builtin.set_fact:
+    node_update_distro_sources_rewritten: true
+
+- name: "Distro: apt-get update against the target sources [{{ k3s_node_name ~ ', ' ~ (node_update_distro_target.codename) }}]"
+  # noqa: command-instead-of-module -- plain apt-get update so a broken new source fails loudly
+  ansible.builtin.command: apt-get update
+  become: true
+  changed_when: false
+
+- name: "Distro: POINT OF NO RETURN [{{ k3s_node_name }}]"
+  ansible.builtin.set_fact:
+    node_update_distro_point_of_no_return: true
+
+- name: "Distro: finish interrupted dpkg work (resume) [{{ k3s_node_name }}]"
+  ansible.builtin.shell: "dpkg --configure -a && apt-get -y -f install"
+  environment: &distro_apt_env
+    DEBIAN_FRONTEND: noninteractive
+    UCF_FORCE_CONFFOLD: "1"
+    NEEDRESTART_MODE: a
+    APT_LISTCHANGES_FRONTEND: none
+  become: true
+  changed_when: true
+  when: node_update_distro_mode == 'resume'
+
+# confdef/confold: our local edits (sshd, journald, sysctl) win; node_setup.yml
+# re-asserts them anyway. UCF_FORCE_CONFFOLD covers ucf-managed files.
+# --no-install-recommends: no surprise multipath-tools (claims Longhorn
+# devices) or dhcpcd-base (different DHCP client-id) via new Recommends.
+# async with a hard timeout so an SSH drop never kills dpkg mid-run.
+- name: "Distro: minimal upgrade (upgrade --without-new-pkgs) [{{ k3s_node_name }}]"
+  # noqa: command-instead-of-module -- apt module has no --without-new-pkgs; async + exact dpkg options
+  ansible.builtin.command: >
+    apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold
+    --no-install-recommends upgrade --without-new-pkgs
+  environment: *distro_apt_env
+  become: true
+  async: "{{ node_update_distro_apt_timeout }}"
+  poll: 30
+  changed_when: true
+
+- name: "Distro: full-upgrade [{{ k3s_node_name }}]"
+  # noqa: command-instead-of-module -- exact apt-get flags + async timeout, see comment above
+  ansible.builtin.command: >
+    apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold
+    --no-install-recommends full-upgrade
+  environment: *distro_apt_env
+  become: true
+  async: "{{ node_update_distro_apt_timeout }}"
+  poll: 30
+  changed_when: true
+
+# A bookworm-backports kernel (6.12.x+deb12, version ~bpo12) can out-rank the
+# new release's kernel in dpkg ordering and in GRUB's default entry, so the
+# node would boot the old kernel again. Pin the meta package to the target
+# release's version and purge every ~bpo kernel image BEFORE the reboot. The
+# old stock kernel (e.g. 6.1.0-x) stays installed as the GRUB fallback.
+- name: "Distro: backports kernels present? [{{ k3s_node_name }}]"
+  ansible.builtin.shell: >
+    set -o pipefail;
+    dpkg-query -W -f='${db:Status-Status} ${Package} ${Version}\n' 'linux-image-*' 2>/dev/null |
+    awk '$1=="installed" && $3 ~ /~bpo/ {print $2}'
+  args:
+    executable: /bin/bash
+  become: true
+  changed_when: false
+  register: node_update_distro_bpo_kernels
+
+- name: "Distro: pin linux-image meta package to the target release, purge bpo kernels [{{ k3s_node_name ~ ', ' ~ (node_update_distro_target.codename) }}]"
+  ansible.builtin.shell: >
+    set -o pipefail;
+    meta=$(dpkg-query -W -f='${Package}\n' 'linux-image-amd64' 'linux-image-arm64' 2>/dev/null | head -1);
+    apt-get -y --allow-downgrades --no-install-recommends install "$meta/{{ node_update_distro_target.codename }}" &&
+    apt-get -y purge $(dpkg-query -W -f='${db:Status-Status} ${Package} ${Version}\n' 'linux-image-[0-9]*' | awk '$1=="installed" && $3 ~ /~bpo/ {print $2}')
+  args:
+    executable: /bin/bash
+  environment: *distro_apt_env
+  become: true
+  changed_when: true
+  when: node_update_distro_bpo_kernels.stdout_lines | length > 0
+
+- name: "Distro: package hygiene (autoremove --purge, purge rc leftovers) [{{ k3s_node_name }}]"
+  ansible.builtin.shell: >
+    set -o pipefail;
+    apt-get -y autoremove --purge;
+    dpkg -l | awk '/^rc/{print $2}' | xargs -r dpkg --purge
+  args:
+    executable: /bin/bash
+  environment: *distro_apt_env
+  become: true
+  changed_when: true
+
+- name: "Distro: Longhorn host deps and time sync stay installed [{{ k3s_node_name }}]"
+  ansible.builtin.apt:
+    name: [open-iscsi, nfs-common, cryptsetup, dmsetup, systemd-timesyncd]
+    state: present
+    install_recommends: false
+  environment: *distro_apt_env
+  become: true
+
+- name: "Distro: Intel iGPU firmware for the target release (installed before the reboot so the first boot loads GuC/HuC) [{{ k3s_node_name }}]"
+  # Debian 13 moved the i915 firmware into firmware-intel-graphics; the gpu package list
+  # in the earlier play was computed on the old release and misses it.
+  ansible.builtin.apt:
+    name: "{{ ['firmware-misc-nonfree'] + (['firmware-intel-graphics'] if (node_update_distro_to_major | int) >= 13 else []) }}"
+    state: present
+    install_recommends: false
+  environment: *distro_apt_env
+  become: true
+  when:
+    - node_update_intel_gpu_present | default(false)
+    - node_update_intel_gpu_autofix | bool
+
+- name: "Distro: iscsid socket + timesyncd enabled [{{ k3s_node_name }}]"
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+  loop: [iscsid.socket, systemd-timesyncd.service]
+  become: true
+
+- name: "Distro: /tmp mode [{{ k3s_node_name ~ ', ' ~ (node_update_distro_upgrade_tmp_mode) }}]"
+  ansible.builtin.include_tasks: distro_tmp.yml
+
+- name: "Distro: release the escape-hatch holds again [{{ k3s_node_name }}]"
+  # Holds only exist to get THIS upgrade past a known regression; left in
+  # place they would silently block every later cluster_update.yml patch run.
+  # Reached only when both apt phases succeeded (a failure goes to rescue).
+  ansible.builtin.command: "apt-mark unhold {{ node_update_distro_hold_packages | join(' ') }}"
+  become: true
+  register: node_update_distro_unhold
+  changed_when: "'Canceled hold' in node_update_distro_unhold.stdout"
+  when: node_update_distro_hold_packages | length > 0
+
+- name: "Distro: report obsolete packages (never auto-purged) [{{ k3s_node_name }}]"
+  ansible.builtin.shell: "set -o pipefail; apt list '?obsolete' 2>/dev/null | tail -n +2 || true"
+  args:
+    executable: /bin/bash
+  become: true
+  changed_when: false
+  register: node_update_distro_obsolete
+
+- name: "Distro: obsolete packages (decide by hand) [{{ k3s_node_name }}]"
+  ansible.builtin.debug:
+    msg: "{{ node_update_distro_obsolete.stdout_lines }}"
+
+# ---- pre-reboot gates: any failure stays here, cordoned, on the old kernel ----
+
+- name: "Distro gate: no newly installed multipath-tools / dhcpcd-base / host iptables; DHCP client kept [{{ k3s_node_name }}]"
+  ansible.builtin.shell: >
+    set -o pipefail;
+    rc=0;
+    for p in multipath-tools dhcpcd-base iptables; do
+    {{ 'case $p in dhcpcd-base) continue;; esac;' if node_update_distro_allow_dhcp_client_change | bool else '' }}
+    if dpkg-query -W -f='${db:Status-Status}' "$p" 2>/dev/null | grep -qx installed
+    && ! grep -qx "$p" {{ node_update_distro_backup_dir }}/installed-pre.txt; then echo "NEW: $p"; rc=1; fi; done;
+    {% if node_update_distro_net_before.dhcp == 'true' and not (node_update_distro_allow_dhcp_client_change | bool) %}
+    dpkg-query -W -f='${db:Status-Status}' isc-dhcp-client 2>/dev/null | grep -qx installed || { echo "isc-dhcp-client was removed"; rc=1; };
+    {% endif %}
+    exit $rc
+  args:
+    executable: /bin/bash
+  become: true
+  changed_when: false
+
+- name: "Distro gate: newest kernel is the target's, has initramfs, GRUB fallback, fstab OK [{{ k3s_node_name ~ ', ' ~ (node_update_distro_target.codename) }}]"
+  ansible.builtin.shell: >
+    set -o pipefail;
+    {{ node_update_newest_kernel_sh }}
+    echo "newest=$newest";
+    case "$newest" in *+deb{{ node_update_distro_to_major }}-*) ;; *) echo "newest kernel is not a +deb{{ node_update_distro_to_major }} kernel"; exit 1;; esac;
+    [ -s /boot/initrd.img-$newest ] || update-initramfs -c -k "$newest";
+    [ -s /boot/initrd.img-$newest ] || { echo "no initramfs for $newest"; exit 1; };
+    update-grub >/dev/null 2>&1 || { echo "update-grub failed"; exit 1; };
+    grep -q "vmlinuz-$newest" /boot/grub/grub.cfg || { echo "grub.cfg has no entry for $newest"; exit 1; };
+    [ "$(ls /boot/vmlinuz-* | wc -l)" -ge 2 ] || { echo "no fallback kernel left"; exit 1; };
+    findmnt --verify >/dev/null || { echo "findmnt --verify failed"; exit 1; }
+  args:
+    executable: /bin/bash
+  become: true
+  changed_when: false
+
+- name: "Distro gate: newest kernel knows the iGPU PCI ID [{{ k3s_node_name }}]"
+  ansible.builtin.shell: >
+    set -o pipefail;
+    {{ node_update_newest_kernel_sh }}
+    for id in {{ node_update_gpu_ids.stdout_lines | default([]) | join(' ') }}; do
+    grep -q "v00008086d0000${id}sv" /lib/modules/$newest/modules.alias || { echo "kernel $newest has no i915 alias for $id"; exit 1; }; done
+  args:
+    executable: /bin/bash
+  become: true
+  changed_when: false
+  when: node_update_intel_gpu_present | bool

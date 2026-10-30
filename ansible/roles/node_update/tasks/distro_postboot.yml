@@ -1,0 +1,99 @@
+---
+# Post-boot gates for a distro upgrade, run after the reboot and BEFORE the
+# uncordon. Any failure lands in main.yml's rescue, which (past the point of
+# no return) leaves the node cordoned.
+
+- name: "Distro gate: re-gather facts (proves the new python works with this ansible-core) [{{ k3s_node_name }}]"
+  ansible.builtin.setup:
+    gather_subset: [min]
+
+- name: "Distro gate: release + kernel [{{ k3s_node_name }}]"
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution_major_version'] | int == node_update_distro_to_major | int
+      - ('+deb' ~ node_update_distro_to_major) in ansible_facts['kernel']
+    fail_msg: >-
+      Booted Debian {{ ansible_facts['distribution_major_version'] }} / kernel {{ ansible_facts['kernel'] }};
+      expected {{ node_update_distro_to_major }} with a +deb{{ node_update_distro_to_major }} kernel (GRUB may have picked an older kernel).
+
+- name: "Distro gate: inotify limits survived the upgrade [{{ k3s_node_name }}]"
+  ansible.builtin.command: cat /proc/sys/fs/inotify/max_user_instances /proc/sys/fs/inotify/max_user_watches
+  become: true
+  changed_when: false
+  register: node_update_distro_inotify
+  failed_when: >-
+    node_update_distro_inotify.stdout_lines[0] | int < node_common_inotify_max_user_instances | int
+    or node_update_distro_inotify.stdout_lines[1] | int < node_common_inotify_max_user_watches | int
+
+- name: "Distro gate: systemd state [{{ k3s_node_name }}]"
+  ansible.builtin.shell: >
+    set -o pipefail;
+    timeout 300 systemctl is-system-running --wait >/dev/null 2>&1;
+    systemctl list-units --state=failed --no-legend --plain | awk '{print $1}'
+  args:
+    executable: /bin/bash
+  become: true
+  changed_when: false
+  register: node_update_distro_failed_units
+  failed_when: node_update_distro_failed_units.stdout_lines | difference(node_update_distro_failed_units_allowlist) | length > 0
+
+- name: "Distro gate: network identical to before (interfaces, primary IP, gateway, DHCP client) [{{ k3s_node_name }}]"
+  ansible.builtin.shell: >
+    set -o pipefail;
+    dev={{ node_update_distro_net_before.iface }};
+    links=$(ip -br link | awk '$1 !~ /^(lo|veth|cni|flannel|lxc|kube|vxlan|tunl|cali|docker)/ {print $1}' | sort | tr '\n' ' ');
+    ip=$(ip -4 -o addr show dev "$dev" scope global | awk '{print $4}' | head -1);
+    gw=$(ip -4 route show default | awk '{print $3; exit}');
+    echo "links=$links ip=$ip gw=$gw";
+    [ "$links" = "{{ node_update_distro_net_before.links }}" ] || { echo "interface set changed"; exit 1; };
+    [ "$ip" = "{{ node_update_distro_net_before.ip }}" ] || { echo "primary IP changed"; exit 1; };
+    [ "$gw" = "{{ node_update_distro_net_before.gw }}" ] || { echo "default gateway changed"; exit 1; };
+    {% if node_update_distro_net_before.networking == 'active' %}
+    systemctl is-active --quiet networking || { echo "ifupdown networking.service not active"; exit 1; };
+    {% endif %}
+    {% if node_update_distro_net_before.dhcp == 'true' and not (node_update_distro_allow_dhcp_client_change | bool) %}
+    pgrep -x dhclient >/dev/null || { echo "dhclient not running"; exit 1; };
+    {% endif %}
+    getent hosts deb.debian.org >/dev/null || { echo "DNS lookup failed"; exit 1; }
+  args:
+    executable: /bin/bash
+  become: true
+  changed_when: false
+
+- name: "Distro gate: k3s service + flannel up [{{ k3s_node_name }}]"
+  # noqa: command-instead-of-module -- read-only is-active probe chained with ip link, retried via until
+  ansible.builtin.shell: >
+    systemctl is-active --quiet {{ node_update_k3s_service_name }} && ip link show flannel.1 >/dev/null
+  become: true
+  changed_when: false
+  register: node_update_distro_k3s_up
+  until: node_update_distro_k3s_up.rc == 0
+  retries: 30
+  delay: 10
+
+- name: "Distro gate: Longhorn host deps [{{ k3s_node_name }}]"
+  ansible.builtin.shell: >
+    set -o pipefail;
+    iscsiadm --version && cryptsetup --version && dmsetup version >/dev/null && test -x /sbin/mount.nfs &&
+    modprobe -n iscsi_tcp && modprobe -n dm_crypt &&
+    { systemctl is-active --quiet iscsid || systemctl is-active --quiet iscsid.socket; }
+  args:
+    executable: /bin/bash
+  become: true
+  changed_when: false
+
+- name: "Distro gate: clock synchronised [{{ k3s_node_name }}]"
+  ansible.builtin.command: timedatectl show -p NTPSynchronized --value
+  changed_when: false
+  register: node_update_distro_ntp
+  until: node_update_distro_ntp.stdout == 'yes'
+  retries: 12
+  delay: 10
+
+- name: "Distro gate: /tmp matches node_update_distro_upgrade_tmp_mode [{{ k3s_node_name ~ ', ' ~ (node_update_distro_upgrade_tmp_mode) }}]"
+  ansible.builtin.shell: "findmnt -n -o FSTYPE /tmp || echo none"
+  changed_when: false
+  register: node_update_distro_tmp_fs
+  failed_when: >-
+    (node_update_distro_upgrade_tmp_mode == 'disk' and node_update_distro_tmp_fs.stdout == 'tmpfs')
+    or (node_update_distro_upgrade_tmp_mode == 'tmpfs_capped' and node_update_distro_tmp_fs.stdout != 'tmpfs')

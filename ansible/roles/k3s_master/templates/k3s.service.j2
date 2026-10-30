@@ -1,13 +1,14 @@
 [Unit]
 Description=Lightweight Kubernetes
 Documentation=https://k3s.io
+Wants=network-online.target
 After=network-online.target
 
 [Service]
 Type=notify
 ExecStartPre=-/sbin/modprobe br_netfilter
 ExecStartPre=-/sbin/modprobe overlay
-ExecStart={{ k3s_server_location | default('/usr/local/bin/k3s') }} server -d /var/lib/rancher/k3s {% if server_args is defined %}{% for arg in server_args %}--{{ arg }} {% endfor +%}{% endif %}
+ExecStart={{ k3s_server_location | default('/usr/local/bin/k3s') }} server -d /var/lib/rancher/k3s
 KillMode=process
 Delegate=yes
 # Having non-zero Limit*s causes performance problems due to accounting overhead
