@@ -4,14 +4,17 @@ vlan_trunk_validate_network_manager: true
 vlan_trunk_expected_network_manager: auto
 vlan_trunk_fail_when_networkmanager_active: true
 
-vlan_trunk_enable_thread_ipv6: true
+# Host-level Thread RA acceptance. Off: only pods (macvlan children, own netns) use
+# the VLANs; the host takes no IPv6 there. Only meaningful with vlan_trunk_host_ipv6.
+vlan_trunk_enable_thread_ipv6: false
 vlan_trunk_thread_interfaces: ["vlan40"]
 
 
-# Router advertisements on the VLAN sub-interfaces must not install an IPv6 default
-# route: the VLANs (IoT, Intern) are not internet paths, and with equal-metric
-# defaults the kernel can pick one for egress (image pulls and other outbound IPv6
-# then time out). Only the parent (uplink) interface keeps its default route.
-# on-link addresses and Thread route info (accept_ra_rt_info_max_plen) are unaffected.
-# Covers the ifupdown path; the networkd and NetworkManager branches are not handled.
-vlan_trunk_ra_default_route: false
+# The node itself takes no IPv6 on the VLAN sub-interfaces (accept_ra=0, autoconf=0,
+# global addresses flushed): only pods attach there, through macvlan children whose
+# sysctls live in the pod netns and are unaffected. Without this the node gets SLAAC
+# addresses (reachable from IoT/Intern) and per-VLAN default routes (2026-10-30:
+# outbound IPv6 picked the IoT one). Link-local stays.
+# ifupdown: post-up; NetworkManager: ipv6.method=disabled on the VLAN connections;
+# systemd-networkd: LinkLocalAddressing=no, networkd sets accept_ra=0 itself.
+vlan_trunk_host_ipv6: false
