@@ -1,6 +1,6 @@
 # Networking
 
-[← Back to Home](../Home.md) · Platform: [Storage](storage.md) · [Secrets](secrets-vault.md) · [Cluster housekeeping](cluster-housekeeping.md)
+[← Back to Home](../Home.md) · Platform: [Storage](storage.md) · [Secrets](secrets-vault.md) · [Cluster housekeeping](cluster-housekeeping.md) · TODO: [ifupdown → systemd-networkd](../06-todo/networkd-migration.md)
 
 Networking is the most-tuned, most-incident-prone part of this platform — see
 [Known Issues](../05-operations/known-issues.md) for the long tail of things that have

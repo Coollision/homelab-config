@@ -67,7 +67,7 @@ and flannel counts them as in-use on next startup.
 
 - **Larger pod CIDR per node:** change `--cluster-cidr` to e.g. `10.42.0.0/16`
   with `--node-cidr-mask-size=23` to give each node 510 IPs instead of 254.
-  Set in `ansible/roles/k3s_master/templates/config.j2`.
+  Set in `ansible/roles/k3s_pre/templates/config.yaml.j2`.
 - **Boot-time reconciliation DaemonSet:** a privileged init container or systemd
   service that on node startup removes any lease file whose IP has no corresponding
   running container (check via `crictl ps`).

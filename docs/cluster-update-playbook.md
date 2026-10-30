@@ -8,6 +8,10 @@ on this cluster's Longhorn/CNPG PodDisruptionBudgets (see
 
 Lives at `ansible/playbooks/cluster_update.yml` + roles `node_update` and
 `cluster_wait_stable`. Usage/commands: [Ansible cheat sheet](../wiki/05-operations/ansible-cheatsheet.md#full-cluster-update-os--kernel--k3s).
+Debian major-release upgrades reuse the same role through `distro_upgrade.yml` (separate
+playbook, one node per run, never bumps k3s); see the
+[distro upgrade runbook](../wiki/00-setup/distro-upgrade.md). Both playbooks share a
+cluster-side lock (ConfigMap `kube-system/homelab-node-maintenance-lock`).
 
 ## Why one drain, not two
 
@@ -73,7 +77,7 @@ anything.
 
 A bare pod with no controller now gets an explicit ansible-level hard-fail before
 touching the node — `--disable-eviction` means drain itself no longer refuses one on
-its own the way the Eviction API used to. `force_drain=true` overrides this and adds
+its own the way the Eviction API used to. `node_update_force_drain=true` overrides this and adds
 `--force` to the drain, which deletes it for good since nothing will recreate it. That
 has to be a deliberate, informed choice each time, not a default.
 
@@ -124,11 +128,11 @@ latest="$(dpkg -l 'linux-image-*' | awk '$1=="ii" && $2 ~ /^linux-image-[0-9]/ {
 ```
 
 **A related gap this surfaced:** a node needing *only* a reboot (OS packages and k3s
-both already current from an earlier run) has `will_patch_os` and `will_upgrade_k3s`
+both already current from an earlier run) has `node_update_will_patch_os` and `node_update_will_upgrade_k3s`
 both false — the old "nothing to do" gate would skip it **forever**, since apt has
 nothing left to offer. Fixed by computing the reboot-pending check separately, up
 front in the reporting phase, and folding it into that same gate
-(`not (will_patch_os or will_upgrade_k3s or will_reboot)`).
+(`not (node_update_will_patch_os or node_update_will_upgrade_k3s or node_update_will_reboot)`).
 
 ## A pipefail + grep exit-code trap in the pod-settle check
 
@@ -147,17 +151,17 @@ no such exit-code quirk for a plain `select()`.
 check — the next node in the `serial: 1` loop cannot start until it clears. It waits on
 two independent things, with separate budgets:
 
-1. Pods scheduled on that node have settled (`stabilize_retries`/`stabilize_delay`,
+1. Pods scheduled on that node have settled (`cluster_wait_stable_stabilize_retries`/`cluster_wait_stable_stabilize_delay`,
    default up to 3 min) — fast, since it's just waiting for the scheduler to place
    already-evicted pods elsewhere.
-2. **No Longhorn volume cluster-wide is `degraded`/`faulted`** (`longhorn_heal_retries`/
-   `longhorn_heal_delay`, default up to 30 min) — much slower, and given its own
+2. **No Longhorn volume cluster-wide is `degraded`/`faulted`** (`cluster_wait_stable_longhorn_heal_retries`/
+   `cluster_wait_stable_longhorn_heal_delay`, default up to 30 min; up to 2 h in a distro upgrade via `cluster_wait_stable_distro_heal_retries`) — much slower, and given its own
    budget deliberately. A single node reboot on this 3-node cluster degrades **every**
    3-replica volume that had a copy on that node (confirmed live: 20 volumes went
    degraded after one worker's reboot). Letting the next node start before those finish
    rebuilding would mean two nodes' worth of rebuild I/O competing on the remaining
    nodes at once — worse for recovery time, not better. Bump the retries/delay
-   (`-e longhorn_heal_retries=... -e longhorn_heal_delay=...`) if a real run needs
+   (`-e cluster_wait_stable_longhorn_heal_retries=... -e cluster_wait_stable_longhorn_heal_delay=...`) if a real run needs
    longer than 30 minutes rather than letting nodes overlap.
 
 On a timeout, the task's failure output includes the actual list of still-non-Healthy
@@ -172,7 +176,9 @@ failure:
 
 - `rescue:` gathers a `kubectl get pods -o wide` snapshot of what's still on the node
   and uncordons it again immediately, so a stuck drain doesn't leave the node stranded
-  out of the scheduler while someone investigates.
+  out of the scheduler while someone investigates. It only uncordons if **this run** cordoned
+  the node: a node that was already cordoned before the run stays cordoned, and the failure
+  message says which state the node is in.
 - `always:` unconditionally reverts the Longhorn `allowScheduling`/`evictionRequested`
   flags and any CNPG `nodeMaintenanceWindow` it flipped on — whether the block
   succeeded or the rescue ran.
@@ -183,23 +189,36 @@ state.
 
 ## Safety model
 
-- `dry_run` defaults to `true`. Every report/detection task (package list, k3s version
+- `node_update_dry_run` defaults to `true`. Every report/detection task (package list, k3s version
   diff, drain-blocker scan) always runs; every mutating task is gated on
-  `not (dry_run | bool)`. A plain run is a report.
+  `not (node_update_dry_run | bool)`. A plain run is a report.
 - A node with nothing pending (OS already current **and** k3s already on
-  `k3s_target_version`) is skipped entirely — never cordoned for a no-op.
-- `patch_os` / `upgrade_k3s` toggle each concern independently, but the node is still
+  `k3s_version`) is skipped entirely — never cordoned for a no-op. If such a node is
+  already **cordoned** (e.g. after a `node_update_keep_cordoned` hand-off), it gets an
+  uncordon-only pass instead, so it is not stranded out of scheduling.
+- `node_update_keep_cordoned=true` is single-host and only meant as the hand-off to the distro
+  upgrade follow-up; it leaves the node cordoned and skips the settle/heal wait, soak and image prune.
+- The settle wait, the soak and the image prune run **outside** the rescue block, after the
+  uncordon: a settle/heal timeout is a plain failure with the node already schedulable, nothing to
+  roll back. The knobs (`cluster_wait_stable_stabilize_*`, `cluster_wait_stable_longhorn_heal_*`,
+  `cluster_wait_stable_distro_heal_retries`) have their own defaults in `roles/cluster_wait_stable/defaults/main.yml`;
+  the wait ignores `Failed` and terminating leftover pods.
+- After the settle wait each node runs `crictl rmi --prune` (toggle `node_update_image_prune`, default `true`).
+- A pending `reboot-required` flag alone now triggers a reboot (an operator-precedence bug used to
+  swallow it); apt holds set by a distro upgrade are released after a successful run.
+- `node_update_cnpg_maintenance_grace` (default 20 s) is the pause
+  between enabling the CNPG maintenance window and the drain.
+- `node_update_patch_os` / `node_update_upgrade_k3s` toggle each concern independently, but the node is still
   only drained once regardless of which are enabled.
 
 ## After a real run
 
-Bump `k3s_pre_version` in `ansible/playbooks/k3s_setup.yml` to match
-`k3s_target_version` in `ansible/roles/node_update/defaults/main.yml`, so a future
-`node_setup`/`k3s_setup` run on a replacement node installs the same version the
-cluster is actually running. The playbook's final play prints a reminder for this on
-any non-dry-run invocation.
+There is a single `k3s_version` (defined in the private `group_vars`, no default in the repo).
+`cluster_update` upgrades to it and `k3s_setup` installs it on a replacement node, so bump it
+in one place before a k3s upgrade. `k3s_setup` refuses to downgrade an installed k3s unless
+`-e k3s_allow_downgrade=true`.
 
-## `drain_timeout` needs to be generous too, not just the post-reboot heal wait
+## `node_update_drain_timeout` needs to be generous too, not just the post-reboot heal wait
 
 Confirmed live on `master-green`: the eviction-request handling above is real and does
 work, but Longhorn can take longer than a short window to actually finish evacuating an
@@ -208,8 +227,8 @@ cleanly via rescue, and a follow-up check maybe 30 seconds later showed that exa
 instance-manager pod **fully gone** (consolidated away by Longhorn, its PDB no longer
 even existing). `kubectl drain` already retries evictions every 5s on its own,
 respecting PDBs, for the whole `--timeout` window — it just needed more of it. Bumped
-the default `drain_timeout` from 300s to 1200s (20 min) for the same reason as
-`longhorn_heal_*`: on this hardware, "give Longhorn more time" beats any cleverer
+the default `node_update_drain_timeout` from 300s to 1200s (20 min) for the same reason as
+`cluster_wait_stable_longhorn_heal_*`: on this hardware, "give Longhorn more time" beats any cleverer
 polling logic. A rolled-back drain is always safe here (see Rollback behavior above) —
 worth remembering before assuming a timeout means something is actually broken.
 

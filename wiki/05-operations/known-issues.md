@@ -557,5 +557,5 @@ full replica redundancy exists elsewhere first. It still sets CNPG's
 reuses the PVC instead of treating the pod's disappearance as a failure), reverting it
 afterward regardless of success or failure. A **bare pod with no controller** (no
 Deployment/StatefulSet/Job owner) is a third, different case the playbook explicitly
-hard-fails on before touching the node, rather than auto-resolving — `force_drain=true`
+hard-fails on before touching the node, rather than auto-resolving — `node_update_force_drain=true`
 overrides this and deletes it for good.
