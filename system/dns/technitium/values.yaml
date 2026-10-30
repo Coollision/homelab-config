@@ -13,6 +13,10 @@
 
 # ── SHARED DEFAULTS ──────────────────────────────────────────────────────────
 defaults:
+  # No node-label affinity for the macvlans: they sit on the node uplink (native VLAN 30), which every
+  # node pins to uplink0, so there is nothing to select on. The library would otherwise derive a
+  # `vlan30-trunk` label from the network name (`...-vlan30`) and require it.
+  multusAutoNodeAffinity: false
   statefulset:
     image:
       repository: technitium/dns-server
@@ -42,6 +46,14 @@ defaults:
       hostnames:
         - technitium-secondary.mylocaldns
   affinity:
+    # Never on the VM node: the third resolver runs in Docker on the NAS that hosts that VM, so a NAS
+    # outage would take out the VM and the NAS instance together (NotIn also admits nodes without a type label).
+    node:
+      required:
+        - matchExpressions:
+            - key: type
+              operator: NotIn
+              values: ["vm"]
     podAnti:
       required:
         - labelSelector:
@@ -129,14 +141,14 @@ primary:
   # fd4f:64d9:fcab:30:211:32ff:feca:c93d (a container on the Synology). Do not record
   # GUAs for any of them anywhere — that is the mistake this comment exists to prevent.
   # IPv4 via static DHCP lease in UniFi for MAC 02:53:00:00:00:01.
-  # parentInterface: enp1s0 = native (untagged) VLAN 30; no vlan30 sub-interface needed.
+  # parentInterface: uplink0 = the node uplink (native, untagged VLAN 30; no vlan30 sub-interface
+  # needed). Every node pins its primary NIC to this name (wiki/06-todo/uplink-name.md).
   multusNetworks:
     - name: technitium-primary-vlan30
       interface: net1
       mac: "02:53:00:00:00:01"
       dhcpHostname: _stub_technitium-primary
-      parentInterface: enp1s0
-      nodeLabelKey: vlan30-trunk
+      parentInterface: uplink0
       type: macvlan
       mode: bridge
       chainedPlugins:
@@ -172,8 +184,7 @@ secondary:
       interface: net1
       mac: "02:53:00:00:00:02"
       dhcpHostname: _stub_technitium-secondary
-      parentInterface: enp1s0
-      nodeLabelKey: vlan30-trunk
+      parentInterface: uplink0
       type: macvlan
       mode: bridge
       chainedPlugins:
