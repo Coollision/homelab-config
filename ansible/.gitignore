@@ -1,2 +1,7 @@
 inventory
 .vscode
+# scratch kubeconfig written by roles/k3s_master/tasks/fetch_kubeconfig.yml
+kubeconfig/
+# collections installed locally from requirements.yml
+collections/
+*.retry

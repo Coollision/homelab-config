@@ -1,0 +1,83 @@
+---
+# iGPU assertions; included post-reboot by main.yml and run standalone by
+# playbooks/gpu_check.yml.
+# 1. Render node exists and i915 loaded + authenticated the GuC/HuC firmware.
+# 2. A throwaway container with a recent VA driver (host stays free of VA
+#    userspace) lists H.264 + HEVC decode and encode on the render node.
+#    NEEDS INTERNET on the node (image pull + apt inside the container);
+#    node_update_intel_gpu_check_vainfo=false skips this part on an offline node.
+- name: "Render node exists [{{ k3s_node_name }}]"
+  ansible.builtin.stat:
+    path: /dev/dri/renderD128
+  register: node_update_render_node
+  failed_when: not node_update_render_node.stat.exists
+
+- name: "GPU: i915 loaded GuC/HuC firmware [{{ k3s_node_name }}]"
+  # pipefail cannot change the outcome: failed_when below decides alone.
+  ansible.builtin.shell: set -o pipefail; dmesg | grep -iE 'HuC{{ ":" }} authenticated|GuC{{ ":" }}? submission enabled' | wc -l
+  args:
+    executable: /bin/bash
+  register: node_update_guc_huc
+  changed_when: false
+  become: true
+  failed_when: node_update_guc_huc.stdout | int < 1
+
+- name: "GPU: vainfo from a throwaway container with a current VA driver [{{ k3s_node_name }}]"
+  when: node_update_intel_gpu_check_vainfo | bool
+  block:
+    - name: "Was the check image already present? [{{ k3s_node_name }}]"
+      ansible.builtin.command: "/usr/local/bin/k3s ctr -n k8s.io images ls -q name=={{ node_update_intel_gpu_check_image }}"
+      become: true
+      changed_when: false
+      register: node_update_gpu_check_image_before
+
+    - name: "Pull check image [{{ k3s_node_name }}]"
+      ansible.builtin.command: "/usr/local/bin/k3s ctr -n k8s.io images pull {{ node_update_intel_gpu_check_image }}"
+      become: true
+      changed_when: false
+
+    - name: "Run vainfo in the container [{{ k3s_node_name }}]"
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/k3s
+          - ctr
+          - -n
+          - k8s.io
+          - run
+          - --rm
+          - --net-host
+          - --device
+          - /dev/dri/renderD128
+          - "{{ node_update_intel_gpu_check_image }}"
+          - gpucheck
+          - sh
+          - -c
+          - >-
+            apt-get update -qq >/dev/null 2>&1;
+            apt-get install -y -qq vainfo intel-media-va-driver >/dev/null 2>&1;
+            LIBVA_DRIVER_NAME=iHD vainfo --display drm --device /dev/dri/renderD128 2>&1
+      become: true
+      changed_when: false
+      failed_when: false
+      register: node_update_vainfo_out
+
+    - name: "Assert H.264 + HEVC decode and encode entrypoints [{{ k3s_node_name }}]"
+      ansible.builtin.assert:
+        that:
+          - node_update_vainfo_out.stdout is search('VAProfileH264\w+\s*:\s*VAEntrypointVLD')
+          - node_update_vainfo_out.stdout is search('VAProfileH264\w+\s*:\s*VAEntrypointEncSlice')
+          - node_update_vainfo_out.stdout is search('VAProfileHEVCMain\s*:\s*VAEntrypointVLD')
+          - node_update_vainfo_out.stdout is search('VAProfileHEVCMain\s*:\s*VAEntrypointEncSlice')
+        fail_msg: >-
+          container vainfo is missing expected profiles (needs internet for the image pull + apt;
+          -e node_update_intel_gpu_check_vainfo=false skips this): {{ node_update_vainfo_out.stdout }}
+  always:
+    - name: "Remove check image (only if this check pulled it) [{{ k3s_node_name }}]"
+      ansible.builtin.command: "/usr/local/bin/k3s ctr -n k8s.io images rm {{ node_update_intel_gpu_check_image }}"
+      become: true
+      changed_when: false
+      failed_when: false
+      when:
+        - node_update_gpu_check_image_before is defined
+        - node_update_gpu_check_image_before is not skipped
+        - node_update_gpu_check_image_before.stdout | default('') | trim | length == 0

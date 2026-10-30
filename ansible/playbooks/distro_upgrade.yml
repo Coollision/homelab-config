@@ -1,0 +1,108 @@
+---
+# In-place Debian release upgrade (e.g. 12 bookworm -> 13 trixie), one node
+# per run, inside the same cordon -> drain -> reboot -> verify -> uncordon
+# cycle as cluster_update.yml (roles/node_update with node_update_distro_upgrade=true).
+# Runbook + rollback story: wiki/00-setup/distro-upgrade.md.
+#
+# Safe by default: node_update_dry_run=true reports the plan and simulates the upgrade in
+# a scratch apt dir under /tmp on the node (set -e node_update_distro_simulate=false for a
+# strictly read-only dry run). --check is refused: apt/command results in
+# check mode are meaningless here; node_update_dry_run is the supported preview.
+#
+# Independent of k3s: this play never touches the k3s binary
+# (node_update_upgrade_k3s=false). Whenever a k3s bump is done, do it as its own
+# cluster_update.yml pass, before or after the distro upgrade, never inside
+# the same drain (k3s wants server-first, this play wants control-plane-last).
+#
+# Order: canary VM worker -> bare-metal worker -> control plane (last; the
+# play refuses the control plane while other nodes are not on the target).
+# One node per run (--limit); the node must be on exactly target-1, release
+# skipping is refused. Raspberry Pi OS nodes on the target are skipped as
+# done; older Pi OS is refused (reflash instead).
+#
+# Usage (target defaults to node_update_distro_to_major=13):
+#   ansible-playbook playbooks/distro_upgrade.yml --limit <node>                       # dry run
+#   ansible-playbook playbooks/distro_upgrade.yml --limit <vm-node> -e node_update_dry_run=false -e node_update_distro_snapshot_taken=true
+#   ansible-playbook playbooks/distro_upgrade.yml --limit <worker> -e node_update_dry_run=false -e node_update_distro_soak_minutes=60
+#   ansible-playbook playbooks/distro_upgrade.yml --limit <control-plane> -e node_update_dry_run=false \
+#       -e node_update_distro_offnode_backup_dir=/abs/path/outside/repo
+#
+# A cluster-side lock (ConfigMap kube-system/homelab-node-maintenance-lock,
+# shared with cluster_update.yml) is taken for real runs and released only on
+# success. After a failure it stays: check the node, then -e maint_lock_break=true.
+
+- name: "Distro upgrade - guards and lock"
+  hosts: k3scluster
+  gather_facts: false
+  tasks:
+    - name: Refuse check mode (use the default node_update_dry_run instead)
+      ansible.builtin.fail:
+        msg: "--check is not supported for distro_upgrade.yml; a plain run is already a dry run (node_update_dry_run=true)."
+      run_once: true  # noqa: run-once[task] -- plays use the default linear strategy
+      when: ansible_check_mode
+
+    - name: Refuse a real run on more than one node at a time
+      ansible.builtin.fail:
+        msg: >-
+          Real runs take exactly one node: add --limit <node> (order: VM worker, bare-metal worker,
+          control plane). Override with -e distro_allow_multi=true.
+      run_once: true  # noqa: run-once[task] -- plays use the default linear strategy
+      when:
+        - not (node_update_dry_run | default(true) | bool)
+        - not (distro_allow_multi | default(false) | bool)
+        - ansible_play_hosts_all | length != 1
+
+    - name: Take the maintenance lock
+      ansible.builtin.include_role:
+        name: node_update
+        tasks_from: maint_lock
+        apply:
+          delegate_to: localhost
+          run_once: true  # noqa: run-once[task] -- plays use the default linear strategy
+      vars:
+        node_update_maint_lock_action: acquire
+        node_update_maint_lock_playbook: distro_upgrade
+      run_once: true  # noqa: run-once[task] -- plays use the default linear strategy
+      when: not (node_update_dry_run | default(true) | bool)
+
+- name: "Distro upgrade - workers (canary first via --limit)"
+  hosts: k3sworkers
+  become: true
+  serial: 1
+  order: inventory
+  any_errors_fatal: true
+  vars:
+    node_update_distro_upgrade: true
+    node_update_patch_os: false
+    node_update_upgrade_k3s: false
+  roles:
+    - node_update
+
+- name: "Distro upgrade - control plane (last)"
+  hosts: k3smaster
+  become: true
+  serial: 1
+  any_errors_fatal: true
+  vars:
+    node_update_distro_upgrade: true
+    node_update_patch_os: false
+    node_update_upgrade_k3s: false
+  roles:
+    - node_update
+
+- name: "Distro upgrade - release lock"
+  hosts: k3scluster
+  gather_facts: false
+  tasks:
+    - name: Release the maintenance lock
+      ansible.builtin.include_role:
+        name: node_update
+        tasks_from: maint_lock
+        apply:
+          delegate_to: localhost
+          run_once: true  # noqa: run-once[task] -- plays use the default linear strategy
+      vars:
+        node_update_maint_lock_action: release
+        node_update_maint_lock_playbook: distro_upgrade
+      run_once: true  # noqa: run-once[task] -- plays use the default linear strategy
+      when: not (node_update_dry_run | default(true) | bool)

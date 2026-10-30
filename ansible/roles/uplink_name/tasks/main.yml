@@ -1,0 +1,17 @@
+---
+- name: Uplink name - phase must be known
+  ansible.builtin.assert:
+    that: uplink_name_phase in ['stage', 'verify', 'cleanup']
+    fail_msg: "uplink_name_phase must be stage, verify or cleanup (got {{ uplink_name_phase }})."
+
+- name: Uplink name - stage
+  ansible.builtin.include_tasks: stage.yml
+  when: uplink_name_phase == 'stage'
+
+- name: Uplink name - verify
+  ansible.builtin.include_tasks: verify.yml
+  when: uplink_name_phase == 'verify'
+
+- name: Uplink name - cleanup
+  ansible.builtin.include_tasks: cleanup.yml
+  when: uplink_name_phase == 'cleanup'

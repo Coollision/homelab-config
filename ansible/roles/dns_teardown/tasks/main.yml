@@ -1,3 +1,18 @@
+---
+- name: Ensure required DNS variables are defined
+  ansible.builtin.assert:
+    that:
+      - dns_key_name is defined
+      - dns_key_secret is defined
+      - dns_server_ip is defined
+      - dns_zone_name is defined
+    fail_msg: "Missing required DNS variables: dns_key_name, dns_key_secret, dns_server_ip, dns_zone_name (set them in the private inventory)."
+    quiet: true
+
+# NOTE: community.general.nsupdate with state=absent deletes the whole RRset for
+# (record, type); `value` is NOT used to delete a single rdata. Passing `type`
+# makes sure only that record type is removed. For multi-value records (e.g. the
+# control-plane name) rewrite the RRset with the dns role instead.
 - name: Remove records from DNS
   become: false
   community.general.nsupdate:
@@ -5,6 +20,9 @@
     key_secret: "{{ dns_key_secret }}"
     server: "{{ dns_server_ip }}"
     zone: "{{ dns_zone_name }}"
-    record: '{{ dns_set_record | regex_replace("\." + dns_zone_name + "$", "") }}'
+    record: '{{ dns_teardown_record | regex_replace("\." + dns_zone_name + "$", "") }}'
+    type: "{{ dns_teardown_record_type }}"
+    value: "{{ dns_teardown_record_value | default(omit) }}"
     state: absent
   delegate_to: localhost
+  no_log: true

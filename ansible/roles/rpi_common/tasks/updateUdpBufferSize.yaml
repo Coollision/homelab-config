@@ -1,0 +1,18 @@
+# /etc/sysctl.d, not /etc/sysctl.conf: Debian/Pi OS 13 no longer reads sysctl.conf.
+- name: Persist UDP receive buffer sizes in /etc/sysctl.d
+  ansible.posix.sysctl:
+    name: "{{ item }}"
+    value: "8388608"
+    state: present
+    sysctl_file: /etc/sysctl.d/99-udp-buffers.conf
+    sysctl_set: true
+    reload: true
+  loop:
+    - net.core.rmem_max
+    - net.core.rmem_default
+
+- name: Remove the old UDP buffer lines from /etc/sysctl.conf
+  ansible.builtin.lineinfile:
+    path: /etc/sysctl.conf
+    regexp: '^\s*net\.core\.rmem_(max|default)\s*='
+    state: absent

@@ -1,0 +1,40 @@
+---
+argument_specs:
+  main:
+    short_description: Wait until pods on a node settle and no Longhorn volume is degraded/faulted.
+    description:
+      - Hard barrier between node-maintenance steps. kubectl runs on the controller.
+      - Failed/Evicted pods created before the node's last Ready transition (leftovers
+        from before the reboot) and pods already being deleted do not count as unsettled.
+    options:
+      k3s_node_name:
+        type: str
+        required: true
+        description: Kubernetes node name to watch.
+      cluster_wait_stable_kubectl_context:
+        type: str
+        description: Controller kube context.
+      cluster_wait_stable_stabilize_retries:
+        type: int
+        default: 18
+        description: Pod-settle attempts.
+      cluster_wait_stable_stabilize_delay:
+        type: int
+        default: 10
+        description: Seconds between pod-settle attempts.
+      cluster_wait_stable_longhorn_heal_retries:
+        type: int
+        default: 120
+        description: Longhorn heal attempts.
+      cluster_wait_stable_longhorn_heal_delay:
+        type: int
+        default: 15
+        description: Seconds between Longhorn heal attempts.
+      cluster_wait_stable_distro_heal_retries:
+        type: int
+        default: 480
+        description: Longhorn heal attempts used instead when cluster_wait_stable_distro_active.
+      cluster_wait_stable_distro_active:
+        type: bool
+        default: false
+        description: Distro-upgrade mode (bigger heal budget).

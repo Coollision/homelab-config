@@ -1,0 +1,193 @@
+---
+# Nothing here renames a running NIC (impossible while it is up). It writes the
+# .link file and rewrites every reference with the OLD config kept as a fallback,
+# then flags a reboot. The rename itself happens in udev at the next boot.
+
+- name: Uplink name - one node per run
+  ansible.builtin.assert:
+    that: ansible_play_hosts_all | length == 1
+    fail_msg: "Stage one node at a time (--limit <node>): a staged node must be rebooted before the next is touched."
+
+- name: Uplink name - primary NIC (default-route device)
+  ansible.builtin.shell: set -o pipefail; ip -o -4 route show default | awk '{print $5}' | sort -u
+  args:
+    executable: /bin/bash
+  register: uplink_name_dev_probe
+  changed_when: false
+  check_mode: false
+
+- name: Uplink name - exactly one primary NIC
+  ansible.builtin.assert:
+    that: uplink_name_dev_probe.stdout_lines | length == 1
+    fail_msg: "Expected one default-route device, got {{ uplink_name_dev_probe.stdout_lines }}."
+
+- name: Uplink name - remember the current name and MAC
+  ansible.builtin.set_fact:
+    uplink_name_old: "{{ uplink_name_dev_probe.stdout_lines[0] }}"
+
+- name: Uplink name - read the MAC of the primary NIC
+  ansible.builtin.command: cat /sys/class/net/{{ uplink_name_old }}/address
+  register: uplink_name_mac_probe
+  changed_when: false
+  check_mode: false
+
+- name: Uplink name - remember the MAC
+  ansible.builtin.set_fact:
+    uplink_name_mac: "{{ uplink_name_mac_probe.stdout | trim | lower }}"
+
+- name: Uplink name - inventory must already say the new name (flannel + trunk parents)
+  # A half-edited node would reboot onto a k3s / VLAN config that names a NIC
+  # that does not exist. In check mode this only warns so the plan can be previewed.
+  ansible.builtin.assert:
+    that:
+      - k3s_flannel_iface | default('') == uplink_name_iface
+      - vlan_trunk_interfaces | default([]) | map(attribute='parent_interface') | reject('equalto', uplink_name_iface) | list | length == 0
+    fail_msg: >-
+      Set k3s_flannel_iface and every vlan_trunk_interfaces[].parent_interface to
+      {{ uplink_name_iface }} in this node's host_vars first (do not re-run vlan_trunk_setup
+      or k3s_setup until after the reboot).
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Uplink name - the .link file
+  ansible.builtin.template:
+    src: 10-uplink.link.j2
+    dest: /etc/systemd/network/10-uplink.link
+    owner: root
+    group: root
+    mode: "0644"
+
+# ---- gate: udev must rename the uplink and nothing else ---------------------
+- name: Uplink name - udev result for the uplink and for every VLAN sub-interface
+  ansible.builtin.shell: |
+    set -o pipefail
+    for dev in {{ uplink_name_old }} $(ip -o link show type vlan | awk -F': ' '{print $2}' | cut -d@ -f1); do
+      out=$(udevadm test-builtin net_setup_link /sys/class/net/$dev 2>&1)
+      echo "$dev|$(echo "$out" | sed -n 's/^ID_NET_LINK_FILE=//p')|$(echo "$out" | sed -n 's/^ID_NET_NAME=//p')"
+    done
+  args:
+    executable: /bin/bash
+  register: uplink_name_gate
+  changed_when: false
+  check_mode: false
+  when: not ansible_check_mode
+
+- name: Uplink name - gate (the uplink matches the file, VLAN sub-interfaces do not)
+  ansible.builtin.assert:
+    that:
+      - (uplink_name_gate.stdout_lines | select('match', '^' ~ uplink_name_old ~ '\|') | first).split('|')[1] is search('10-uplink.link')
+      - (uplink_name_gate.stdout_lines | select('match', '^' ~ uplink_name_old ~ '\|') | first).split('|')[2] == uplink_name_iface
+      - uplink_name_gate.stdout_lines | reject('match', '^' ~ uplink_name_old ~ '\|') | select('search', '10-uplink.link') | list | length == 0
+    fail_msg: >-
+      udev would not rename exactly the uplink. Gate output: {{ uplink_name_gate.stdout_lines }}.
+      Remove /etc/systemd/network/10-uplink.link and pick another uplink_name_match_key.
+  when: not ansible_check_mode
+
+# ---- ifupdown (Debian nodes) ------------------------------------------------
+- name: Uplink name - ifupdown stanza present?
+  ansible.builtin.command: grep -qsE '^iface {{ uplink_name_old }} inet dhcp$' /etc/network/interfaces
+  register: uplink_name_ifupdown
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Uplink name - old stanza must not hot-fail once the name is gone (auto -> allow-hotplug)
+  ansible.builtin.replace:
+    path: /etc/network/interfaces
+    regexp: '^auto {{ uplink_name_old }}$'
+    replace: 'allow-hotplug {{ uplink_name_old }}'
+  when: uplink_name_ifupdown.rc == 0
+
+- name: Uplink name - new stanza next to the old one (the old one is the fallback)
+  ansible.builtin.blockinfile:
+    path: /etc/network/interfaces
+    marker: "# {mark} uplink_name"
+    block: |
+      allow-hotplug {{ uplink_name_iface }}
+      iface {{ uplink_name_iface }} inet dhcp
+  when: uplink_name_ifupdown.rc == 0
+
+- name: Uplink name - find the VLAN stanza files
+  ansible.builtin.find:
+    paths: /etc/network/interfaces.d
+    patterns: "40-vlan*"
+  register: uplink_name_vlan_files
+  when: uplink_name_ifupdown.rc == 0
+
+- name: Uplink name - VLAN stanzas follow the new parent
+  ansible.builtin.replace:
+    path: "{{ item.path }}"
+    regexp: '(vlan-raw-device) {{ uplink_name_old }}$'
+    replace: '\1 {{ uplink_name_iface }}'
+  loop: "{{ uplink_name_vlan_files.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: uplink_name_ifupdown.rc == 0
+
+# ---- NetworkManager (Raspberry Pi) ------------------------------------------
+- name: Uplink name - NetworkManager profile bound to the old name?
+  ansible.builtin.shell: |
+    set -o pipefail
+    command -v nmcli >/dev/null || exit 0
+    nmcli -t -f NAME,DEVICE connection show --active | awk -F: -v d={{ uplink_name_old }} '$2==d {print $1}' || true
+  args:
+    executable: /bin/bash
+  register: uplink_name_nm_profile
+  changed_when: false
+  check_mode: false
+
+- name: Uplink name - clone that profile for the new name (original stays as the fallback)
+  ansible.builtin.shell: |
+    set -eo pipefail
+    src="{{ uplink_name_nm_profile.stdout_lines[0] }}"
+    nmcli -g NAME connection show | grep -qx "{{ uplink_name_iface }}" && { echo unchanged; exit 0; }
+    nmcli connection clone "$src" "{{ uplink_name_iface }}"
+    nmcli connection modify "{{ uplink_name_iface }}" connection.interface-name "{{ uplink_name_iface }}" connection.autoconnect yes
+    echo changed
+  args:
+    executable: /bin/bash
+  register: uplink_name_nm_clone
+  changed_when: uplink_name_nm_clone.stdout_lines | last == 'changed'
+  when: uplink_name_nm_profile.stdout_lines | length == 1
+
+- name: Uplink name - NetworkManager VLAN profiles follow the new parent
+  ansible.builtin.shell: |
+    set -o pipefail
+    for c in $(nmcli -t -f NAME,TYPE connection show | awk -F: '$2=="vlan" {print $1}'); do
+      p=$(nmcli -g vlan.parent connection show "$c")
+      if [ "$p" = "{{ uplink_name_old }}" ]; then nmcli connection modify "$c" vlan.parent {{ uplink_name_iface }}; echo "changed $c"; fi
+    done
+  args:
+    executable: /bin/bash
+  register: uplink_name_nm_vlans
+  changed_when: "'changed' in uplink_name_nm_vlans.stdout"
+  when: uplink_name_nm_profile.stdout_lines | length == 1
+
+# ---- k3s --------------------------------------------------------------------
+# ASSUMPTION: stage, then reboot right away (cluster_update.yml -e node_update_force_reboot=true).
+# flannel-iface already names the NEW interface, which only exists after the
+# reboot; any k3s restart in between (crash, manual restart, a k3s bump) would
+# start flannel on a missing NIC. Accepted until this role is retired (new or
+# rebuilt nodes get the uplink0 pin at bootstrap instead); do not stage and
+# leave the node for later.
+- name: Uplink name - flannel interface in the k3s config
+  ansible.builtin.lineinfile:
+    path: /etc/rancher/k3s/config.yaml
+    regexp: '^flannel-iface:'
+    line: 'flannel-iface: "{{ uplink_name_iface }}"'
+
+# ---- flag the reboot ---------------------------------------------------------
+- name: Uplink name - flag a reboot (cluster_update.yml with node_update_force_reboot=true does the drain/reboot/uncordon)
+  ansible.builtin.copy:
+    dest: /var/run/reboot-required
+    content: "*** uplink_name: reboot to apply the {{ uplink_name_iface }} rename\n"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Uplink name - staged
+  ansible.builtin.debug:
+    msg: >-
+      {{ inventory_hostname }}: {{ uplink_name_old }} ({{ uplink_name_mac }}) will be named {{ uplink_name_iface }} at the next boot.
+      Next: ansible-playbook playbooks/cluster_update.yml --limit {{ inventory_hostname }}
+      -e node_update_dry_run=false -e node_update_patch_os=false -e node_update_upgrade_k3s=false -e node_update_force_reboot=true
+      (reboot cutover), then this playbook with -e uplink_name_phase=verify.

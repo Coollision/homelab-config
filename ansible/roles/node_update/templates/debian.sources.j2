@@ -1,0 +1,12 @@
+# Managed by ansible (node_update distro upgrade) - {{ node_update_distro_target.codename }}
+Types: deb
+URIs: {{ node_update_distro_mirror }}
+Suites: {{ node_update_distro_target.codename }} {{ node_update_distro_target.codename }}-updates
+Components: {{ node_update_distro_target.components | join(' ') }}
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+
+Types: deb
+URIs: {{ node_update_distro_security_mirror }}
+Suites: {{ node_update_distro_target.security_suite }}
+Components: {{ node_update_distro_target.components | join(' ') }}
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg

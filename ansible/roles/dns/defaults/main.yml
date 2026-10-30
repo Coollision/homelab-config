@@ -1,5 +1,4 @@
-dns_key_name: "your-key-name"
-dns_key_secret: "your-key-secret"
-dns_server_ip: "192.168.1.1"
-dns_zone_name: "example.com" # Ensure this matches the inventory variable
-dns_record_type: "A" # Ensure this matches the inventory variable
+---
+# dns_key_name, dns_key_secret, dns_server_ip and dns_zone_name have NO defaults on
+# purpose: they must come from the private inventory (the role fails without them).
+dns_record_type: "A"

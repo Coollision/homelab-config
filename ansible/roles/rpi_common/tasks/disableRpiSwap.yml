@@ -1,0 +1,36 @@
+# Raspberry Pi OS 13 ships rpi-swap (zram + a /var/swap writeback file) instead of
+# dphys-swapfile, so the swap tasks above do nothing there. kubelet wants swap off.
+# Mechanism=none also removes /var/swap.
+- name: Is rpi-swap installed?
+  ansible.builtin.stat:
+    path: /etc/rpi/swap.conf
+  register: rpi_common_swap_conf
+
+- name: Create the rpi-swap drop-in directory
+  become: true
+  ansible.builtin.file:
+    path: /etc/rpi/swap.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: rpi_common_swap_conf.stat.exists
+
+- name: Disable rpi-swap (zram / swap file)
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/rpi/swap.conf.d/50-no-swap.conf
+    content: |
+      [Main]
+      Mechanism=none
+    owner: root
+    group: root
+    mode: "0644"
+  when: rpi_common_swap_conf.stat.exists
+  register: rpi_common_swap_dropin
+
+- name: Turn off active swap now
+  become: true
+  ansible.builtin.command: swapoff -a
+  changed_when: false
+  when: rpi_common_swap_conf.stat.exists and rpi_common_swap_dropin.changed

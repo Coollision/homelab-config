@@ -1,22 +1,37 @@
-# NOTE: DNS record injection moved to playbooks/dns.yml (runs after the cluster is up).
+---
+# Bootstrap a node's OS basics (hostname, locale, packages, sysctl, journald,
+# udev, Pi specifics). Meant for new/rebuilt nodes, targeted with --limit:
+#   ansible-playbook playbooks/node_setup.yml --limit <node>
+# Safe to re-run on a live node: the initial apt upgrade is skipped once k3s
+# runs there (OS upgrades then go through cluster_update.yml).
+# DNS record injection lives in playbooks/dns.yml (runs after the cluster is up).
 
-# - name: Configure node basic things serially
-#   hosts: nodes
-#   gather_facts: false
-#   serial: 1
-#   roles:
-#     - role: python
-#     - role: sudoers
+- name: Node setup - maintenance lock soft check
+  hosts: nodes
+  gather_facts: false
+  tasks:
+    # Refuses while a cluster_update/distro_upgrade/... run holds the lock;
+    # silently proceeds when there is no cluster (API unreachable) yet.
+    - name: Check the maintenance lock
+      ansible.builtin.include_role:
+        name: node_update
+        tasks_from: maint_lock
+        apply:
+          delegate_to: localhost
+          run_once: true
+      vars:
+        node_update_maint_lock_action: check
+      run_once: true  # noqa: run-once[task]
 
 - name: Configure node basic things
   hosts: nodes
   gather_facts: false
   roles:
-    - role: node-common
+    - role: node_common
 
 - name: Raspberry pi specific tasks
   hosts: rpi
   gather_facts: true
   become: true
   roles:
-    - role: rpi-common
+    - role: rpi_common

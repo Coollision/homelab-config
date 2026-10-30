@@ -1,12 +1,12 @@
 ---
-host_ip_address: 123.456.789.123
+host_ip_address: 192.0.2.30
 host_ipv6_address: "2001:db8::30"
 ansible_user: user
-dns_record_name: node-s.pi
+dns_record_name: node-s.example.internal
 dns_record_value: "{{ host_ip_address }}"
 ansible_python_interpreter: /usr/bin/python3
 k3s_node_name: master-s
-k3s_flannel_iface: enp3s0
+k3s_flannel_iface: uplink0
 k3s_node_label:
   - type=vm
   - node.longhorn.io/create-default-disk=config
@@ -16,7 +16,8 @@ k3s_node_taint:
 k3s_node_annotations:
   node.longhorn.io/default-disks-config: '[{"path":"/mnt/longhorn","allowScheduling":true,"tags":["fast"],"storageReserved":53687091200}]'
 
-longhorn_disk_device: /dev/sda3
+longhorn_disk_device: /dev/disk/by-partuuid/00000000-0000-0000-0000-000000000003
+# longhorn_disk_allow_format: false
 
 
 # VM — hypervisor steal spikes cause kubelet lease timeouts

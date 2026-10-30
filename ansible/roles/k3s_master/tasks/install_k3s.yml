@@ -1,21 +1,28 @@
+---
 - name: Copy K3s service file
-  register: k3s_service
   ansible.builtin.template:
     src: "k3s.service.j2"
     dest: "{{ systemd_dir }}/k3s.service"
     owner: root
     group: root
-    mode: '0644'
+    mode: "0644"
+  notify: Restart k3s
 
-- name: Creates k3s config dir
-  ansible.builtin.file:
-    path: /etc/rancher/k3s
-    state: directory
-    mode: '0755'
+- name: Flag k3s restart when the binary or registries changed (k3s_pre)
+  ansible.builtin.debug:
+    msg: "k3s binary or registries.yaml changed; k3s will be restarted"
+  changed_when: true
+  notify: Restart k3s
+  when: k3s_pre_restart_needed | default(false) | bool
 
-- name: Enable and check K3s service
+- name: Enable and start K3s service
   ansible.builtin.systemd:
     name: k3s
     daemon_reload: true
-    state: restarted
+    state: started
     enabled: true
+
+# Apply a pending config/binary restart now, before the token is read or the
+# next node joins, instead of at the end of the play.
+- name: Restart k3s now if anything changed
+  ansible.builtin.meta: flush_handlers

@@ -1,3 +1,6 @@
+# Example inventory (structure only). Copy to ../inventory/ (gitignored) and fill in.
+# Addresses use documentation ranges (RFC 5737 / RFC 3849); example.internal stands in for <internal-domain>.
+
 [k3scluster:children]
 k3smaster
 k3sworkers
@@ -7,6 +10,7 @@ mini
 vm
 
 [k3sworkers:children]
+rpi
 
 [nodes:children]
 vm
@@ -14,13 +18,13 @@ mini
 rpi
 
 [rpi]
-node-b ansible_host=node-b.local-domain
-node-g ansible_host=node-g.local-domain
-node-r ansible_host=node-r.local-domain
+node-b ansible_host=node-b.example.internal
+node-g ansible_host=node-g.example.internal
+node-r ansible_host=node-r.example.internal
 
 [vm]
-node-s ansible_host=node-s.local-domain
+node-s ansible_host=node-s.example.internal
 
 [mini]
-node-gn ansible_host=node-gn.local-domain
-node-be ansible_host=node-be.local-domain
+node-gn ansible_host=node-gn.example.internal
+node-be ansible_host=node-be.example.internal

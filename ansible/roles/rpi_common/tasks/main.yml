@@ -1,0 +1,50 @@
+- name: Setup Pi config options
+  ansible.builtin.include_tasks: pi-config-changes.yaml
+
+# One copy of the alias task: roles/node_common/tasks/bashStuff.yaml.
+# become: false so ~ is the connecting user's home, not root's.
+- name: Add some bash aliases
+  ansible.builtin.include_role:
+    name: node_common
+    tasks_from: bashStuff
+    apply:
+      become: false
+  vars:
+    node_common_bashrc_location: "~/.bashrc"
+    node_common_aliases: "{{ rpi_common_bash_aliases }}"
+
+# Pi OS 12 and older: dphys-swapfile. Only touched where it is installed.
+- name: Is dphys-swapfile installed?
+  ansible.builtin.stat:
+    path: /etc/dphys-swapfile
+  register: rpi_common_dphys_swapfile
+
+- name: Disable dphys-swapfile
+  ansible.builtin.systemd:
+    name: dphys-swapfile
+    enabled: false
+    state: stopped
+  when: rpi_common_dphys_swapfile.stat.exists
+
+- name: Comment out swap entries in fstab
+  ansible.builtin.replace:
+    path: /etc/fstab
+    regexp: '^([^#\n].*\sswap\s.*)$'
+    replace: '#\1'
+
+- name: Disable rpi-swap (Raspberry Pi OS 13)
+  ansible.builtin.include_tasks: disableRpiSwap.yml
+
+- name: Is any swap still active?
+  ansible.builtin.command: swapon --noheadings --show=NAME
+  register: rpi_common_swap_active
+  changed_when: false
+  check_mode: false
+
+- name: Turn off active swap
+  ansible.builtin.command: swapoff -a
+  changed_when: true
+  when: rpi_common_swap_active.stdout | trim | length > 0
+
+- name: Update Udp BufferSize
+  ansible.builtin.include_tasks: updateUdpBufferSize.yaml

@@ -1,0 +1,22 @@
+---
+- name: Ensure ssh_public_key is set
+  ansible.builtin.assert:
+    that:
+      - ssh_public_key is defined
+      - ssh_public_key is string
+      - (ssh_public_key | trim | length) > 0
+      - ssh_public_key is match('^(ssh-|ecdsa-|sk-)')
+    fail_msg: >-
+      ssh_public_key must be set to a non-empty OpenSSH public key in the private
+      inventory (refusing to touch authorized_keys otherwise).
+    quiet: true
+
+# exclusive=true REMOVES every other key for the user; opt in deliberately with
+# -e setup_ssh_key_exclusive=true. sshd re-reads authorized_keys per login, no restart needed.
+- name: Add SSH public key to authorized_keys
+  ansible.posix.authorized_key:
+    user: "{{ ansible_user }}"
+    key: "{{ ssh_public_key }}"
+    state: present
+    exclusive: "{{ setup_ssh_key_exclusive | bool }}"
+  become: true

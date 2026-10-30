@@ -1,12 +1,30 @@
+---
+# k3s_version comes from the PRIVATE inventory group_vars (no default in the repo).
+# Refuses to downgrade an installed k3s unless -e k3s_allow_downgrade=true.
+# k3s is only restarted (per node, serially) when its binary/config/unit changed.
+- name: K3s setup - maintenance lock soft check
+  hosts: k3scluster
+  gather_facts: false
+  tasks:
+    # Bootstrap may run before any cluster exists, so this only refuses when the API
+    # answers and a maintenance run (cluster_update / distro_upgrade / vlan / uplink) holds the lock.
+    - name: Check the maintenance lock
+      ansible.builtin.include_role:
+        name: node_update
+        tasks_from: maint_lock
+        apply:
+          delegate_to: localhost
+          run_once: true
+      vars:
+        node_update_maint_lock_action: check
+      run_once: true  # noqa: run-once[task]
+
 - name: Configure k3s prerequisites
   hosts: k3scluster
   become: true
   roles:
     - role: k3s_pre
-      vars:
-        # curl -s https://api.github.com/repos/k3s-io/k3s/releases/latest | jq -r .tag_name
-        k3s_pre_version: v1.36.1+k3s1
-    - role: vlan-trunk
+    - role: vlan_trunk
 
 - name: K3s setup - master
   hosts: k3smaster
@@ -20,5 +38,6 @@
 - name: K3s setup - workers
   hosts: k3sworkers
   become: true
+  serial: 1
   roles:
     - k3s_worker

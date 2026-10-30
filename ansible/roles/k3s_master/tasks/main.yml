@@ -1,13 +1,18 @@
-- name: mount disks for storage
+---
+- name: Mount disks for storage
   ansible.builtin.include_tasks: mount-disks.yml
+  when: longhorn_disk_device is defined
 
-- name: Install K3s on the primary master node without a token
+- name: Write k3s config on the primary master node (cluster-init, no token)
   ansible.builtin.template:
-    src: config.j2
+    src: "{{ role_path }}/../k3s_pre/templates/config.yaml.j2"
     dest: /etc/rancher/k3s/config.yaml
     owner: root
     group: root
-    mode: "0644"
+    mode: "0600"
+  vars:
+    k3s_config_role: primary
+  notify: Restart k3s
   when: inventory_hostname == k3s_primary_master
 
 - name: Start K3s on the primary master node
@@ -18,18 +23,12 @@
   ansible.builtin.include_tasks: gather_token.yml
   when: inventory_hostname == k3s_primary_master
 
-- name: Debug token
-  ansible.builtin.debug:
-    msg: "K3s token gathered: {{ k3s_token_file.content | b64decode | trim }}"
-  when:
-    - inventory_hostname != k3s_primary_master
-    - k3s_token_file is defined
-
 - name: Get token from primary master node for remaining masters
   ansible.builtin.slurp:
     path: "/var/lib/rancher/k3s/server/node-token"
-  register: k3s_token_file
+  register: k3s_master_token_file
   delegate_to: "{{ k3s_primary_master }}"
+  no_log: true
   when: inventory_hostname != k3s_primary_master
 
 - name: Validate token from primary master node for remaining masters
@@ -37,18 +36,21 @@
     msg: "Failed to retrieve valid node token from primary master node {{ k3s_primary_master }}. Ensure K3s is properly running on the primary master."
   when:
     - inventory_hostname != k3s_primary_master
-    - k3s_token_file.content is not defined or k3s_token_file.content | b64decode | trim == ""
+    - k3s_master_token_file.content is not defined or k3s_master_token_file.content | b64decode | trim == ""
 
-- name: Install K3s on remaining master nodes using the token
+- name: Write k3s config on remaining master nodes (join with token)
   ansible.builtin.template:
-    src: config_token.j2
+    src: "{{ role_path }}/../k3s_pre/templates/config.yaml.j2"
     dest: /etc/rancher/k3s/config.yaml
     owner: root
     group: root
-    mode: "0644"
-  when: inventory_hostname != k3s_primary_master
+    mode: "0600"
   vars:
-    k3s_token: "{{ k3s_token_file.content | b64decode | trim }}"
+    k3s_config_role: secondary
+    k3s_token: "{{ k3s_master_token_file.content | b64decode | trim }}"
+  notify: Restart k3s
+  no_log: true
+  when: inventory_hostname != k3s_primary_master
 
 - name: Start K3s on remaining master nodes
   ansible.builtin.include_tasks: install_k3s.yml
@@ -58,10 +60,23 @@
   ansible.builtin.include_tasks: fetch_kubeconfig.yml
   when: inventory_hostname == k3s_primary_master
 
-- name: Install etcd defrag timer
-  ansible.builtin.include_tasks: install_etcd_defrag.yml
-  when: inventory_hostname == k3s_primary_master
-  tags: etcd_defrag
+# etcd-defrag timer was dropped from this role; clean up nodes that still have it.
+- name: Stop and disable retired etcd-defrag timer
+  ansible.builtin.systemd:
+    name: etcd-defrag.timer
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Remove retired etcd-defrag unit files and etcdctl
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ systemd_dir }}/etcd-defrag.timer"
+    - "{{ systemd_dir }}/etcd-defrag.service"
+    - /usr/local/bin/etcdctl
+  notify: Reload systemd
 
 - name: Apply node annotations (labels are applied during registration)
   ansible.builtin.include_tasks: apply_annotations.yml

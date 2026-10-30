@@ -1,0 +1,16 @@
+---
+# One stable name for the primary NIC on every cluster node, so everything that
+# sits directly on the uplink (Technitium macvlan on the untagged VLAN, VLAN
+# trunk parent, flannel) uses a single value. Design: wiki/06-todo/uplink_name.md
+uplink_name_iface: uplink0
+
+# stage   : write the .link file and rewrite every reference; flag a reboot.
+#           One node per run (--limit), then reboot through cluster_update.yml.
+# verify  : read-only assertions after the reboot.
+# cleanup : drop the fallback (old-name) config; needs -e uplink_legacy_name=<old>.
+uplink_name_phase: stage
+
+# VLAN sub-interfaces share the parent's MAC, so the match key must be the
+# *permanent* hardware address (virtual devices have none). Fall back to a path
+# match per node only if the stage gate reports the permanent MAC is unusable.
+uplink_name_match_key: PermanentMACAddress

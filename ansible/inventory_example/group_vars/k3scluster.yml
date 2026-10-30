@@ -1,4 +1,16 @@
 ---
-k3s_registries:
+# Single source of the k3s version (no default in the roles; k3s_setup refuses
+# to downgrade unless -e k3s_allow_downgrade=true).
+k3s_version: v1.36.3+k3s1
+
+# Private registry mirrors; {} (or leave unset) for none. Example:
+# k3s_registries:
+#   docker.io:
+#     endpoints:
+#       - https://mirror.example.internal
+#     auth:
+#       username: user
+#       password: "<secret>"
+k3s_registries: {}
 
 systemd_dir: /etc/systemd/system

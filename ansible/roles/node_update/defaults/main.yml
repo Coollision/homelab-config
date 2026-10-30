@@ -1,54 +1,150 @@
 ---
 # Safe-by-default: nothing mutates unless the playbook is run with
-# -e dry_run=false
-dry_run: true
+# -e node_update_dry_run=false
+node_update_dry_run: true
 
 # Toggle each concern independently, but they still share ONE
 # cordon/drain/uncordon cycle per node (see tasks/main.yml).
-patch_os: true
-upgrade_k3s: true
+node_update_patch_os: true
+node_update_upgrade_k3s: true
 
-# Bump this alongside k3s_pre_version in playbooks/k3s_setup.yml once a real
-# (non-dry-run) upgrade has succeeded, so future fresh node installs match.
-k3s_target_version: "v1.36.3+k3s1"
+# k3s_version (e.g. "v1.36.3+k3s1") has NO default here: it lives in the
+# private inventory group_vars, shared with k3s_setup.yml so fresh installs and
+# upgrades always use the same version. The role asserts it when node_update_upgrade_k3s.
 
-# Overridden per-play in playbooks/cluster_update.yml:
-# "k3s" on k3smaster, "k3s-node" on k3sworkers.
-k3s_service_name: k3s
+# The single definition of the k3s unit name: "k3s" on k3smaster, "k3s-node"
+# everywhere else. Plays do not override it.
+node_update_k3s_service_name: "{{ 'k3s' if inventory_hostname in (groups['k3smaster'] | default([])) else 'k3s-node' }}"
 
-kubectl_context: "{{ k3s_cluster_name | default('k3s') }}"
+# Controller-side kube context. Override with -e node_update_kubectl_context=<ctx>.
+node_update_kubectl_context: "{{ k3s_cluster_name | default('k3s') }}"
 
-# No longer Longhorn-related: drain uses --disable-eviction now, which
-# bypasses every PDB directly rather than negotiating with Longhorn's. This
-# is just the grace period for CNPG to notice/react to its maintenance
-# window before we start deleting things.
-longhorn_eviction_grace: 20  # seconds
+# Grace period for CNPG to notice/react to its nodeMaintenanceWindow before
+# the drain starts deleting pods (drain uses --disable-eviction, so this is
+# not a PDB negotiation). Was longhorn_eviction_grace.
+node_update_cnpg_maintenance_grace: 20  # seconds
 
 # Kept generous even though --disable-eviction no longer needs to wait out
 # PDB negotiation — a genuinely slow drain (large emptyDir data, many pods)
 # still deserves room rather than a premature rollback.
-drain_timeout: 1200          # seconds -> up to 20 min
-node_ready_timeout: 300     # seconds
-reboot_timeout: 1200        # seconds -> up to 20 min, ansible.builtin.reboot ceiling.
+node_update_drain_timeout: 1200          # seconds -> up to 20 min
+node_update_node_ready_timeout: 300     # seconds
+node_update_reboot_timeout: 1200        # seconds -> up to 20 min, ansible.builtin.reboot ceiling.
                              # Was 600 — confirmed live worker-blue's own reboot took
                              # noticeably longer than that (timed out at 616s while
                              # the box was still mid-boot per pam_nologin; ended up
                              # taking several more minutes past that). Same "just be
-                             # more patient" reasoning as drain_timeout/longhorn_heal_*.
-stabilize_retries: 18
-stabilize_delay: 10          # seconds -> up to 3 min waiting for pods to settle
-
-# A reboot degrades every 3-replica volume that had a copy on that node (normal
-# on this 3-node cluster — see docs/cluster-update-playbook.md), and Longhorn
-# rate-limits how many replicas it rebuilds at once, so this needs a much more
-# patient budget than pod-settling. This is a hard barrier before the next
-# node starts, specifically so two nodes' rebuild I/O never overlaps — bump
-# these (-e longhorn_heal_retries=... -e longhorn_heal_delay=...) if a run
-# legitimately needs longer, rather than letting nodes overlap.
-longhorn_heal_retries: 120
-longhorn_heal_delay: 15      # seconds -> up to 30 min waiting for Longhorn to heal
+                             # more patient" reasoning as node_update_drain_timeout/longhorn_heal_*.
+# Settle/heal budgets (stabilize_*, longhorn_heal_*, cluster_wait_stable_distro_heal_retries) live
+# in roles/cluster_wait_stable/defaults; -e overrides work the same as before.
 
 # If a drain gets stuck on a bare pod (no Deployment/StatefulSet/Job owner),
 # --force will evict/delete it anyway and it will NOT come back on its own.
 # Leave false and fix the offending pod manually unless you're sure.
-force_drain: false
+node_update_force_drain: false
+
+# --- Intel iGPU auto-fix -----------------------------------------------------
+# Detected per node via lspci. If an Intel GPU is present the play (inside the
+# normal single drain/reboot) installs i915 firmware + VA tooling, pulls the
+# backports kernel when the newest installed kernel lacks the GPU's PCI ID
+# (e.g. 8086:46d4 on 6.1), and asserts /dev/dri + vainfo before uncordon.
+node_update_intel_gpu_autofix: true
+# Host only needs the i915 firmware. The VA driver lives in the workload
+# container (Debian 12's 23.1.1 is too old for newer ADL-N IDs such as 46d4),
+# so the check below verifies the GPU from a throwaway trixie container.
+# Debian 13 moved the i915 firmware (GuC/HuC/DMC) into firmware-intel-graphics.
+node_update_intel_gpu_packages: >-
+  {{ ['firmware-misc-nonfree']
+     + (['firmware-intel-graphics'] if (ansible_facts['distribution_major_version'] | int) >= 13 else []) }}
+node_update_intel_gpu_check_image: docker.io/library/debian:trixie-slim
+# The vainfo part of the check needs internet on the node (pulls the image
+# above and apt-installs vainfo inside it). false = render node + firmware
+# checks only. A pre-existing copy of the image is never removed.
+node_update_intel_gpu_check_vainfo: true
+
+# Reboot the node in this run even when no new kernel is pending (e.g. a staged
+# NIC rename: playbooks/uplink_name.yml, then -e node_update_force_reboot=true).
+node_update_force_reboot: false
+# Leave the node cordoned after this run (skips the settle/heal wait, the
+# distro soak + re-check and the image prune), so a follow-up
+# distro_upgrade.yml run reuses the same drain. Single host only (asserted).
+# The follow-up run uncordons: a cordoned node with nothing pending gets an
+# uncordon-only pass instead of being skipped. Never leave a node like this.
+node_update_keep_cordoned: false
+
+# After a successful uncordon + settle: `k3s crictl rmi --prune` to drop
+# unused images (Renovate churn is the usual DiskPressure cause). Non-fatal.
+node_update_image_prune: true
+
+# --- Debian release upgrade (playbooks/distro_upgrade.yml) -------------------
+# Only playbooks/distro_upgrade.yml sets this true (see tasks/distro_*.yml).
+node_update_distro_upgrade: false
+
+# Release data. To add the next release: add one entry here after checking
+# the codename/security suite/components against the Debian release notes,
+# then read wiki/00-setup/distro-upgrade.md "Adding the next release".
+node_update_distro_releases:
+  "12": {codename: bookworm, security_suite: bookworm-security, components: [main, non-free-firmware]}
+  "13": {codename: trixie, security_suite: trixie-security, components: [main, non-free-firmware]}
+  # "14": {codename: forky, security_suite: forky-security, components: [main, non-free-firmware]}
+# Target major. The play refuses unless the node is on exactly target-1
+# (never skips a release) or already mid-upgrade to this target (resume).
+node_update_distro_to_major: "13"
+node_update_distro_mirror: http://deb.debian.org/debian
+node_update_distro_security_mirror: http://security.debian.org/debian-security
+
+node_update_distro_min_free_root_mb: 5120
+# Dry run: simulate the upgrade against the target sources in a scratch apt
+# dir under /tmp (writes only there, removed afterwards). Set false for a
+# strictly read-only dry run.
+node_update_distro_simulate: true
+# VMs (ansible_virtualization_role == guest) need -e node_update_distro_snapshot_taken=true.
+node_update_distro_snapshot_taken: false
+# Control plane only: absolute controller-side directory OUTSIDE this repo
+# (e.g. a NAS mount) that receives the etcd snapshot, server token and k3s
+# config. Required for a real run on the control-plane node.
+node_update_distro_offnode_backup_dir: ""
+# Refuse the control-plane node while other nodes are not yet on the target.
+node_update_distro_allow_control_plane_first: false
+# Packages held during the upgrade (escape hatch for a known regression).
+node_update_distro_hold_packages: []
+# The DHCP client must stay isc-dhcp-client (same client-id => same lease/IP).
+# Set true only after confirming MAC-based DHCP reservations for every node.
+node_update_distro_allow_dhcp_client_change: false
+# Hard timeout (s) for each async apt phase; on timeout the rescue prints the
+# dpkg/apt processes instead of guessing.
+node_update_distro_apt_timeout: 5400
+# inotify limits: defined once in roles/node_common/defaults (the distro
+# preflight includes node_common's updateInotifyLimits task to load them).
+# Units allowed to be failed after boot (systemctl --failed).
+# networkd-wait-online: trixie enables systemd-networkd, but these nodes keep
+# ifupdown so every link is "unmanaged" and the unit always times out (first
+# real run on the bare-metal worker, 2026-10-30); the network gate checks IP/gateway itself.
+node_update_distro_failed_units_allowlist:
+  - systemd-networkd-wait-online.service
+# /tmp after the upgrade. trixie mounts /tmp as tmpfs by default on upgraded
+# systems. Decided 2026-10-30: keep it on disk (masks tmp.mount).
+#   disk          -> mask tmp.mount (today's behaviour)
+#   tmpfs_capped  -> tmpfs with size=node_update_distro_tmpfs_size
+#   tmpfs_default -> leave the release default alone
+node_update_distro_upgrade_tmp_mode: disk
+node_update_distro_tmpfs_size: 1G
+# Pause after the node is uncordoned and Longhorn healed, then re-check the
+# Longhorn barrier before the next node. 0 disables the pause, never the barrier.
+node_update_distro_soak_minutes: 10
+node_update_distro_backup_dir: /var/backups/distro-upgrade
+
+# Cluster-side lock (tasks/maint_lock.yml) shared by every node-maintenance playbook.
+maint_lock_name: homelab-node-maintenance-lock  # noqa: var-naming[no-role-prefix] - kept unprefixed on purpose
+
+# Shell snippet: sets $newest to the ABI string (e.g. 6.12.48+deb13-amd64) of
+# the installed linux-image-<abi> package with the highest *dpkg* version.
+# Not `sort -V` on package names: a bookworm-backports kernel
+# (6.12.95+deb12, version 6.12.95-1~bpo12+1) would beat a newer-release
+# kernel with a lower ABI number on a name sort, and dpkg ordering is what
+# apt and the -amd64 meta package actually follow.
+node_update_newest_kernel_sh: >-
+  newest=""; nv="";
+  for p in $(dpkg-query -W -f='${db:Status-Status} ${Package}\n' 'linux-image-[0-9]*' 2>/dev/null | awk '$1=="installed"{print $2}'); do
+  v="$(dpkg-query -W -f='${Version}' "$p")";
+  if [ -z "$nv" ] || dpkg --compare-versions "$v" gt "$nv"; then nv="$v"; newest="${p#linux-image-}"; fi; done;

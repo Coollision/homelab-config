@@ -1,11 +1,12 @@
+---
 - name: Copy K3s service file
-  register: k3s_service
   ansible.builtin.template:
     src: "k3s.service.j2"
     dest: "{{ systemd_dir }}/k3s-node.service"
     owner: root
     group: root
     mode: "0644"
+  notify: Restart k3s-node
 
 - name: Creates k3s config dir
   ansible.builtin.file:
@@ -16,26 +17,42 @@
 - name: Get token from primary master node
   ansible.builtin.slurp:
     path: "/var/lib/rancher/k3s/server/node-token"
-  register: k3s_token_file
+  register: k3s_worker_token_file
   delegate_to: "{{ k3s_primary_master }}"
+  no_log: true
 
 - name: Validate token from primary master node
   ansible.builtin.fail:
     msg: "Failed to retrieve valid node token from primary master node {{ k3s_primary_master }}. Ensure K3s is properly running on the primary master."
   when:
-    - k3s_token_file.content is not defined or k3s_token_file.content | b64decode | trim == ""
+    - k3s_worker_token_file.content is not defined or k3s_worker_token_file.content | b64decode | trim == ""
 
 - name: Copy K3s config file
   ansible.builtin.template:
-    src: "config.j2"
+    src: "{{ role_path }}/../k3s_pre/templates/config.yaml.j2"
     dest: "/etc/rancher/k3s/config.yaml"
-    mode: "0644"
+    owner: root
+    group: root
+    mode: "0600"
   vars:
-    k3s_token: "{{ k3s_token_file.content | b64decode | trim }}"
+    k3s_config_role: agent
+    k3s_token: "{{ k3s_worker_token_file.content | b64decode | trim }}"
+  notify: Restart k3s-node
+  no_log: true
 
-- name: Enable and check K3s service
+- name: Flag k3s-node restart when the binary or registries changed (k3s_pre)
+  ansible.builtin.debug:
+    msg: "k3s binary or registries.yaml changed; k3s-node will be restarted"
+  changed_when: true
+  notify: Restart k3s-node
+  when: k3s_pre_restart_needed | default(false) | bool
+
+- name: Enable and start K3s agent service
   ansible.builtin.systemd:
     name: k3s-node
     daemon_reload: true
-    state: restarted
+    state: started
     enabled: true
+
+- name: Restart k3s-node now if anything changed
+  ansible.builtin.meta: flush_handlers

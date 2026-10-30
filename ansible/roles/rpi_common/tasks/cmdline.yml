@@ -1,0 +1,30 @@
+# replace_existing=true: any value of `key` is replaced; false: key=value is
+# only appended when that exact pair is missing.
+- name: Read cmdline.txt {{ key | string + "=" + value | string }}
+  become: true
+  ansible.builtin.slurp:
+    src: "{{ cmd_line_location }}"
+  register: rpi_common_result_cmdline
+
+- name: Generate regular expression for existing arguments {{ key | string + "=" + value | string }}
+  ansible.builtin.set_fact:
+    rpi_common_regex_existing: '{{ "\b" + key | string + "=" + (replace_existing | bool | ternary("[\w]*", value | string)) + "\b" }}'
+    rpi_common_key_value_pair: '{{ key | string + "=" + value | string }}'
+
+- name: Generate regular expression for new arguments {{ key | string + "=" + value | string }}
+  ansible.builtin.set_fact:
+    rpi_common_regex_add_missing: '{{ "^((?!(?:.|\n)*" + rpi_common_regex_existing + ")((?:.|\n)*))$" }}'
+
+- name: Update cmdline.txt {{ key | string + "=" + value | string }}  # noqa: risky-file-permissions
+  become: true
+  ansible.builtin.copy:
+    content: '{{ rpi_common_result_cmdline.content
+        | b64decode
+        | regex_replace(rpi_common_regex_existing, rpi_common_key_value_pair)
+        | regex_replace(rpi_common_regex_add_missing, rpi_common_key_value_pair + " \1")
+      }}'
+    dest: "{{ cmd_line_location }}"
+    # No mode: `mode: preserve` with `content:` falls back to the 0600 temp file, which flipped the mode
+    # (and so notified the reboot handler) on every run; leaving it unset keeps the existing mode.
+  notify:
+    - Reboot host

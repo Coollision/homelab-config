@@ -1,0 +1,83 @@
+- name: Setup Hostname
+  ansible.builtin.include_tasks:
+    file: hostname-update.yaml
+    apply:
+      tags: [hostname, hosts]
+  vars:
+    node_common_hostname_name: "{{ inventory_hostname }}"
+  tags: [hostname, hosts]
+
+- name: Set locale en timezone
+  ansible.builtin.include_tasks: set-timezone.yaml
+
+- name: Add some bash aliases
+  ansible.builtin.include_tasks: bashStuff.yaml
+  vars:
+    # Runs as the connecting user (no become), so ~ is that user's home.
+    node_common_bashrc_location: "~/.bashrc"
+    node_common_aliases:
+      grepi: "'grep -i'"
+      resource: "'source ~/.bashrc'"
+
+# node_setup.yml is bootstrap-only. Once k3s runs on the node, OS upgrades
+# belong to cluster_update.yml (drained, one node at a time), never to an
+# un-drained parallel apt upgrade here.
+- name: Is k3s already running on this node?
+  ansible.builtin.shell: systemctl is-active --quiet k3s.service || systemctl is-active --quiet k3s-node.service
+  register: _k3s_active
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Run apt upgrade (bootstrap only, skipped when k3s is active)
+  become: true
+  when: _k3s_active.rc != 0
+  ansible.builtin.apt:
+    cache_valid_time: 600
+    update_cache: true
+    autoclean: true
+    autoremove: true
+    upgrade: true
+
+- name: Install some packages
+  become: true
+  ansible.builtin.apt:
+    cache_valid_time: 600
+    update_cache: true
+    autoclean: true
+    autoremove: true
+    name:
+      - dnsutils
+      - tmux
+      - jq
+      - htop
+      - vim
+      - systemd-timesyncd
+      - lm-sensors
+      - nfs-common
+      - open-iscsi
+      - cryptsetup
+      - dmsetup
+
+- name: Configure inotify limits
+  ansible.builtin.include_tasks: updateInotifyLimits.yml
+
+- name: Network-online wait on ifupdown nodes
+  ansible.builtin.include_tasks: networkOnline.yml
+
+- name: Load NFS kernel modules
+  become: true
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+    persistent: present
+  loop:
+    - nfs
+    - nfsd
+
+- name: Configure journald log retention
+  ansible.builtin.include_role:
+    name: journald_config
+
+- name: Setup custom Usb rule names
+  ansible.builtin.include_tasks: custom-usb-rule-names.yaml

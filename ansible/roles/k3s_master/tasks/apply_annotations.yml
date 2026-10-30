@@ -8,8 +8,8 @@
     cmd: kubectl get --raw=/readyz
   environment:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
-  register: apiserver_ready
-  until: apiserver_ready.rc == 0 and 'ok' in apiserver_ready.stdout
+  register: k3s_master_apiserver_ready
+  until: k3s_master_apiserver_ready.rc == 0 and 'ok' in k3s_master_apiserver_ready.stdout
   retries: 60
   delay: 2
   changed_when: false
@@ -19,8 +19,8 @@
     cmd: kubectl get node {{ k3s_node_name }} --no-headers
   environment:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
-  register: node_check
-  until: node_check.rc == 0
+  register: k3s_master_node_check
+  until: k3s_master_node_check.rc == 0
   retries: 60
   delay: 2
   changed_when: false
@@ -34,5 +34,5 @@
   environment:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
   when: k3s_node_annotations is defined and k3s_node_annotations["node.longhorn.io/default-disks-config"] is defined
-  register: annotation_result
-  changed_when: "'annotated' in annotation_result.stdout or 'configured' in annotation_result.stdout"
+  register: k3s_master_annotation_result
+  changed_when: "'annotated' in k3s_master_annotation_result.stdout or 'configured' in k3s_master_annotation_result.stdout"

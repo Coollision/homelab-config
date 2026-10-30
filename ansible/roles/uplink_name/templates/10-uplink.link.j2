@@ -1,0 +1,8 @@
+# Managed by Ansible (role uplink_name). Pins the primary NIC name; applied by
+# udev at boot, independent of ifupdown / networkd / NetworkManager.
+[Match]
+{{ uplink_name_match_key }}={{ uplink_name_mac }}
+Type=ether
+
+[Link]
+Name={{ uplink_name_iface }}

@@ -1,0 +1,53 @@
+---
+# Pin the primary NIC name on every cluster node (design: wiki/06-todo/uplink_name.md).
+#   stage:   ansible-playbook playbooks/uplink_name.yml --limit <node> --check --diff   (then without --check)
+#   reboot:  playbooks/cluster_update.yml --limit <node> -e node_update_dry_run=false -e node_update_patch_os=false
+#              -e node_update_upgrade_k3s=false -e node_update_force_reboot=true
+#   verify:  ansible-playbook playbooks/uplink_name.yml --limit <node> -e uplink_name_phase=verify
+#   cleanup: ansible-playbook playbooks/uplink_name.yml --limit <node> -e uplink_name_phase=cleanup -e uplink_legacy_name=<old>
+# Takes the cluster-side maintenance lock (ConfigMap
+# kube-system/homelab-node-maintenance-lock, shared with cluster_update.yml and
+# distro_upgrade.yml). Released only on success; after a failure check the
+# nodes, then re-run with -e maint_lock_break=true.
+
+- name: "Uplink name - lock"
+  hosts: k3scluster
+  gather_facts: false
+  tasks:
+    - name: Take the maintenance lock (only checked under --check)
+      ansible.builtin.include_role:
+        name: node_update
+        tasks_from: maint_lock
+        apply:
+          delegate_to: localhost
+          run_once: true
+      vars:
+        node_update_maint_lock_action: "{{ 'check' if ansible_check_mode else 'acquire' }}"
+        node_update_maint_lock_playbook: uplink_name
+      run_once: true  # noqa: run-once[task]
+
+- name: Pin the uplink NIC name
+  hosts: k3scluster
+  # A failure on any node stops the run so the release play never frees the lock.
+  any_errors_fatal: true
+  become: true
+  gather_facts: false
+  roles:
+    - uplink_name
+
+- name: "Uplink name - release lock"
+  hosts: k3scluster
+  gather_facts: false
+  tasks:
+    - name: Release the maintenance lock
+      ansible.builtin.include_role:
+        name: node_update
+        tasks_from: maint_lock
+        apply:
+          delegate_to: localhost
+          run_once: true
+      vars:
+        node_update_maint_lock_action: release
+        node_update_maint_lock_playbook: uplink_name
+      run_once: true  # noqa: run-once[task]
+      when: not ansible_check_mode

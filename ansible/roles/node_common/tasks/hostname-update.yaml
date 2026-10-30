@@ -1,0 +1,32 @@
+- name: Updating hostname (1/2)
+  become: true
+  ansible.builtin.hostname:
+    name: "{{ node_common_hostname_name }}"
+
+- name: Updating hostname (2/2)  # noqa: risky-file-permissions
+  become: true
+  ansible.builtin.copy:
+    content: "{{ node_common_hostname_name }}{{'\n'}}"
+    dest: /etc/hostname
+    backup: true
+    # No mode: `mode: preserve` with `content:` would make /etc/hostname 0600 (see rpi_common/tasks/cmdline.yml).
+
+- name: Update /etc/hosts
+  ansible.builtin.include_tasks:
+    file: ./ensureInHostsFile.yml
+    apply:
+      tags: [hostname, hosts]
+  vars:
+    # 127.0.1.1 raspberrypi (the Pi OS image default name) only on Pi hosts.
+    set_addresses: >-
+      {{
+        [
+          {'127.0.0.1': 'localhost'},
+          {'127.0.0.1': inventory_hostname},
+          {host_ip_address: ansible_host}
+        ]
+        + ([{'127.0.1.1': 'raspberrypi'}] if inventory_hostname in (groups['rpi'] | default([])) else [])
+        + ([{host_ip_address: k3s_node_name}] if (k3s_node_name is defined and (k3s_node_name | length) > 0) else [])
+        + ([{host_ipv6_address: ansible_host}] if (host_ipv6_address is defined and (host_ipv6_address | length) > 0) else [])
+      }}
+    node_common_set_expected_state: present

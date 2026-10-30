@@ -1,0 +1,6 @@
+node_common_hostname_name: "{{ inventory_hostname }}"
+node_common_set_expected_state: present
+# Single source for the inotify limits; roles/node_update's distro preflight
+# and post-boot gate load them via include_role tasks_from updateInotifyLimits.
+node_common_inotify_max_user_instances: 512
+node_common_inotify_max_user_watches: 524288

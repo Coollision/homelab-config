@@ -1,6 +1,47 @@
 ---
+# Configure the VLAN trunk sub-interfaces on the cluster nodes.
+# Takes the cluster-side maintenance lock (ConfigMap
+# kube-system/homelab-node-maintenance-lock, shared with cluster_update.yml and
+# distro_upgrade.yml). Released only on success; after a failure check the
+# nodes, then re-run with -e maint_lock_break=true.
+
+- name: "Vlan trunk setup - lock"
+  hosts: k3scluster
+  gather_facts: false
+  tasks:
+    - name: Take the maintenance lock (only checked under --check)
+      ansible.builtin.include_role:
+        name: node_update
+        tasks_from: maint_lock
+        apply:
+          delegate_to: localhost
+          run_once: true
+      vars:
+        node_update_maint_lock_action: "{{ 'check' if ansible_check_mode else 'acquire' }}"
+        node_update_maint_lock_playbook: vlan_trunk_setup
+      run_once: true  # noqa: run-once[task]
+
 - name: Configure VLAN trunk interfaces
   hosts: k3scluster
+  # A failure on any node stops the run so the release play never frees the lock.
+  any_errors_fatal: true
   become: true
   roles:
-    - vlan-trunk
+    - vlan_trunk
+
+- name: "Vlan trunk setup - release lock"
+  hosts: k3scluster
+  gather_facts: false
+  tasks:
+    - name: Release the maintenance lock
+      ansible.builtin.include_role:
+        name: node_update
+        tasks_from: maint_lock
+        apply:
+          delegate_to: localhost
+          run_once: true
+      vars:
+        node_update_maint_lock_action: release
+        node_update_maint_lock_playbook: vlan_trunk_setup
+      run_once: true  # noqa: run-once[task]
+      when: not ansible_check_mode
