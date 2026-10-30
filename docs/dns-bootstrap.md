@@ -6,6 +6,11 @@ secondary pod `<VIP-B>`, tertiary (NAS Docker) `<NAS-IP>`. Cluster nodes adverti
 MACVLAN IPs; **never ClusterIPs or node IPs**. This is the only model that lets the
 off-overlay NAS node join (it can't route to k8s ClusterIPs).
 
+**Placement:** the primary and secondary pods are kept off each other's node (pod anti-affinity) and
+off the VM node (`type=vm` node affinity). That VM runs on the same NAS as the tertiary, so one NAS
+outage must not take out two of the three resolvers. No node label is needed for the VLAN 30 MACVLANs:
+they sit on the node uplink (`uplink0`), which every node has.
+
 The advertised address is set at init/join but is **no longer immutable** — v15.4 added
 `POST /api/admin/cluster/updateIpAddress` (see §2.0) and
 `POST /api/admin/cluster/secondary/updatePrimary`. Advertise the **ULA** alongside the
@@ -471,7 +476,7 @@ addresses needs a per-family rule with `ip_version` set accordingly.
 - **k3s node-name NXDOMAIN noise:** the k3s node names (`worker-<x>`/`master-<x>`) differ
   from the DNS records (`node-<x>.<zone>`) and the OS hostname (`node-<x>`). kubelet resolves its
   own k3s node name every ~10 s → NXDOMAIN against these resolvers. Fixed by mapping each
-  k3s node name to its IP in `/etc/hosts` via the Ansible `node-common` role
+  k3s node name to its IP in `/etc/hosts` via the Ansible `node_common` role
   (`hostname-update.yaml`); apply with `ansible-playbook playbooks/node_setup.yml --tags hosts`.
 - **`primaryNameServerAddresses` empty on a catalog member** → it resolves the primary via
   DNS (→ ClusterIP/unreachable). Drive it from the catalog (§2), not per-zone.
