@@ -10,7 +10,7 @@ never touches a Kubernetes object; it stops the moment `kubectl get nodes` works
 ┌─────────────┐   ┌──────────────┐   ┌─────────────┐   ┌──────────────┐
 │  Debian      │──▶│  Ansible:    │──▶│  Ansible:   │──▶│  Ansible:    │
 │  preseed     │   │  node prep   │   │  k3s install │   │  DNS records │
-│  (SSH + sudo)│   │ (node-common)│   │ (join order) │   │ (Technitium) │
+│  (SSH + sudo)│   │ (node_common)│   │ (join order) │   │ (Technitium) │
 └─────────────┘   └──────────────┘   └─────────────┘   └──────────────┘
                                                                 │
                                                                 ▼
@@ -32,8 +32,10 @@ never touches a Kubernetes object; it stops the moment `kubectl get nodes` works
 install and you get, with zero interaction: no desktop, `en_US.UTF-8` /
 `Europe/Brussels`, DHCP networking, a manual partition layout (512MB EFI + 64GB ext4
 root, **rest of the disk left unallocated** — that's the space Longhorn will later
-claim), swap disabled, a `homelab` user with passwordless sudo, root login and SSH
-password auth both disabled, and an SSH public key injected via `late_command`. The
+claim), swap disabled, a `homelab` user with a locked password and passwordless sudo, root login and SSH
+password auth both disabled (an sshd drop-in), and an SSH public key injected by the single
+`late_command`. The key is the `SSH_PUBLIC_KEY_PLACEHOLDER` line in the preseed: replace it with
+your own public key in a private copy, never commit a real key. The
 result is a box that's immediately reachable by Ansible.
 
 ## 2. Ansible: OS prep and k3s install
@@ -41,8 +43,8 @@ result is a box that's immediately reachable by Ansible.
 Full role-by-role detail is on the [Ansible page](ansible.md). The playbooks run in this
 order:
 
-1. `ansible/playbooks/node_setup.yml` — OS hardening/common config (`node-common` on
-   everything, `rpi-common` on Pis).
+1. `ansible/playbooks/node_setup.yml` — OS hardening/common config (`node_common` on
+   everything, `rpi_common` on Pis).
 2. `ansible/playbooks/vlan_trunk_setup.yml` — VLAN sub-interfaces where a node needs one
    (see [Networking](../01-platform/networking.md)); also enables IPv6 RA acceptance for
    the Thread border router's backbone interface.

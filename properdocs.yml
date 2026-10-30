@@ -11,6 +11,7 @@ nav:
       - 00-setup/bootstrap.md
       - 00-setup/gitops-structure.md
       - 00-setup/ansible.md
+      - 00-setup/distro-upgrade.md
   - Platform:
       - 01-platform/networking.md
       - 01-platform/storage.md
@@ -41,7 +42,11 @@ nav:
       - 05-operations/ansible-cheatsheet.md
       - 05-operations/history.md
   - TODO:
+      - 06-todo/ansible-housekeeping.md
       - 06-todo/music-stack.md
+      - 06-todo/networkd-migration.md
+      - 06-todo/uplink-name.md
+      - 06-todo/plex-migration.md
 
 theme:
   name: material

@@ -126,7 +126,7 @@ No node migration, no IP re-addressing, no routing complexity.
 ┌──────────────────────────────────────────────────────────┐
 │  K8s node (e.g. node-gn)   — VLAN 30: 192.168.30.10     │
 │                                                          │
-│  Physical NIC: enp1s0  (untagged, VLAN 30 native)       │
+│  Physical NIC: uplink0 (untagged, VLAN 30 native)        │
 │  VLAN sub-ifaces: vlan40 + vlan5 (NO IPs on node)│
 │                                                          │
 │  ┌─────────────────────────────────────────────┐        │
@@ -293,13 +293,12 @@ takes the VLAN 40 and VLAN 5 addresses via MACVLAN.
 ```bash
 # First, find the actual physical interface name on the node:
 ip link show
-# Look for the interface with the VLAN 30 IP — e.g. enp1s0, ens3, eth0.
-# For node-gn this is enp1s0 (from Ansible inventory k3s_flannel_iface).
+# Look for the interface with the VLAN 30 IP — e.g. uplink0, ens3, eth0.
+# On every node this is uplink0 (pinned by the Ansible uplink-name role; see wiki/06-todo/uplink-name.md).
 
 # Create the sub-interfaces (VLAN IDs 40 and 5)
-# Replace enp1s0 with your actual interface name
-sudo ip link add link enp1s0 name vlan40 type vlan id 40
-sudo ip link add link enp1s0 name vlan5 type vlan id 5
+sudo ip link add link uplink0 name vlan40 type vlan id 40
+sudo ip link add link uplink0 name vlan5 type vlan id 5
 sudo ip link set vlan40 up
 sudo ip link set vlan5 up
 
@@ -419,10 +418,10 @@ k3s_node_label:
 
 vlan_trunk_interfaces:
   - id: 40
-    parent_interface: enp1s0
+    parent_interface: uplink0
     interface_name: vlan40
   - id: 5
-    parent_interface: enp1s0
+    parent_interface: uplink0
     interface_name: vlan5
 ```
 
@@ -737,8 +736,8 @@ cp -r tests/kube-system/multus system/kube-system/multus
 
 ### Node (one-time setup)
 
-- [ ] VLAN 40 sub-interface created: `ip link add link enp1s0 name vlan40 type vlan id 40`
-- [ ] VLAN 5 sub-interface created: `ip link add link enp1s0 name vlan5 type vlan id 5`
+- [ ] VLAN 40 sub-interface created: `ip link add link uplink0 name vlan40 type vlan id 40`
+- [ ] VLAN 5 sub-interface created: `ip link add link uplink0 name vlan5 type vlan id 5`
 - [ ] systemd-networkd files created for persistence (§6.3)
 - [ ] sysctl `99-matter-thread.conf` created and applied (§6.3)
 - [ ] Node labelled: `kubectl label node master-gn vlan40-trunk=true vlan5-trunk=true`

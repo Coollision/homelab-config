@@ -74,8 +74,8 @@ ansible <hostname> -m setup
 One cordon/drain/uncordon pass per node covering OS packages, the kernel, and the k3s
 binary version together — see [docs/cluster-update-playbook.md](https://github.com/Coollision/homelab-config/blob/master/docs/cluster-update-playbook.md)
 for the full design (why it's one pass, the Longhorn/CNPG drain-blocker handling, node
-ordering). **Safe by default** — `dry_run` defaults to `true`, so a plain run only
-reports what would change; nothing is touched until you pass `-e dry_run=false`.
+ordering). **Safe by default** — `node_update_dry_run` defaults to `true`, so a plain run only
+reports what would change; nothing is touched until you pass `-e node_update_dry_run=false`.
 
 ```bash
 cd ansible
@@ -85,25 +85,38 @@ cd ansible
 ansible-playbook playbooks/cluster_update.yml
 
 # Try it for real on one node first (recommended — pick the least critical node)
-ansible-playbook playbooks/cluster_update.yml -e dry_run=false --limit <node-name>
+ansible-playbook playbooks/cluster_update.yml -e node_update_dry_run=false --limit <node-name>
 
 # Real run, everything, whole cluster (master first, then workers — see docs)
-ansible-playbook playbooks/cluster_update.yml -e dry_run=false
+ansible-playbook playbooks/cluster_update.yml -e node_update_dry_run=false
 
 # OS/kernel packages only, skip the k3s version bump
-ansible-playbook playbooks/cluster_update.yml -e dry_run=false -e upgrade_k3s=false
+ansible-playbook playbooks/cluster_update.yml -e node_update_dry_run=false -e node_update_upgrade_k3s=false
 
 # k3s binary only, skip OS packages
-ansible-playbook playbooks/cluster_update.yml -e dry_run=false -e patch_os=false
+ansible-playbook playbooks/cluster_update.yml -e node_update_dry_run=false -e node_update_patch_os=false
 
 # Follow progress live: run it in the foreground in your own terminal (recommended for
 # a real run) instead of asking Claude to background it — you get the full task-by-task
 # ansible output as it happens. Add -v (or -vv) for full kubectl/apt command output.
-ansible-playbook playbooks/cluster_update.yml -e dry_run=false -v
+ansible-playbook playbooks/cluster_update.yml -e node_update_dry_run=false -v
 ```
 
+> ℹ️ Real runs of `cluster_update.yml`, `distro_upgrade.yml`, `vlan_trunk_setup.yml`,
+> `vlan_trunk_teardown.yml` and `uplink_name.yml` take a cluster-side lock
+> (ConfigMap `kube-system/homelab-node-maintenance-lock`), so they never run at once;
+> `node_setup.yml` and `k3s_setup.yml` only check it (they refuse when the API is reachable and the
+> lock exists). It is released only on success; after a failure check the nodes, then re-run with
+> `-e maint_lock_break=true`. A Debian release upgrade is a separate playbook
+> (`playbooks/distro_upgrade.yml --limit <node-name>`, dry-run by default); k3s bumps are never
+> done inside its drain.
+
+> ℹ️ After the uncordon and the settle wait, each node also gets `crictl rmi --prune` (unused images,
+> the usual DiskPressure cause); switch off with `-e node_update_image_prune=false`.
+
 > ⚠️ A stuck drain (bare pod with no controller) is refused, not forced, and the node is
-> automatically uncordoned again on failure. Only pass `-e force_drain=true` once you've
+> uncordoned again on failure, but only if this run cordoned it (a node that was already cordoned
+> stays cordoned). Only pass `-e node_update_force_drain=true` once you've
 > confirmed that pod is fine to lose permanently — see
 > [Known Issues](known-issues.md#node-drain-blockers).
 
@@ -119,7 +132,8 @@ ansible-playbook playbooks/k3s_setup.yml
 # Just the VLAN trunk interfaces, without touching k3s
 ansible-playbook playbooks/vlan_trunk_setup.yml
 
-# Re-push SSH keys to every host
+# Add the ssh_public_key (from the private group_vars) to every host's authorized_keys.
+# Other keys are kept; add -e setup_ssh_key_exclusive=true to drop them (rotation)
 ansible-playbook playbooks/setup-ssh-keys.yml
 
 # Inject/refresh DNS records for the cluster — ONLY once Technitium is already
@@ -132,8 +146,12 @@ ansible-playbook playbooks/node_setup.yml --limit <hostname>
 # Dry-run any playbook (check mode — shows what WOULD change, changes nothing)
 ansible-playbook playbooks/node_setup.yml --check --diff
 
-# Full teardown of a node (removes k3s entirely — destructive, confirm target first)
-ansible-playbook playbooks/k3s_teardown.yml --limit <hostname>
+# Full teardown of a node (removes k3s entirely — destructive). Both guards are mandatory:
+# an explicit --limit AND the cluster name (k3s_cluster_name, default "k3s")
+ansible-playbook playbooks/k3s_teardown.yml --limit <hostname> -e confirm_teardown=<cluster-name>
+
+# Remove one node's DNS records (A/AAAA); --limit required
+ansible-playbook playbooks/dns_teardown.yml --limit <hostname>
 ```
 
 ## Debugging playbook runs
