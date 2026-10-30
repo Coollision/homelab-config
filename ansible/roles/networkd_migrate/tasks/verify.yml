@@ -1,0 +1,92 @@
+---
+# Read-only gates, in order. Failing any of them leaves the revert timer armed.
+- name: Networkd migrate gate - collect state
+  ansible.builtin.shell: |
+    set -o pipefail
+    {
+    echo "NETWORKD=$(systemctl is-active systemd-networkd)"
+    echo "RESOLVED=$(systemctl is-active systemd-resolved)"
+    echo "IFUPDOWN=$(systemctl is-enabled networking.service 2>/dev/null || true)"
+    echo "ADDR=$(ip -o -4 addr show dev {{ networkd_migrate_uplink_iface }} scope global | awk '{print $4}' | head -n1)"
+    echo "GW=$(ip -o -4 route show default dev {{ networkd_migrate_uplink_iface }} | awk '{print $3}' | head -n1)"
+    echo "DEFDEVS=$(ip -o -4 route show default | awk '{print $5}' | sort -u | tr '\n' ' ')"
+    echo "DEF6DEVS=$(ip -o -6 route show default | awk '{print $5}' | sort -u | tr '\n' ' ')"
+    echo "DNS=$(getent hosts {{ networkd_migrate_dns_probe }} >/dev/null && echo ok || echo fail)"
+    echo "RESOLVCONF=$(readlink /etc/resolv.conf || echo regular)"
+    echo "CONFIGURED=$(networkctl --no-legend --no-pager list 2>/dev/null | awk '$5 == "configured" {print $2}' | sort | tr '\n' ' ')"
+    echo "VLAN6=$(for i in {{ networkd_migrate_vlan_names | join(' ') }}; do ip -o -6 addr show dev $i scope global 2>/dev/null; done | wc -l)"
+    echo "FLANNEL=$(ip link show flannel.1 >/dev/null 2>&1 && echo yes || echo no)"
+    echo "UPSTREAM_NS=$(grep -c '^nameserver' /run/systemd/resolve/resolv.conf 2>/dev/null || echo 0)"
+    echo "STUB_ONLY=$(grep '^nameserver' /run/systemd/resolve/resolv.conf 2>/dev/null | grep -vc '127\.0\.0\.53')"
+    sed 's/^/PRE_/' {{ networkd_migrate_state_dir }}/pre.env 2>/dev/null || true
+    } | sed -E "s/^([A-Za-z0-9_]+)=(.*)$/\1: '\2'/"
+  args:
+    executable: /bin/bash
+  register: networkd_migrate_gate
+  changed_when: false
+  check_mode: false
+
+- name: Networkd migrate gate - parse
+  ansible.builtin.set_fact:
+    networkd_migrate_vlan_names: "{{ networkd_migrate_vlans | map(attribute='interface_name', default='') | select | list }}"
+    networkd_migrate_g: "{{ networkd_migrate_gate.stdout | from_yaml }}"
+    networkd_migrate_expected_configured: >-
+      {{ ([networkd_migrate_uplink_iface] + networkd_migrate_vlans | map(attribute='interface_name', default='') | list) | select | sort }}
+
+- name: Networkd migrate gate - stack, address, route, DNS
+  ansible.builtin.assert:
+    that:
+      - networkd_migrate_g.NETWORKD == 'active'
+      - networkd_migrate_g.RESOLVED == 'active'
+      - networkd_migrate_g.IFUPDOWN != 'enabled'
+      - networkd_migrate_g.PRE_ADDR is not defined or networkd_migrate_g.ADDR == networkd_migrate_g.PRE_ADDR
+      - networkd_migrate_g.PRE_GW is not defined or networkd_migrate_g.GW == networkd_migrate_g.PRE_GW
+      - networkd_migrate_g.DEFDEVS | trim == networkd_migrate_uplink_iface
+      - networkd_migrate_g.DNS == 'ok'
+      - networkd_migrate_g.RESOLVCONF == '/run/systemd/resolve/stub-resolv.conf'
+    fail_msg: "{{ inventory_hostname }}: stack/IPv4/DNS gate failed: {{ networkd_migrate_g }}"
+    quiet: true
+
+- name: Networkd migrate gate - networkd manages only the uplink and the VLANs
+  ansible.builtin.assert:
+    that: >-
+      (networkd_migrate_g.CONFIGURED.split() | sort) == (networkd_migrate_expected_configured | list)
+    fail_msg: >-
+      {{ inventory_hostname }}: networkd shows {{ networkd_migrate_g.CONFIGURED.split() }} as configured, expected
+      {{ networkd_migrate_expected_configured }} (cni0, flannel.1, veth* and macvlans must stay unmanaged).
+    quiet: true
+
+- name: Networkd migrate gate - no node IPv6 on the VLANs, only the uplink has a default route
+  ansible.builtin.assert:
+    that:
+      - networkd_migrate_g.VLAN6 | int == 0
+      - networkd_migrate_g.DEF6DEVS | trim in ['', networkd_migrate_uplink_iface]
+    fail_msg: "{{ inventory_hostname }}: VLAN IPv6 isolation broke: {{ networkd_migrate_g }}"
+    quiet: true
+  when: networkd_migrate_vlans | length > 0
+
+- name: Networkd migrate gate - k3s
+  when: networkd_migrate_check_k3s | bool
+  block:
+    # k3s detects the 127.0.0.53 stub and hands the kubelet /run/systemd/resolve/resolv.conf (the real upstreams).
+    - name: Networkd migrate gate - flannel link and real upstream resolvers for the kubelet
+      ansible.builtin.assert:
+        that:
+          - networkd_migrate_g.FLANNEL == 'yes'
+          - networkd_migrate_g.UPSTREAM_NS | int > 0
+          - networkd_migrate_g.STUB_ONLY | int > 0
+        fail_msg: "{{ inventory_hostname }}: flannel.1 missing or no upstream resolvers in resolved's resolv.conf: {{ networkd_migrate_g }}"
+        quiet: true
+
+    - name: Networkd migrate gate - node Ready
+      ansible.builtin.command: >-
+        kubectl --context {{ networkd_migrate_kubectl_context }} get node {{ k3s_node_name }}
+        -o jsonpath={.status.conditions[?(@.type=="Ready")].status}
+      delegate_to: localhost
+      become: false
+      register: networkd_migrate_ready
+      changed_when: false
+      check_mode: false
+      until: networkd_migrate_ready.stdout == 'True'
+      retries: 30
+      delay: 10

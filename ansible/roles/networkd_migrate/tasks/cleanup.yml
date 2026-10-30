@@ -1,0 +1,28 @@
+---
+# After every node is cut over and has run stable: drop the safety net and the leftovers.
+- name: Networkd migrate - confirmed
+  ansible.builtin.assert:
+    that: networkd_migrate_confirm == inventory_hostname
+    fail_msg: "Use -e networkd_migrate_confirm=<node> (once per node, or --limit with the same value)."
+    quiet: true
+
+- name: Networkd migrate - only after a verified cutover
+  ansible.builtin.stat:
+    path: "{{ networkd_migrate_state_dir }}/cutover.done"
+  register: networkd_migrate_done
+
+- name: Networkd migrate - gate on cutover.done
+  ansible.builtin.assert:
+    that: networkd_migrate_done.stat.exists
+    fail_msg: "{{ inventory_hostname }}: no cutover.done marker, not cleaning up."
+    quiet: true
+
+- name: Networkd migrate - remove the safety net
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/systemd/system/networkd-migrate-revert.timer
+    - /etc/systemd/system/networkd-migrate-revert.service
+    - /usr/local/sbin/networkd-migrate-revert
+    - "{{ networkd_migrate_state_dir }}"

@@ -1,0 +1,26 @@
+---
+# Manual revert: same script the timer runs. Restores ifupdown + resolv.conf and reboots.
+- name: Networkd migrate - confirmed
+  ansible.builtin.assert:
+    that:
+      - ansible_play_hosts_all | length == 1
+      - networkd_migrate_confirm == inventory_hostname
+    fail_msg: "Use --limit <node> and -e networkd_migrate_confirm=<node>."
+    quiet: true
+
+- name: Networkd migrate - run the revert script (the node reboots)
+  ansible.builtin.shell: nohup /usr/local/sbin/networkd-migrate-revert >/var/log/networkd-migrate-revert.log 2>&1 &
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: Networkd migrate - wait for the node to come back
+  ansible.builtin.wait_for_connection:
+    delay: 30
+    timeout: "{{ networkd_migrate_reboot_timeout }}"
+
+- name: Networkd migrate - clear the cutover markers
+  ansible.builtin.file:
+    path: "{{ networkd_migrate_state_dir }}/{{ item }}"
+    state: absent
+  loop: [cutover.done, cutover.started]

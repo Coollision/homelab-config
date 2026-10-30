@@ -1,0 +1,40 @@
+---
+# ifupdown -> systemd-networkd on one node (docs: wiki/01-platform/networking.md#network-stack).
+# stage   : install resolved (kept off), render the networkd files into a staging dir, back up
+#           the ifupdown/resolv.conf state, write the revert script + timer. Nothing live changes.
+# cutover : arm the revert timer, swap the stack, reboot, run the gates, cancel the timer.
+#           One node per run; needs -e networkd_migrate_confirm=<inventory hostname>.
+# verify  : read-only gates (also run by cutover).
+# revert  : run the revert script by hand (restores ifupdown + resolv.conf, reboots).
+# cleanup : after a successful rollout, drop the backups, revert unit and ifupdown leftovers.
+networkd_migrate_phase: stage
+networkd_migrate_confirm: ""
+
+networkd_migrate_uplink_iface: "{{ uplink_name_iface | default('uplink0') }}"
+
+# DHCP=ipv4 mirrors today (IPv6 comes from router adverts only; DHCPv6 would be a new lease).
+networkd_migrate_dhcp: ipv4
+# The reservation is keyed on the MAC (dhclient sent no client identifier); keep it that way.
+networkd_migrate_client_identifier: mac
+# Optional extra resolvers appended to the DHCP ones (none needed: one resolver lives off-cluster).
+networkd_migrate_extra_dns: []
+
+# VLAN sub-interfaces come from vlan_trunk_interfaces (the node takes no IP/IPv6 there).
+networkd_migrate_vlans: "{{ vlan_trunk_interfaces | default([]) }}"
+
+# Reboot-surviving revert: fires this long after the NEXT boot unless the gates cancelled it.
+networkd_migrate_revert_after: 15min
+networkd_migrate_reboot_timeout: 600
+
+# Same cycle as cluster_update.yml: refuse on degraded Longhorn, cordon, drain (--disable-eviction, safe
+# because every volume has healthy replicas elsewhere), and after the gates uncordon + wait for pods and
+# Longhorn to settle (cluster_wait_stable). On ANY failure the node stays cordoned for you to look at.
+networkd_migrate_drain: true
+networkd_migrate_drain_timeout: 1200
+
+networkd_migrate_state_dir: /var/lib/networkd-migrate
+networkd_migrate_kubectl_context: "{{ k3s_cluster_name | default('k3s') }}"
+# Gates that need a k3s node (skip on a node that is not in the cluster).
+networkd_migrate_check_k3s: true
+# A host a node must resolve after the cutover.
+networkd_migrate_dns_probe: deb.debian.org

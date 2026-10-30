@@ -1,0 +1,109 @@
+---
+# Nothing live changes here: networkd files are only staged. systemd-resolved is NOT installed yet: its
+# postinst replaces /etc/resolv.conf with a stub symlink at once (found on silver, 2026-10-30), so the
+# cutover installs it after the backup is taken and the revert timer is armed.
+- name: Networkd migrate - already cut over (nothing to stage)
+  ansible.builtin.stat:
+    path: "{{ networkd_migrate_state_dir }}/cutover.done"
+  register: networkd_migrate_done
+
+- name: Networkd migrate - preflight facts
+  ansible.builtin.shell: |
+    set -o pipefail
+    re='^[[:space:]]*(auto|allow-hotplug|iface)[[:space:]]+{{ networkd_migrate_uplink_iface }}([[:space:]]|$)'
+    echo "ifupdown_uplink=$(grep -RqsE "$re" /etc/network/interfaces /etc/network/interfaces.d/ && echo yes || echo no)"
+    echo "link_file=$([ -f /etc/systemd/network/10-uplink.link ] && echo yes || echo no)"
+    echo "resolv_file=$([ -f /etc/resolv.conf ] && [ ! -L /etc/resolv.conf ] && echo yes || echo no)"
+    echo "nm_active=$(systemctl is-active NetworkManager 2>/dev/null || true)"
+    echo "networkd_files=$(ls /etc/systemd/network/*.network 2>/dev/null | wc -l)"
+  args:
+    executable: /bin/bash
+  register: networkd_migrate_pre
+  changed_when: false
+  check_mode: false
+
+- name: Networkd migrate - preflight asserts
+  ansible.builtin.assert:
+    that:
+      - "'ifupdown_uplink=yes' in networkd_migrate_pre.stdout or networkd_migrate_done.stat.exists"
+      - "'link_file=yes' in networkd_migrate_pre.stdout"
+      - "'nm_active=active' not in networkd_migrate_pre.stdout"
+    fail_msg: >-
+      {{ inventory_hostname }}: expected an ifupdown-managed uplink, the 10-uplink.link pin (uplink_name role) and no
+      NetworkManager. Raspberry Pi nodes stay on NetworkManager and are out of scope. Got: {{ networkd_migrate_pre.stdout_lines }}
+    quiet: true
+
+- name: Networkd migrate - stage
+  when: not networkd_migrate_done.stat.exists
+  block:
+    - name: Networkd migrate - resolv.conf must be a regular file before anything is installed
+      ansible.builtin.assert:
+        that: "'resolv_file=yes' in networkd_migrate_pre.stdout"
+        fail_msg: "{{ inventory_hostname }}: /etc/resolv.conf is not a regular file; the revert script restores a plain copy."
+        quiet: true
+
+    - name: Networkd migrate - state directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0700"
+      loop:
+        - "{{ networkd_migrate_state_dir }}"
+        - "{{ networkd_migrate_state_dir }}/staged"
+        - "{{ networkd_migrate_state_dir }}/backup"
+
+    - name: Networkd migrate - back up ifupdown config and resolv.conf (first stage only)
+      ansible.builtin.shell: |
+        set -e
+        B={{ networkd_migrate_state_dir }}/backup
+        [ -e $B/interfaces ] && exit 0
+        cp -a /etc/network/interfaces $B/interfaces
+        cp -a /etc/network/interfaces.d $B/interfaces.d
+        cp -a /etc/resolv.conf $B/resolv.conf
+        echo changed
+      args:
+        executable: /bin/bash
+      register: networkd_migrate_backup
+      changed_when: "'changed' in networkd_migrate_backup.stdout"
+
+    - name: Networkd migrate - file set
+      ansible.builtin.include_tasks: files.yml
+
+    - name: Networkd migrate - render the networkd files into the staging dir
+      ansible.builtin.template:
+        src: "{{ nm.src }}"
+        dest: "{{ networkd_migrate_state_dir }}/staged/{{ nm.name }}"
+        mode: "0644"
+      vars:
+        item: "{{ nm.item }}"
+      loop: "{{ networkd_migrate_files }}"
+      loop_control:
+        loop_var: nm
+        label: "{{ nm.name }}"
+
+    - name: Networkd migrate - list of files the cutover installs (the revert script removes these)
+      ansible.builtin.copy:
+        content: "{{ networkd_migrate_files | map(attribute='dest') | join('\n') }}\n"
+        dest: "{{ networkd_migrate_state_dir }}/installed.list"
+        mode: "0600"
+
+    - name: Networkd migrate - revert script
+      ansible.builtin.template:
+        src: revert.sh.j2
+        dest: /usr/local/sbin/networkd-migrate-revert
+        mode: "0750"
+
+    - name: Networkd migrate - revert service and timer (timer stays disabled until the cutover)
+      ansible.builtin.template:
+        src: "{{ item }}.j2"
+        dest: "/etc/systemd/system/networkd-migrate-revert.{{ item.split('.')[1] }}"
+        mode: "0644"
+      loop:
+        - revert.service
+        - revert.timer
+      register: networkd_migrate_units
+
+    - name: Networkd migrate - reload systemd units
+      ansible.builtin.systemd:
+        daemon_reload: true
+      when: networkd_migrate_units is changed  # noqa: no-handler

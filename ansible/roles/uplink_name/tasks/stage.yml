@@ -7,6 +7,7 @@
   ansible.builtin.assert:
     that: ansible_play_hosts_all | length == 1
     fail_msg: "Stage one node at a time (--limit <node>): a staged node must be rebooted before the next is touched."
+  when: not (uplink_name_bootstrap | bool)
 
 - name: Uplink name - primary NIC (default-route device)
   ansible.builtin.shell: set -o pipefail; ip -o -4 route show default | awk '{print $5}' | sort -u
@@ -166,14 +167,20 @@
 # ASSUMPTION: stage, then reboot right away (cluster_update.yml -e node_update_force_reboot=true).
 # flannel-iface already names the NEW interface, which only exists after the
 # reboot; any k3s restart in between (crash, manual restart, a k3s bump) would
-# start flannel on a missing NIC. Accepted until this role is retired (new or
-# rebuilt nodes get the uplink0 pin at bootstrap instead); do not stage and
-# leave the node for later.
+# start flannel on a missing NIC. New nodes never hit this (node_setup.yml pins
+# and reboots them before k3s exists); on a live node do not stage and leave it
+# for later.
+- name: Uplink name - k3s config present (absent on a node that was never bootstrapped)
+  ansible.builtin.stat:
+    path: /etc/rancher/k3s/config.yaml
+  register: uplink_name_k3s_config
+
 - name: Uplink name - flannel interface in the k3s config
   ansible.builtin.lineinfile:
     path: /etc/rancher/k3s/config.yaml
     regexp: '^flannel-iface:'
     line: 'flannel-iface: "{{ uplink_name_iface }}"'
+  when: uplink_name_k3s_config.stat.exists
 
 # ---- flag the reboot ---------------------------------------------------------
 - name: Uplink name - flag a reboot (cluster_update.yml with node_update_force_reboot=true does the drain/reboot/uncordon)

@@ -1,16 +1,24 @@
 ---
 # One stable name for the primary NIC on every cluster node, so everything that
 # sits directly on the uplink (Technitium macvlan on the untagged VLAN, VLAN
-# trunk parent, flannel) uses a single value. Design: wiki/06-todo/uplink_name.md
+# trunk parent, flannel) uses a single value. Docs: wiki/01-platform/networking.md#uplink-name
 uplink_name_iface: uplink0
 
 # stage   : write the .link file and rewrite every reference; flag a reboot.
 #           One node per run (--limit), then reboot through cluster_update.yml.
 # verify  : read-only assertions after the reboot.
 # cleanup : drop the fallback (old-name) config; needs -e uplink_legacy_name=<old>.
+# guard   : read-only uniformity check, included by the setup/update playbooks (guard.yml).
 uplink_name_phase: stage
 
 # VLAN sub-interfaces share the parent's MAC, so the match key must be the
 # *permanent* hardware address (virtual devices have none). Fall back to a path
 # match per node only if the stage gate reports the permanent MAC is unusable.
 uplink_name_match_key: PermanentMACAddress
+
+# guard.yml: also check the running system (false = static checks, valid before the rename reboot).
+uplink_name_guard_live: true
+
+# true only from node_setup.yml on a node without k3s: several nodes per run are fine
+# (the play reboots each one right away) and there is no k3s config to rewrite yet.
+uplink_name_bootstrap: false

@@ -1,5 +1,5 @@
 ---
-# Pin the primary NIC name on every cluster node (design: wiki/06-todo/uplink_name.md).
+# Pin the primary NIC name on every cluster node (docs: wiki/01-platform/networking.md#uplink-name).
 #   stage:   ansible-playbook playbooks/uplink_name.yml --limit <node> --check --diff   (then without --check)
 #   reboot:  playbooks/cluster_update.yml --limit <node> -e node_update_dry_run=false -e node_update_patch_os=false
 #              -e node_update_upgrade_k3s=false -e node_update_force_reboot=true

@@ -19,6 +19,18 @@
         node_update_maint_lock_action: check
       run_once: true  # noqa: run-once[task]
 
+- name: K3s setup - every node must carry the uniform uplink name
+  hosts: k3scluster
+  become: true
+  gather_facts: false
+  tasks:
+    # New nodes get the pin in node_setup.yml; refuse to write k3s/VLAN config on a drifted node.
+    - name: Uniformity guard
+      ansible.builtin.include_role:
+        name: uplink_name
+      vars:
+        uplink_name_phase: guard
+
 - name: Configure k3s prerequisites
   hosts: k3scluster
   become: true

@@ -1,0 +1,8 @@
+[Unit]
+Description=Networkd migration safety net: revert unless the gates cancelled this
+
+[Timer]
+OnBootSec={{ networkd_migrate_revert_after }}
+
+[Install]
+WantedBy=timers.target

@@ -86,6 +86,33 @@ devices. Its implementation choice (a dumb L2 repeater, not a re-publishing resp
 the single most important lesson from the Matter mesh's history — see
 [Known Issues → the mDNS reflector conflict loop](../05-operations/known-issues.md#mdns-reflector-must-not-re-publish).
 
+## One uplink name on every node {#uplink-name}
+
+Every cluster node calls its primary NIC `uplink0` (the VLAN sub-interfaces are `vlan40` / `vlan5` everywhere too). Anything
+that sits directly on the uplink therefore uses one value on every node: the Technitium macvlan legs (VLAN 30 is untagged, so
+there is no sub-interface to attach to), `k3s_flannel_iface` and the `parent_interface` of the VLAN trunk. Before this, the
+name was `enp1s0` / `enp3s0` / `eth0` per host, and a pod scheduled on a node with another name got `Link not found`.
+
+- **How it is pinned:** the Ansible role `uplink_name` writes `/etc/systemd/network/10-uplink.link`, which matches the NIC by
+  its *permanent* MAC (VLAN sub-interfaces share the parent's MAC, a plain MAC match would rename them too) and sets
+  `Name=uplink0`. udev applies it at boot, independent of ifupdown, networkd or NetworkManager, so a network-stack change
+  or Debian upgrade keeps the name. MAC, DHCP lease and the router reservation are untouched.
+- **Staying uniform:** `uplink_name`'s `guard` phase is read-only and runs in every playbook that can introduce drift. It
+  asserts the inventory (flannel + trunk parents) says `uplink0`, the `.link` file exists, and, on a running node, that the
+  default route and flannel use `uplink0`.
+
+  | Playbook | When the guard runs |
+  |---|---|
+  | `node_setup.yml` | a new node without k3s is pinned and rebooted once; a *live* unpinned node is refused (use `uplink_name.yml`) |
+  | `k3s_setup.yml`, `vlan_trunk_setup.yml` | before any k3s or VLAN config is written |
+  | `cluster_update.yml`, `distro_upgrade.yml` | static part before the drain, full check after the reboot and **before uncordon** |
+
+- **Changing an existing node** (only needed if a node is ever found unpinned): `uplink_name.yml` stages it one node per run,
+  then `cluster_update.yml -e node_update_force_reboot=true` reboots it drained; `-e uplink_name_phase=verify` checks it.
+  Cleanup of the old-name fallback config is `-e uplink_name_phase=cleanup -e uplink_legacy_name=<old>`. See
+  [Ansible](../00-setup/ansible.md).
+- Prometheus network series use `device="uplink0"`; graphs from before the cutover (2026-10-30) carry the old names.
+
 ## Design rationale worth keeping in mind
 
 - **Why a second Traefik instance for the tunnel, instead of one Traefik with two

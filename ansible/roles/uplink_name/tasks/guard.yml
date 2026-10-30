@@ -1,0 +1,63 @@
+---
+# Read-only uniformity guard: every node must call its primary NIC the same name
+# (uplink_name_iface). Included by k3s_setup.yml, vlan_trunk_setup.yml and
+# node_update (cluster_update.yml / distro_upgrade.yml) so a new node, a rebuilt
+# node or an OS upgrade can never silently drift (e.g. back to enp1s0).
+#   uplink_name_guard_live: false -> static checks only (inventory + .link file),
+#                                    valid BEFORE the reboot that applies the rename;
+#                           true  -> also the running system (after a reboot / on a live node).
+- name: Uplink guard - inventory names the uplink for flannel and every VLAN trunk parent
+  ansible.builtin.assert:
+    that:
+      - k3s_flannel_iface | default(uplink_name_iface) == uplink_name_iface
+      - >-
+        vlan_trunk_interfaces | default([]) | map(attribute='parent_interface')
+        | reject('equalto', uplink_name_iface) | list | length == 0
+      - vlan_parent_interface | default(uplink_name_iface) == uplink_name_iface
+    fail_msg: >-
+      {{ inventory_hostname }}: k3s_flannel_iface and every vlan_trunk_interfaces[].parent_interface must be
+      {{ uplink_name_iface }} (or unset). Fix host_vars/group_vars, never a per-node NIC name.
+    quiet: true
+
+- name: Uplink guard - the .link file that pins the name is present
+  ansible.builtin.stat:
+    path: /etc/systemd/network/10-uplink.link
+  register: uplink_name_guard_link
+  check_mode: false
+
+- name: Uplink guard - pin file must exist
+  ansible.builtin.assert:
+    that: uplink_name_guard_link.stat.exists
+    fail_msg: >-
+      {{ inventory_hostname }}: /etc/systemd/network/10-uplink.link is missing, so this node is not pinned to
+      {{ uplink_name_iface }}. New node: run playbooks/node_setup.yml (pins and reboots before k3s exists).
+      Live node: playbooks/uplink_name.yml (stage), then cluster_update.yml -e node_update_force_reboot=true.
+    quiet: true
+
+- name: Uplink guard - the running system uses the pinned name
+  when: uplink_name_guard_live | bool
+  block:
+    - name: Uplink guard - default-route device, flannel config
+      ansible.builtin.shell: |
+        set -o pipefail
+        ip -o -4 route show default | awk '{print $5}' | sort -u
+        echo ---
+        grep -hs '^flannel-iface:' /etc/rancher/k3s/config.yaml || true
+      args:
+        executable: /bin/bash
+      register: uplink_name_guard_now
+      changed_when: false
+      check_mode: false
+
+    - name: Uplink guard - default route and flannel are on the pinned name
+      ansible.builtin.assert:
+        that:
+          - uplink_name_guard_now.stdout.split('---')[0].split() == [uplink_name_iface]
+          - >-
+            uplink_name_guard_now.stdout.split('---')[1] | trim == ''
+            or uplink_name_iface in uplink_name_guard_now.stdout.split('---')[1]
+        fail_msg: >-
+          {{ inventory_hostname }}: expected the default route and flannel on {{ uplink_name_iface }}, got
+          {{ uplink_name_guard_now.stdout | replace('\n', ' ') }}. The rename was lost (NIC swap, OS or
+          network-stack change): re-check 10-uplink.link before touching the next node.
+        quiet: true

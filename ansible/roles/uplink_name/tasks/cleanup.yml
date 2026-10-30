@@ -9,6 +9,12 @@
 - name: Uplink name - the node must already run on the new name
   ansible.builtin.include_tasks: verify.yml
 
+# NetworkManager nodes (Raspberry Pi OS) have no ifupdown file at all.
+- name: Uplink name - is this an ifupdown node?
+  ansible.builtin.stat:
+    path: /etc/network/interfaces
+  register: uplink_name_interfaces_file
+
 # The iface line plus its indented option lines (hwaddress, post-up, ...);
 # the allow-hotplug/auto line is removed by the next task.
 - name: Uplink name - remove the old ifupdown iface block
@@ -16,12 +22,14 @@
     path: /etc/network/interfaces
     regexp: '^iface {{ uplink_legacy_name | regex_escape }}(?:[ \t][^\n]*)?\n(?:[ \t]+[^\n]*(?:\n|\Z))*'
     replace: ''
+  when: uplink_name_interfaces_file.stat.exists
 
 - name: Uplink name - remove the old ifupdown allow-hotplug/auto line
   ansible.builtin.lineinfile:
     path: /etc/network/interfaces
     regexp: '^(allow-hotplug|auto|iface) {{ uplink_legacy_name }}( |$)'
     state: absent
+  when: uplink_name_interfaces_file.stat.exists
 
 - name: Uplink name - remove the old NetworkManager wired profile
   ansible.builtin.shell: |
