@@ -15,10 +15,6 @@
       metric). Proper fix: stop the router from advertising a default route
       (or lower its preference) on the IoT and Intern VLANs in UniFi, then re-check `ip -6 route show default` on both
       trunk nodes. The networkd and NetworkManager branches of the role do not handle this yet.
-- [ ] **Keep Prometheus off the Raspberry Pi worker.** A long-range query (30 days of speedtest or UPS data) plus
-      scrape load is too much for the Pi: on 2026-10-30 Prometheus was moved to a faster node by cordoning the Pi by
-      hand. Make it permanent in the monitoring values (node affinity or anti-affinity on the Pi's arch/hostname label)
-      so a drain of another node cannot reschedule it there.
 - [ ] **Decide whether etcd needs an off-node backup (control-plane rebuild path is untested).** The `k3s_master`
       config only uses the k3s defaults for etcd snapshots (local disk of the control-plane node, default schedule and
       retention, no off-node copy). The documented recovery from a lost control plane is a full new cluster provision

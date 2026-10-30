@@ -224,6 +224,18 @@ promstack:
           value: "native-histograms"
       # Prometheus-operator managed WAL compression option (instead of CLI arg)
       walCompression: true
+      # Keep Prometheus off the Raspberry Pi worker (label type=rpi, set via k3s_node_label):
+      # long-range queries plus scrape load are too much for it. Required, not preferred,
+      # so a drain of another node cannot reschedule Prometheus onto the Pi.
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: type
+                    operator: NotIn
+                    values:
+                      - rpi
       livenessProbe:
         initialDelaySeconds: 30
         periodSeconds: 15
