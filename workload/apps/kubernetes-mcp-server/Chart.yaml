@@ -7,6 +7,6 @@ appVersion: "0.0.62"
 
 dependencies:
   - name: kubernetes-mcp-server
-    version: 0.1.0
+    version: 0.1.1
     # OCI registry (single chart, no huge classic index to parse)
     repository: oci://ghcr.io/containers/charts
