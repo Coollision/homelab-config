@@ -1,0 +1,9 @@
+*.tgz
+**/Chart.lock
+**/charts/**
+storage-operator/dist/
+storage-operator/bin/
+storage-operator/testbin/
+__pycache__/
+*.py[cod]
+.DS_Store
