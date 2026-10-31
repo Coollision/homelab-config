@@ -1,6 +1,6 @@
 apiVersion: v2
 name: storage-operator
 description: Homelab storage operator (SMB server for Longhorn RWX volumes, optional PV reclaimer)
-version: 0.0.0
-appVersion: 0.0.0
+version: 0.1.0
+appVersion: 0.1.0
 type: application
