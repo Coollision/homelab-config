@@ -130,11 +130,13 @@
       changed_when: false
       when: node_update_distro_p.grub_pc == 'true'
 
-    - name: "Distro: network snapshot (primary iface, IP, gateway, DHCP client) [{{ k3s_node_name }}]"
-      # Primary NICs use `inet dhcp`. trixie's ifupdown prefers dhcpcd-base, whose
-      # DUID client-id can make the DHCP server hand out a NEW address, breaking
-      # k3s node-ip / etcd advertise URLs / DNS. Keeping isc-dhcp-client keeps the
-      # same client and lease; the post-boot gate checks the IP is unchanged.
+    - name: "Distro: network snapshot (stack, primary iface, IP, gateway, DHCP client) [{{ k3s_node_name }}]"
+      # Two stacks are supported (see "Distro: network stack" below). ifupdown nodes
+      # use `inet dhcp`: trixie's ifupdown prefers dhcpcd-base, whose DUID client-id
+      # can make the DHCP server hand out a NEW address, breaking k3s node-ip / etcd
+      # advertise URLs / DNS. Keeping isc-dhcp-client keeps the same client and lease.
+      # networkd nodes (networkd_migrate role) have no such client; networkd leases by MAC.
+      # Either way the post-boot gate checks the IP is unchanged.
       ansible.builtin.shell: >
         set -o pipefail;
         dev=$(ip -4 route show default | awk '{for(i=1;i<=NF;i++) if($i=="dev"){print $(i+1); exit}}');
@@ -143,6 +145,12 @@
         echo "gw=$(ip -4 route show default | awk '{print $3; exit}')";
         if grep -Eqs "^\s*iface\s+$dev\s+inet\s+dhcp" /etc/network/interfaces /etc/network/interfaces.d/*; then echo "dhcp=true"; else echo "dhcp=false"; fi;
         echo "networking=$(systemctl is-active networking 2>/dev/null)";
+        echo "networking_enabled=$(systemctl is-enabled networking 2>/dev/null || true)";
+        echo "networkd=$(systemctl is-active systemd-networkd 2>/dev/null)";
+        echo "resolved=$(systemctl is-active systemd-resolved 2>/dev/null)";
+        echo "uplink_cfg=$([ -f /etc/systemd/network/10-uplink.network ] && echo yes || echo no)";
+        echo "uplink_state=$(networkctl --no-legend --no-pager list 2>/dev/null | awk '$2 == "{{ node_update_distro_uplink_iface }}" {print $5}')";
+        echo "resolv=$(readlink /etc/resolv.conf || echo regular)";
         if dpkg-query -W -f='${db:Status-Status}' isc-dhcp-client 2>/dev/null | grep -qx installed; then echo "isc=true"; else echo "isc=false"; fi;
         echo "links=$(ip -br link | awk '$1 !~ /^(lo|veth|cni|flannel|lxc|kube|vxlan|tunl|cali|docker)/ {print $1}' | sort | tr '\n' ' ')"
       args:
@@ -155,13 +163,46 @@
       ansible.builtin.set_fact:
         node_update_distro_net_before: "{{ dict(node_update_distro_net_probe.stdout_lines | select('search', '=') | map('split', '=', 1)) }}"
 
-    - name: "Distro: DHCP continuity gate [{{ k3s_node_name }}]"
+    - name: "Distro: network stack (networkd or ifupdown) [{{ k3s_node_name }}]"
+      # networkd: networkd_migrate's 10-uplink.network is present, systemd-networkd is active
+      # and networking.service is not enabled. ifupdown: networking.service is active.
+      # Anything else (e.g. NetworkManager) is not covered by the gates below.
+      ansible.builtin.set_fact:
+        node_update_distro_stack: >-
+          {{ 'networkd' if (node_update_distro_net_before.uplink_cfg == 'yes'
+                            and node_update_distro_net_before.networkd == 'active'
+                            and node_update_distro_net_before.networking_enabled != 'enabled')
+             else ('ifupdown' if node_update_distro_net_before.networking == 'active' else 'unknown') }}
+
+    - name: "Distro: refuse an unrecognised network stack [{{ k3s_node_name }}]"
+      ansible.builtin.fail:
+        msg: >-
+          {{ k3s_node_name }}: neither ifupdown (networking.service active) nor networkd (10-uplink.network + systemd-networkd active,
+          networking.service not enabled) detected; the network gates would not mean anything. Not covered by this play.
+      when: node_update_distro_stack == 'unknown'
+
+    - name: "Distro: networkd uplink must be healthy before the upgrade [{{ k3s_node_name }}]"
+      ansible.builtin.fail:
+        msg: >-
+          {{ k3s_node_name }}: networkd stack but uplink {{ node_update_distro_uplink_iface }} is not healthy:
+          default-route iface={{ node_update_distro_net_before.iface }}, networkctl state='{{ node_update_distro_net_before.uplink_state }}'
+          (want configured), systemd-resolved={{ node_update_distro_net_before.resolved }}, /etc/resolv.conf -> {{ node_update_distro_net_before.resolv }}
+          (want /run/systemd/resolve/stub-resolv.conf).
+      when:
+        - node_update_distro_stack == 'networkd'
+        - node_update_distro_net_before.iface != node_update_distro_uplink_iface
+          or node_update_distro_net_before.uplink_state != 'configured'
+          or node_update_distro_net_before.resolved != 'active'
+          or node_update_distro_net_before.resolv != '/run/systemd/resolve/stub-resolv.conf'
+
+    - name: "Distro: DHCP continuity gate (ifupdown only) [{{ k3s_node_name }}]"
       ansible.builtin.fail:
         msg: >-
           {{ k3s_node_name }}'s primary interface {{ node_update_distro_net_before.iface }} uses DHCP but isc-dhcp-client is
           not installed, so trixie's ifupdown would use dhcpcd (different client-id, possibly a new IP).
           Install isc-dhcp-client first, or confirm MAC-based reservations and pass -e node_update_distro_allow_dhcp_client_change=true.
       when:
+        - node_update_distro_stack == 'ifupdown'
         - node_update_distro_net_before.dhcp == 'true'
         - node_update_distro_net_before.isc != 'true'
         - not (node_update_distro_allow_dhcp_client_change | bool)
@@ -285,7 +326,7 @@
         msg: >-
           {{ node_update_distro_mode | upper }} {{ node_update_distro_source.codename }} -> {{ node_update_distro_target.codename }} on {{ k3s_node_name }}
           (kernel {{ node_update_distro_p.kernel }}, pending={{ node_update_distro_p.pending }}, dpkg audit lines={{ node_update_distro_p.audit_lines }},
-          primary {{ node_update_distro_net_before.iface }} {{ node_update_distro_net_before.ip }}
+          network stack={{ node_update_distro_stack }}, primary {{ node_update_distro_net_before.iface }} {{ node_update_distro_net_before.ip }}
           dhcp={{ node_update_distro_net_before.dhcp }} isc={{ node_update_distro_net_before.isc }}).
           Real run: cordon+drain, backup /etc, {{ 'etcd snapshot + token/config off-node, ' if node_update_distro_is_control_plane | bool else '' }}deb822
           sources, minimal then full upgrade (--no-install-recommends), kernel/boot gates, reboot, post-boot gates, uncordon,

@@ -64,9 +64,13 @@
       become: true
 
 - name: "Distro: keep the network stack and Longhorn deps manual (autoremove can never take them) [{{ k3s_node_name }}]"
+  vars:
+    node_update_distro_stack_pkgs:
+      ifupdown: ifupdown isc-dhcp-client
+      networkd: systemd-networkd systemd-resolved
   ansible.builtin.shell: >
     set -o pipefail;
-    for p in ifupdown isc-dhcp-client open-iscsi nfs-common cryptsetup dmsetup systemd-timesyncd; do
+    for p in {{ node_update_distro_stack_pkgs[node_update_distro_stack] }} open-iscsi nfs-common cryptsetup dmsetup systemd-timesyncd; do
     dpkg-query -W -f='${db:Status-Status}' "$p" 2>/dev/null | grep -qx installed && apt-mark manual "$p"; done; true
   args:
     executable: /bin/bash
@@ -129,7 +133,8 @@
 # confdef/confold: our local edits (sshd, journald, sysctl) win; node_setup.yml
 # re-asserts them anyway. UCF_FORCE_CONFFOLD covers ucf-managed files.
 # --no-install-recommends: no surprise multipath-tools (claims Longhorn
-# devices) or dhcpcd-base (different DHCP client-id) via new Recommends.
+# devices) or dhcpcd-base (different DHCP client-id) via new Recommends, or ifupdown (would
+# enable networking.service next to networkd).
 # async with a hard timeout so an SSH drop never kills dpkg mid-run.
 - name: "Distro: minimal upgrade (upgrade --without-new-pkgs) [{{ k3s_node_name }}]"
   # noqa: command-instead-of-module -- apt module has no --without-new-pkgs; async + exact dpkg options
@@ -248,16 +253,25 @@
 
 # ---- pre-reboot gates: any failure stays here, cordoned, on the old kernel ----
 
-- name: "Distro gate: no newly installed multipath-tools / dhcpcd-base / host iptables; DHCP client kept [{{ k3s_node_name }}]"
+- name: "Distro gate: no newly installed multipath-tools / host iptables / stack-specific packages; network stack kept [{{ k3s_node_name }}]"
   ansible.builtin.shell: >
     set -o pipefail;
     rc=0;
-    for p in multipath-tools dhcpcd-base iptables; do
+    for p in multipath-tools iptables {{ 'dhcpcd-base' if node_update_distro_stack == 'ifupdown' else 'ifupdown dhcpcd-base' }}; do
     {{ 'case $p in dhcpcd-base) continue;; esac;' if node_update_distro_allow_dhcp_client_change | bool else '' }}
     if dpkg-query -W -f='${db:Status-Status}' "$p" 2>/dev/null | grep -qx installed
     && ! grep -qx "$p" {{ node_update_distro_backup_dir }}/installed-pre.txt; then echo "NEW: $p"; rc=1; fi; done;
-    {% if node_update_distro_net_before.dhcp == 'true' and not (node_update_distro_allow_dhcp_client_change | bool) %}
+    {% if node_update_distro_stack == 'ifupdown' and node_update_distro_net_before.dhcp == 'true'
+    and not (node_update_distro_allow_dhcp_client_change | bool) %}
     dpkg-query -W -f='${db:Status-Status}' isc-dhcp-client 2>/dev/null | grep -qx installed || { echo "isc-dhcp-client was removed"; rc=1; };
+    {% elif node_update_distro_stack == 'networkd' %}
+    for p in systemd-resolved; do
+    dpkg-query -W -f='${db:Status-Status}' "$p" 2>/dev/null | grep -qx installed || { echo "$p was removed"; rc=1; }; done;
+    [ -f /etc/systemd/network/10-uplink.network ] || { echo "10-uplink.network is gone"; rc=1; };
+    [ "$(readlink /etc/resolv.conf)" = /run/systemd/resolve/stub-resolv.conf ] || { echo "resolv.conf is no longer the resolved stub symlink"; rc=1; };
+    systemctl is-enabled --quiet systemd-networkd || { echo "systemd-networkd is no longer enabled"; rc=1; };
+    systemctl is-enabled --quiet systemd-resolved || { echo "systemd-resolved is no longer enabled"; rc=1; };
+    if systemctl is-enabled --quiet networking 2>/dev/null; then echo "networking.service got enabled next to networkd"; rc=1; fi;
     {% endif %}
     exit $rc
   args:

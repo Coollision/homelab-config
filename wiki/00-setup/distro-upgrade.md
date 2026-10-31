@@ -8,8 +8,12 @@ inside the same cordon → drain → reboot → verify → uncordon cycle as `cl
 ## What it does {#what-it-does}
 
 1. **Preflight** (also in dry run): classify the node as *done*, *fresh* or *resume*; refuse
-   release skipping, unclean dpkg, pending old-release updates, holds, low disk, a DHCP primary NIC
-   without `isc-dhcp-client`, a VM without a snapshot ack, and the control plane before the others.
+   release skipping, unclean dpkg, pending old-release updates, holds, a VM without a snapshot ack,
+   and the control plane before the others. It detects the network stack (`networkd` when
+   `10-uplink.network` exists, `systemd-networkd` is active and `networking.service` is not enabled;
+   `ifupdown` when `networking.service` is active; anything else is refused) and then refuses an
+   ifupdown DHCP primary NIC without `isc-dhcp-client`, or a networkd uplink that is not `configured`
+   / not the default-route interface / without `systemd-resolved` and the stub `resolv.conf`.
    Dry run also simulates the upgrade against the target sources in a scratch apt dir under `/tmp`
    (`-e node_update_distro_simulate=false` for strictly read-only).
 2. **Cordon + drain** (unchanged). Drain comes *before* apt on purpose: open-iscsi/iscsid restart
@@ -18,18 +22,24 @@ inside the same cordon → drain → reboot → verify → uncordon cycle as `cl
    snapshot, old sources). Control plane: `k3s etcd-snapshot save`, then the snapshot,
    `server/token` and `/etc/rancher/k3s/config.yaml` are fetched to `node_update_distro_offnode_backup_dir`
    (controller-side, outside this repo).
-4. `apt-mark manual` for `ifupdown`, `isc-dhcp-client`, Longhorn deps and timesyncd; deb822
+4. `apt-mark manual` for the network stack (ifupdown: `ifupdown`, `isc-dhcp-client`; networkd:
+   `systemd-networkd`, `systemd-resolved`), Longhorn deps and timesyncd; deb822
    `debian.sources` for the target; old source files moved aside.
 5. **Point of no return**, then minimal upgrade (`upgrade --without-new-pkgs`) and `full-upgrade`,
    both `--no-install-recommends`, confdef/confold + `UCF_FORCE_CONFFOLD`, async with a hard timeout.
 6. Backports kernels (`~bpo`) purged and the `linux-image-*` meta package moved to the target release
    before reboot (a bpo kernel can otherwise out-rank the new kernel and boot again).
-7. Pre-reboot gates: no newly installed `multipath-tools`/`dhcpcd-base`/host `iptables`,
-   `isc-dhcp-client` still installed, newest kernel (dpkg version order) is `+debNN` with an
+7. Pre-reboot gates: no newly installed `multipath-tools`/`dhcpcd-base`/host `iptables` (networkd nodes:
+   also not `ifupdown`); ifupdown: `isc-dhcp-client` still installed; networkd: `systemd-resolved` installed
+   and both units enabled, `10-uplink.network` present, `resolv.conf` still the resolved stub symlink,
+   `networking.service` not enabled; newest kernel (dpkg version order) is `+debNN` with an
    initramfs and a GRUB entry plus a fallback kernel, `findmnt --verify`, iGPU PCI ID known.
 8. Reboot, post-boot gates (release + kernel, systemd failed units (`systemd-networkd-wait-online` is
-   allowlisted: the nodes keep ifupdown, so networkd sees every link as unmanaged), interface set / primary IP /
-   gateway unchanged, `dhclient` running, k3s + `flannel.1`, Longhorn host deps, NTP sync, `/tmp`),
+   allowlisted on ifupdown nodes only, where networkd sees every link as unmanaged; on networkd nodes it
+   must pass), interface set / primary IP / gateway unchanged, DNS resolves; ifupdown: `networking.service`
+   active and `dhclient` running; networkd: `systemd-networkd` and `systemd-resolved` active, uplink
+   `configured` in `networkctl`, `resolv.conf` stub symlink intact, k3s node `InternalIP` equals the uplink
+   IPv4; k3s + `flannel.1`, Longhorn host deps, NTP sync, `/tmp`),
    iGPU check, uncordon, pod + Longhorn heal barrier, soak (`node_update_distro_soak_minutes`, default 10),
    barrier again.
 
@@ -55,7 +65,7 @@ follow-up: the node is left drained and cordoned, and the settle wait, soak and 
 - [ ] Dry run of the node read and understood (simulation summary: kernel, removals, watch-list).
 - [ ] VM node: hypervisor snapshot taken → `-e node_update_distro_snapshot_taken=true`.
 - [ ] Control plane: off-node directory (e.g. a NAS mount) → `-e node_update_distro_offnode_backup_dir=/abs/path`.
-- [ ] DHCP: primary NICs keep `isc-dhcp-client` (enforced). If you ever drop that, first confirm
+- [ ] DHCP, ifupdown nodes only: primary NICs keep `isc-dhcp-client` (enforced). If you ever drop that, first confirm
       MAC-based reservations for every node and pass `-e node_update_distro_allow_dhcp_client_change=true`.
 - [ ] Console access to the bare-metal nodes in case the network does not come back.
 
@@ -101,8 +111,9 @@ systemctl start k3s
 
 ## Decisions {#decisions}
 
-- **Network stack**: keep ifupdown + `isc-dhcp-client` for this upgrade (decided 2026-10-30). The
-  DHCP-client pin and IP-continuity gate are mandatory. Moving to systemd-networkd is a separate later project.
+- **Network stack**: ifupdown + `isc-dhcp-client` were kept for the 12 → 13 upgrade (decided 2026-10-30), with the
+  DHCP-client pin and IP-continuity gate mandatory. The nodes have since moved to systemd-networkd
+  ([Networking](../01-platform/networking.md#network-stack)).
 - **/tmp**: stays on disk, `tmp.mount` masked (decided 2026-10-30). Override with
   `node_update_distro_upgrade_tmp_mode=tmpfs_capped` (+ `node_update_distro_tmpfs_size`) or `tmpfs_default`.
 - **No full-disk image** of the control-plane node; the off-node etcd snapshot + token/config is the
@@ -119,6 +130,16 @@ systemctl start k3s
 4. Test on a throwaway VM (DHCP NIC, ideally a backports kernel installed), then the canary order above.
 
 ## Known limits {#limits}
+
+- **Network stack:** both ifupdown + `isc-dhcp-client` and systemd-networkd (`networkd_migrate`) nodes are handled, the
+  gates branch on the detected stack. NetworkManager (Raspberry Pi OS) is out of scope; the networkd path has not run
+  against a real node yet.
+- **Open questions for 13 → 14 (forky release notes are still a draft and say nothing on networking):** whether
+  `systemd-networkd` is split into its own package or `ifupdown` / `dhcpcd-base` packaging changes (the `apt-mark` loop
+  only marks packages that exist, so a split is harmless but unverified); whether new `systemd-resolved` defaults touch
+  `/etc/resolv.conf` or the drop-ins from `networkd_migrate`; whether a new systemd renames or re-orders interfaces. Re-read the
+  final release notes ("Issues to be aware of") and the dry-run simulation watch-list before the 13 → 14 run.
+- The netboot restore of a bare-metal node has never been tested.
 
 - Not exercised against a real node yet; only syntax/lint/template rendering were checked locally.
 - Raspberry Pi OS in-place upgrade is not implemented (preflight refuses).

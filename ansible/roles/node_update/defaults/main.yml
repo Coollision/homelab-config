@@ -108,7 +108,7 @@ node_update_distro_offnode_backup_dir: ""
 node_update_distro_allow_control_plane_first: false
 # Packages held during the upgrade (escape hatch for a known regression).
 node_update_distro_hold_packages: []
-# The DHCP client must stay isc-dhcp-client (same client-id => same lease/IP).
+# ifupdown nodes only: the DHCP client must stay isc-dhcp-client (same client-id => same lease/IP).
 # Set true only after confirming MAC-based DHCP reservations for every node.
 node_update_distro_allow_dhcp_client_change: false
 # Hard timeout (s) for each async apt phase; on timeout the rescue prints the
@@ -117,11 +117,15 @@ node_update_distro_apt_timeout: 5400
 # inotify limits: defined once in roles/node_common/defaults (the distro
 # preflight includes node_common's updateInotifyLimits task to load them).
 # Units allowed to be failed after boot (systemctl --failed).
-# networkd-wait-online: trixie enables systemd-networkd, but these nodes keep
-# ifupdown so every link is "unmanaged" and the unit always times out (first
-# real run on the bare-metal worker, 2026-10-30); the network gate checks IP/gateway itself.
-node_update_distro_failed_units_allowlist:
+node_update_distro_failed_units_allowlist: []
+# ifupdown nodes only: networkd-wait-online. trixie enables systemd-networkd, but with ifupdown
+# every link is "unmanaged" and the unit always times out (first real run on the bare-metal
+# worker, 2026-10-30); the network gate checks IP/gateway itself. On networkd nodes the unit is
+# meaningful and a failure of it must fail the gate.
+node_update_distro_failed_units_allowlist_ifupdown:
   - systemd-networkd-wait-online.service
+# networkd nodes: the uplink link name (networkd_migrate / uplink_name role).
+node_update_distro_uplink_iface: "{{ uplink_name_iface | default('uplink0') }}"
 # /tmp after the upgrade. trixie mounts /tmp as tmpfs by default on upgraded
 # systems. Decided 2026-10-30: keep it on disk (masks tmp.mount).
 #   disk          -> mask tmp.mount (today's behaviour)
