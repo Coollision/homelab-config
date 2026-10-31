@@ -49,10 +49,23 @@ existingSecret: smb-credentials
 smb:
   enabled: true
 
-# Second controller (see the pv-reclaimer plan). Not implemented yet: enabling it only renders its
-# RBAC and passes --enable-pv-reclaimer, which the binary logs and ignores.
+# Second controller: makes Released PVs Available again by clearing spec.claimRef. The defaults
+# match the old shell loop (every Released PV, any reclaim policy, any class, whole claimRef).
+# Everything below `enabled` is an opt-in safety switch.
 pvReclaimer:
   enabled: false
+  # Patch with dryRun=All and emit WouldReclaim events instead (use for the first cutover run).
+  # Independent of the top-level dryRun: leader election stays on.
+  dryRun: false
+  # Only reclaim PVs whose persistentVolumeReclaimPolicy is Retain.
+  retainOnly: false
+  # StorageClass allowlist; empty = every class.
+  storageClasses: []
+  # Skip PVs annotated storage-operator.homelab/pv-reclaimer-skip: "true".
+  honorSkipAnnotation: false
+  # clear = remove the whole claimRef; keep-claim = drop only uid/resourceVersion so only a PVC
+  # with the same namespace/name can rebind.
+  patchMode: clear
 
 # --- SMB controller inputs ---------------------------------------------------------------------
 

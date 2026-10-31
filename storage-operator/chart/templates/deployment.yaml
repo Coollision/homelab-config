@@ -38,6 +38,15 @@ spec:
             - --leader-elect={{ .Values.operatorArgs.leaderElect }}
             - --enable-smb={{ .Values.smb.enabled }}
             - --enable-pv-reclaimer={{ .Values.pvReclaimer.enabled }}
+            {{- with .Values.pvReclaimer }}
+            {{- if .enabled }}
+            - --pv-reclaimer-dry-run={{ .dryRun }}
+            - --pv-reclaimer-retain-only={{ .retainOnly }}
+            - --pv-reclaimer-storage-classes={{ join "," .storageClasses }}
+            - --pv-reclaimer-honor-skip-annotation={{ .honorSkipAnnotation }}
+            - --pv-reclaimer-patch-mode={{ .patchMode }}
+            {{- end }}
+            {{- end }}
             - --owner-deployment={{ .Values.ownerDeploymentName | default (include "storage-operator.fullname" .) }}
             - --dry-run={{ .Values.dryRun }}
             {{- range .Values.operatorArgs.extraArgs }}
