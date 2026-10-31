@@ -35,9 +35,9 @@
   become: true
   changed_when: false
   register: node_update_distro_failed_units
-  failed_when: node_update_distro_failed_units.stdout_lines | difference(node_update_distro_failed_units_allowlist) | length > 0
+  failed_when: node_update_distro_failed_units.stdout_lines | difference(node_update_distro_failed_units_allowlist + (node_update_distro_failed_units_allowlist_ifupdown if node_update_distro_stack == 'ifupdown' else [])) | length > 0
 
-- name: "Distro gate: network identical to before (interfaces, primary IP, gateway, DHCP client) [{{ k3s_node_name }}]"
+- name: "Distro gate: network identical to before (interfaces, primary IP, gateway, DHCP client on ifupdown) [{{ k3s_node_name }}]"
   ansible.builtin.shell: >
     set -o pipefail;
     dev={{ node_update_distro_net_before.iface }};
@@ -48,10 +48,10 @@
     [ "$links" = "{{ node_update_distro_net_before.links }}" ] || { echo "interface set changed"; exit 1; };
     [ "$ip" = "{{ node_update_distro_net_before.ip }}" ] || { echo "primary IP changed"; exit 1; };
     [ "$gw" = "{{ node_update_distro_net_before.gw }}" ] || { echo "default gateway changed"; exit 1; };
-    {% if node_update_distro_net_before.networking == 'active' %}
+    {% if node_update_distro_stack == 'ifupdown' %}
     systemctl is-active --quiet networking || { echo "ifupdown networking.service not active"; exit 1; };
     {% endif %}
-    {% if node_update_distro_net_before.dhcp == 'true' and not (node_update_distro_allow_dhcp_client_change | bool) %}
+    {% if node_update_distro_stack == 'ifupdown' and node_update_distro_net_before.dhcp == 'true' and not (node_update_distro_allow_dhcp_client_change | bool) %}
     pgrep -x dhclient >/dev/null || { echo "dhclient not running"; exit 1; };
     {% endif %}
     getent hosts deb.debian.org >/dev/null || { echo "DNS lookup failed"; exit 1; }
@@ -59,6 +59,23 @@
     executable: /bin/bash
   become: true
   changed_when: false
+
+- name: "Distro gate: networkd stack intact (networkd, resolved, uplink configured, resolv.conf stub, DNS) [{{ k3s_node_name }}]"
+  # wait-online is meaningful here (it is not allowlisted); this adds the per-link state and the resolver chain.
+  ansible.builtin.shell: >
+    set -o pipefail;
+    systemctl is-active --quiet systemd-networkd || { echo "systemd-networkd not active"; exit 1; };
+    systemctl is-active --quiet systemd-resolved || { echo "systemd-resolved not active"; exit 1; };
+    if systemctl is-enabled --quiet networking 2>/dev/null; then echo "networking.service enabled next to networkd"; exit 1; fi;
+    st=$(networkctl --no-legend --no-pager list | awk '$2 == "{{ node_update_distro_uplink_iface }}" {print $5}');
+    [ "$st" = configured ] || { echo "{{ node_update_distro_uplink_iface }} is '$st', not configured"; exit 1; };
+    [ "$(readlink /etc/resolv.conf)" = /run/systemd/resolve/stub-resolv.conf ] || { echo "resolv.conf is not the resolved stub symlink"; exit 1; };
+    getent hosts deb.debian.org >/dev/null || { echo "DNS lookup via resolved failed"; exit 1; }
+  args:
+    executable: /bin/bash
+  become: true
+  changed_when: false
+  when: node_update_distro_stack == 'networkd'
 
 - name: "Distro gate: k3s service + flannel up [{{ k3s_node_name }}]"
   # noqa: command-instead-of-module -- read-only is-active probe chained with ip link, retried via until
@@ -70,6 +87,20 @@
   until: node_update_distro_k3s_up.rc == 0
   retries: 30
   delay: 10
+
+# k3s picks its node IP once at start; it must be the uplink IPv4 (networkd_migrate saw it take a SLAAC IPv6 once).
+- name: "Distro gate: k3s node InternalIP is the uplink IPv4 (networkd) [{{ k3s_node_name }}]"
+  ansible.builtin.command: >-
+    kubectl --context {{ node_update_kubectl_context }} get node {{ k3s_node_name }}
+    -o 'jsonpath={.status.addresses[?(@.type=="InternalIP")].address}'
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  register: node_update_distro_internal_ip
+  until: (node_update_distro_internal_ip.stdout.split() | first | default('')) == node_update_distro_net_before.ip.split('/')[0]
+  retries: 12
+  delay: 10
+  when: node_update_distro_stack == 'networkd'
 
 - name: "Distro gate: Longhorn host deps [{{ k3s_node_name }}]"
   ansible.builtin.shell: >
