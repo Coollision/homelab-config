@@ -13,6 +13,13 @@ VLAN={{ vlan.interface_name | default('vlan' ~ vlan.id) }}
 DNS={{ dns }}
 {% endfor %}
 
+[Link]
+# network-online.target (and so k3s, which picks its node/etcd IP at start) must wait for the DHCPv4
+# lease like ifupdown's networking.service did. By default wait-online is satisfied by the SLAAC IPv6
+# address alone, k3s then picks the IPv6 and an existing etcd member (registered on the IPv4) refuses it.
+RequiredForOnline=routable
+RequiredFamilyForOnline=ipv4
+
 [DHCPv4]
 ClientIdentifier={{ networkd_migrate_client_identifier }}
 UseDNS=yes

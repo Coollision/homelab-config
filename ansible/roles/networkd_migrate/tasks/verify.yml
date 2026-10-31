@@ -1,5 +1,9 @@
 ---
 # Read-only gates, in order. Failing any of them leaves the revert timer armed.
+- name: Networkd migrate gate - interface names
+  ansible.builtin.set_fact:
+    networkd_migrate_vlan_names: "{{ networkd_migrate_vlans | map(attribute='interface_name', default='') | select | list }}"
+
 - name: Networkd migrate gate - collect state
   ansible.builtin.shell: |
     set -o pipefail
@@ -16,7 +20,7 @@
     echo "CONFIGURED=$(networkctl --no-legend --no-pager list 2>/dev/null | awk '$5 == "configured" {print $2}' | sort | tr '\n' ' ')"
     echo "VLAN6=$(for i in {{ networkd_migrate_vlan_names | join(' ') }}; do ip -o -6 addr show dev $i scope global 2>/dev/null; done | wc -l)"
     echo "FLANNEL=$(ip link show flannel.1 >/dev/null 2>&1 && echo yes || echo no)"
-    echo "UPSTREAM_NS=$(grep -c '^nameserver' /run/systemd/resolve/resolv.conf 2>/dev/null || echo 0)"
+    echo "UPSTREAM_NS=$(grep -c '^nameserver' /run/systemd/resolve/resolv.conf 2>/dev/null || true)"
     echo "STUB_ONLY=$(grep '^nameserver' /run/systemd/resolve/resolv.conf 2>/dev/null | grep -vc '127\.0\.0\.53')"
     sed 's/^/PRE_/' {{ networkd_migrate_state_dir }}/pre.env 2>/dev/null || true
     } | sed -E "s/^([A-Za-z0-9_]+)=(.*)$/\1: '\2'/"
@@ -25,10 +29,14 @@
   register: networkd_migrate_gate
   changed_when: false
   check_mode: false
+  # k3s recreates flannel.1 a while after the reboot; wait for it before judging.
+  until: >-
+    not (networkd_migrate_check_k3s | bool) or ("FLANNEL" ~ ": 'yes'") in networkd_migrate_gate.stdout
+  retries: 30
+  delay: 10
 
 - name: Networkd migrate gate - parse
   ansible.builtin.set_fact:
-    networkd_migrate_vlan_names: "{{ networkd_migrate_vlans | map(attribute='interface_name', default='') | select | list }}"
     networkd_migrate_g: "{{ networkd_migrate_gate.stdout | from_yaml }}"
     networkd_migrate_expected_configured: >-
       {{ ([networkd_migrate_uplink_iface] + networkd_migrate_vlans | map(attribute='interface_name', default='') | list) | select | sort }}
@@ -68,6 +76,19 @@
 - name: Networkd migrate gate - k3s
   when: networkd_migrate_check_k3s | bool
   block:
+    # k3s picks its node IP (and etcd peer URL) once, at start. It must be the DHCP IPv4, not a SLAAC IPv6
+    # (green, 2026-10-31: wait-online passed on IPv6 alone, k3s took the IPv6 and etcd refused it).
+    - name: Networkd migrate gate - the k3s node InternalIP is the uplink IPv4
+      ansible.builtin.command: >-
+        kubectl --context {{ networkd_migrate_kubectl_context }} get node {{ k3s_node_name }}
+        -o 'jsonpath={.status.addresses[?(@.type=="InternalIP")].address}'
+      delegate_to: localhost
+      become: false
+      register: networkd_migrate_internal_ip
+      changed_when: false
+      check_mode: false
+      failed_when: networkd_migrate_internal_ip.stdout.split() | first | default('') != networkd_migrate_g.ADDR.split('/')[0]
+
     # k3s detects the 127.0.0.53 stub and hands the kubelet /run/systemd/resolve/resolv.conf (the real upstreams).
     - name: Networkd migrate gate - flannel link and real upstream resolvers for the kubelet
       ansible.builtin.assert:
@@ -81,12 +102,12 @@
     - name: Networkd migrate gate - node Ready
       ansible.builtin.command: >-
         kubectl --context {{ networkd_migrate_kubectl_context }} get node {{ k3s_node_name }}
-        -o jsonpath={.status.conditions[?(@.type=="Ready")].status}
+        -o 'jsonpath={.status.conditions[?(@.type=="Ready")].status}'
       delegate_to: localhost
       become: false
       register: networkd_migrate_ready
       changed_when: false
       check_mode: false
       until: networkd_migrate_ready.stdout == 'True'
-      retries: 30
+      retries: 90
       delay: 10

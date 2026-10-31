@@ -44,7 +44,6 @@ nav:
   - TODO:
       - 06-todo/ansible-housekeeping.md
       - 06-todo/music-stack.md
-      - 06-todo/networkd-migration.md
       - 06-todo/plex-migration.md
 
 theme:

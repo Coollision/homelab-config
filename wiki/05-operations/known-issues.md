@@ -559,3 +559,28 @@ afterward regardless of success or failure. A **bare pod with no controller** (n
 Deployment/StatefulSet/Job owner) is a third, different case the playbook explicitly
 hard-fails on before touching the node, rather than auto-resolving — `node_update_force_drain=true`
 overrides this and deletes it for good.
+
+### Network-stack and k3s restart gotchas (networkd move) {#node-stack-gotchas}
+
+Three separate causes surfaced while moving the nodes to systemd-networkd ([Networking](../01-platform/networking.md#network-stack)).
+
+**k3s will not start after a reboot: "this server is not a member of the etcd cluster".**
+- **Cause:** k3s picks its node/etcd IP once, at start. Under ifupdown, `networking.service` blocked until DHCP returned an IPv4
+  address. `systemd-networkd-wait-online` counts a SLAAC IPv6 address as online, so k3s started first, took the IPv6, and the
+  existing etcd member (registered on the IPv4) refused it.
+- **Fix:** `RequiredForOnline=routable` + `RequiredFamilyForOnline=ipv4` on the uplink so `network-online.target` waits for the
+  IPv4, and `node-ip` pinned in the k3s config. A one-off recovery is `systemctl restart k3s` once the IPv4 is up.
+
+**DNS is dead right after installing `systemd-resolved`.**
+- **Cause:** the Debian package's postinst replaces `/etc/resolv.conf` with a symlink to the stub at once, while resolved is still
+  stopped and has no upstreams.
+- **Fix:** install it only inside the cutover (after the backup is taken and the revert timer is armed), and rewrite a plain
+  `resolv.conf` by hand if it ever happens outside it.
+
+**A k3s restart killed every container on the node (Longhorn engines died, volumes faulted).**
+- **Cause:** the k3s unit template had `KillMode=process` on its own line, but an old `{% endif %}` swallowed the newline (Ansible
+  `trim_blocks`), gluing it onto `ExecStart` as a stray argument. systemd ignored it and used `control-group`, so restarting
+  `k3s` / `k3s-node` killed all pods on the node. Reboots and `cluster_update` were unaffected because they drain first.
+- **Fix:** the template is split correctly, the live units were re-templated, and the k3s roles assert a standalone
+  `KillMode=process` line. Still treat any k3s restart as a drained, one-node-at-a-time operation and wait for Longhorn to be
+  healthy before the next node. `systemctl show k3s-node -p KillMode` shows what is actually in effect.

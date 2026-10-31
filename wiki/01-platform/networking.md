@@ -1,6 +1,6 @@
 # Networking
 
-[← Back to Home](../Home.md) · Platform: [Storage](storage.md) · [Secrets](secrets-vault.md) · [Cluster housekeeping](cluster-housekeeping.md) · TODO: [ifupdown → systemd-networkd](../06-todo/networkd-migration.md)
+[← Back to Home](../Home.md) · Platform: [Storage](storage.md) · [Secrets](secrets-vault.md) · [Cluster housekeeping](cluster-housekeeping.md)
 
 Networking is the most-tuned, most-incident-prone part of this platform — see
 [Known Issues](../05-operations/known-issues.md) for the long tail of things that have
@@ -112,6 +112,53 @@ name was `enp1s0` / `enp3s0` / `eth0` per host, and a pod scheduled on a node wi
   Cleanup of the old-name fallback config is `-e uplink_name_phase=cleanup -e uplink_legacy_name=<old>`. See
   [Ansible](../00-setup/ansible.md).
 - Prometheus network series use `device="uplink0"`; graphs from before the cutover (2026-10-30) carry the old names.
+
+## Host network stack: systemd-networkd {#network-stack}
+
+The x86 cluster nodes run **systemd-networkd** (moved off ifupdown on 2026-10-30/31); `networking.service` is disabled
+and `/etc/network/interfaces` holds only `lo`. The Raspberry Pi node stays on NetworkManager. The reason was the DHCP
+client, not ifupdown: ISC dhclient is end-of-life and Debian 13's ifupdown prefers `dhcpcd`, which sends a different
+client identifier. networkd settles that with one line.
+
+- **Uplink** (`10-uplink.network`, matches the pinned `uplink0`): `DHCP=ipv4` (IPv6 stays RA-only, as before),
+  `ClientIdentifier=mac` (the router reservation is keyed on the MAC, so the lease and IP do not change),
+  `KeepConfiguration=dhcp-on-stop`, and `RequiredForOnline=routable` + `RequiredFamilyForOnline=ipv4` (see the boot-order
+  note below).
+- **VLAN legs:** `vlan40` / `vlan5` from `vlan_trunk_interfaces`, same file names and templates as the `vlan_trunk` role,
+  with no node IP and no IPv6 (`LinkLocalAddressing=no`, `IPv6AcceptRA=no`). Only pods use them, through macvlan children.
+- **Kubernetes links stay unmanaged:** a `networkd.conf.d` drop-in sets `ManageForeignRoutes=no`,
+  `ManageForeignRoutingPolicyRules=no` and `ManageForeignNextHops=no`; there is no catch-all `[Match]`, so `cni0`,
+  `flannel.1`, `veth*` and macvlan children are untouched.
+- **DNS:** `systemd-resolved` provides the stub (`/etc/resolv.conf` is a symlink to it) with mDNS and LLMNR **off** so it
+  cannot clash with the mDNS reflector or Matter on UDP 5353. k3s hands the kubelet resolved's upstream file, not the stub.
+  NTP from DHCP is native (`UseNTP=yes`).
+- **k3s node IP is pinned** (`node-ip` in the k3s config, from `host_ip_address`), so the node/etcd address never depends
+  on which address comes up first.
+
+**Rolling it out** (role `networkd_migrate`, playbook `networkd_migrate.yml`, one node per run with `--limit`, shared
+cluster-side maintenance lock):
+
+- **Phases** (`-e networkd_migrate_phase=...`): `stage` (default; renders the networkd files into a staging dir, backs up
+  the ifupdown / `resolv.conf` state, writes the revert script and timer; nothing live changes), `cutover` (drain, arm
+  the revert timer, install `systemd-resolved`, swap the stack, reboot, then `finish`), `finish` (gates, cancel the
+  timer, uncordon, wait for pods and Longhorn; also the way to resume after a gate failed once the node is healthy),
+  `verify` (read-only gates), `revert` (restores ifupdown and `resolv.conf`, reboots), `cleanup` (drops the revert unit,
+  backups and state dir once the rollout has proven stable).
+- **Confirmation:** `cutover`, `revert` and `cleanup` need `-e networkd_migrate_confirm=<inventory hostname>`.
+- **Safety net:** a reboot-surviving revert timer fires 15 minutes after the *next boot* unless the gates cancelled it.
+- **Drain:** the cutover cordons and drains (same cycle as `cluster_update.yml`, including CNPG maintenance windows for
+  pinned single-instance clusters), refuses on degraded Longhorn, and uncordons after the gates pass. On any failure the
+  node stays cordoned.
+- **Gates:** same IPv4 and gateway, default route and DNS, networkd manages only the uplink and VLANs, no node IPv6 on the
+  VLANs and only the uplink has a default route, flannel present, k3s InternalIP is the uplink IPv4, node Ready.
+- **Order:** the VM node, then the VLAN/Multus node, the control-plane node last (about 5 minutes without an API server;
+  take an etcd snapshot and copy it off the node first). The netboot restore of a bare-metal node has never been tested:
+  do not count on it as a fallback.
+
+Lessons from the rollout, each also in [Known Issues](../05-operations/known-issues.md#node-stack-gotchas):
+`wait-online` is satisfied by a SLAAC IPv6 address alone, so k3s can start before the DHCPv4 lease and pick the IPv6;
+installing the `systemd-resolved` package replaces `resolv.conf` with a stub symlink immediately; and a mis-templated
+`KillMode` made every k3s restart kill all containers on the node.
 
 ## Design rationale worth keeping in mind
 
