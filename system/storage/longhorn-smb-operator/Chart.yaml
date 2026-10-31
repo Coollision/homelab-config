@@ -1,0 +1,10 @@
+apiVersion: v2
+name: longhorn-smb-operator
+description: Wrapper chart for the standalone storage-operator (SMB server controller + PV reclaimer)
+type: application
+version: 0.2.0
+appVersion: "0.1.0"
+dependencies:
+  - name: storage-operator
+    version: 0.1.0
+    repository: oci://ghcr.io/coollision/charts
