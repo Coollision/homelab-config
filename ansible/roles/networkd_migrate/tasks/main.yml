@@ -1,8 +1,8 @@
 ---
 - name: Networkd migrate - phase must be known
   ansible.builtin.assert:
-    that: networkd_migrate_phase in ['stage', 'cutover', 'verify', 'revert', 'cleanup']
-    fail_msg: "networkd_migrate_phase must be stage, cutover, verify, revert or cleanup (got {{ networkd_migrate_phase }})."
+    that: networkd_migrate_phase in ['stage', 'cutover', 'finish', 'verify', 'revert', 'cleanup']
+    fail_msg: "networkd_migrate_phase must be stage, cutover, finish, verify, revert or cleanup (got {{ networkd_migrate_phase }})."
 
 - name: Networkd migrate - stage
   ansible.builtin.include_tasks: stage.yml
@@ -11,6 +11,10 @@
 - name: Networkd migrate - cutover
   ansible.builtin.include_tasks: cutover.yml
   when: networkd_migrate_phase == 'cutover'
+
+- name: Networkd migrate - finish
+  ansible.builtin.include_tasks: finish.yml
+  when: networkd_migrate_phase == 'finish'
 
 - name: Networkd migrate - verify
   ansible.builtin.include_tasks: verify.yml

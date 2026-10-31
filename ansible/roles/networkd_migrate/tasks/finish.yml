@@ -1,0 +1,55 @@
+---
+# Everything after the reboot. Also the entry point to resume after a gate failed once the node is healthy.
+- name: Networkd migrate - gates
+  ansible.builtin.include_tasks: verify.yml
+
+- name: Networkd migrate - gates passed, cancel the revert timer
+  ansible.builtin.systemd:
+    name: networkd-migrate-revert.timer
+    enabled: false
+    state: stopped
+
+- name: Networkd migrate - mark done
+  ansible.builtin.file:
+    path: "{{ networkd_migrate_state_dir }}/cutover.done"
+    state: touch
+    mode: "0600"
+
+- name: Networkd migrate - uncordon and wait for pods and Longhorn to settle
+  when: networkd_migrate_drain | bool
+  block:
+    - name: Networkd migrate - uncordon
+      ansible.builtin.command: "kubectl --context {{ networkd_migrate_kubectl_context }} uncordon {{ k3s_node_name }}"
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
+    - name: Networkd migrate - wait for the cluster to settle (hard barrier before the next node)
+      ansible.builtin.include_role:
+        name: cluster_wait_stable
+
+# Whatever cutover switched on (matched by state, so this also works when finish is run alone).
+- name: Networkd migrate - CNPG clusters still in a maintenance window
+  ansible.builtin.shell: |
+    set -o pipefail
+    kubectl --context {{ networkd_migrate_kubectl_context }} get clusters.postgresql.cnpg.io -A -o json \
+      | jq -r '.items[] | select(.spec.nodeMaintenanceWindow.inProgress == true) | .metadata.namespace + "/" + .metadata.name'
+  args:
+    executable: /bin/bash
+  delegate_to: localhost
+  become: false
+  register: networkd_migrate_cnpg_open
+  changed_when: false
+  check_mode: false
+  when: networkd_migrate_drain | bool
+
+- name: Networkd migrate - CNPG nodeMaintenanceWindow off again
+  ansible.builtin.command: >-
+    kubectl --context {{ networkd_migrate_kubectl_context }} patch cluster.postgresql.cnpg.io
+    {{ item.split('/')[1] }} -n {{ item.split('/')[0] }} --type merge
+    -p '{"spec":{"nodeMaintenanceWindow":{"inProgress":false}}}'
+  loop: "{{ networkd_migrate_cnpg_open.stdout_lines | default([]) }}"
+  delegate_to: localhost
+  become: false
+  changed_when: true
+  when: networkd_migrate_drain | bool

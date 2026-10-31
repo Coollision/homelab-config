@@ -4,6 +4,7 @@
 #           the ifupdown/resolv.conf state, write the revert script + timer. Nothing live changes.
 # cutover : arm the revert timer, swap the stack, reboot, run the gates, cancel the timer.
 #           One node per run; needs -e networkd_migrate_confirm=<inventory hostname>.
+# finish  : after the reboot: gates, cancel the revert timer, uncordon, wait (cutover ends with it; use alone to resume).
 # verify  : read-only gates (also run by cutover).
 # revert  : run the revert script by hand (restores ifupdown + resolv.conf, reboots).
 # cleanup : after a successful rollout, drop the backups, revert unit and ifupdown leftovers.

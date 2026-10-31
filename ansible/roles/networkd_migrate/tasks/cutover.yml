@@ -55,6 +55,40 @@
         fail_msg: "Longhorn volumes not healthy: {{ networkd_migrate_unhealthy.stdout_lines }}. Fix storage before draining."
         quiet: true
 
+    - name: Networkd migrate - single-instance CNPG clusters pinned on this node
+      ansible.builtin.shell: |
+        set -o pipefail
+        comm -12 \
+          <(kubectl --context {{ networkd_migrate_kubectl_context }} get pods -A -l cnpg.io/cluster \
+              --field-selector spec.nodeName={{ k3s_node_name }} -o json \
+              | jq -r '.items[] | .metadata.namespace + "/" + .metadata.labels["cnpg.io/cluster"]' | sort -u) \
+          <(kubectl --context {{ networkd_migrate_kubectl_context }} get clusters.postgresql.cnpg.io -A -o json \
+              | jq -r '.items[] | select(.spec.instances == 1) | .metadata.namespace + "/" + .metadata.name' | sort -u)
+      args:
+        executable: /bin/bash
+      delegate_to: localhost
+      become: false
+      register: networkd_migrate_cnpg_singletons
+      changed_when: false
+      check_mode: false
+
+    # Same as cluster_update.yml: let CNPG reuse the PVC when its only pod is deleted by the drain.
+    # Switched off again in finish.yml.
+    - name: Networkd migrate - CNPG nodeMaintenanceWindow on for those clusters
+      ansible.builtin.command: >-
+        kubectl --context {{ networkd_migrate_kubectl_context }} patch cluster.postgresql.cnpg.io
+        {{ item.split('/')[1] }} -n {{ item.split('/')[0] }} --type merge
+        -p '{"spec":{"nodeMaintenanceWindow":{"inProgress":true,"reusePVC":true}}}'
+      loop: "{{ networkd_migrate_cnpg_singletons.stdout_lines }}"
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
+    - name: Networkd migrate - grace period for CNPG to see the maintenance window
+      ansible.builtin.pause:
+        seconds: 20
+      when: networkd_migrate_cnpg_singletons.stdout_lines | length > 0
+
     - name: Networkd migrate - cordon
       ansible.builtin.command: "kubectl --context {{ networkd_migrate_kubectl_context }} cordon {{ k3s_node_name }}"
       delegate_to: localhost
@@ -125,30 +159,5 @@
     reboot_timeout: "{{ networkd_migrate_reboot_timeout }}"
     msg: "networkd migration cutover"
 
-- name: Networkd migrate - gates
-  ansible.builtin.include_tasks: verify.yml
-
-- name: Networkd migrate - gates passed, cancel the revert timer
-  ansible.builtin.systemd:
-    name: networkd-migrate-revert.timer
-    enabled: false
-    state: stopped
-
-- name: Networkd migrate - mark done
-  ansible.builtin.file:
-    path: "{{ networkd_migrate_state_dir }}/cutover.done"
-    state: touch
-    mode: "0600"
-
-- name: Networkd migrate - uncordon and wait for pods and Longhorn to settle
-  when: networkd_migrate_drain | bool
-  block:
-    - name: Networkd migrate - uncordon
-      ansible.builtin.command: "kubectl --context {{ networkd_migrate_kubectl_context }} uncordon {{ k3s_node_name }}"
-      delegate_to: localhost
-      become: false
-      changed_when: true
-
-    - name: Networkd migrate - wait for the cluster to settle (hard barrier before the next node)
-      ansible.builtin.include_role:
-        name: cluster_wait_stable
+- name: Networkd migrate - gates, cancel the timer, uncordon
+  ansible.builtin.include_tasks: finish.yml
