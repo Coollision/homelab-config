@@ -1,4 +1,6 @@
 fullnameOverride: whisper
+# TEMPORARY: down for STT benchmarking (string, since the lib's `default "1"` swallows int 0)
+replicaCount: "0"
 statefulset:
   image:
     repository: rhasspy/wyoming-whisper
