@@ -102,6 +102,13 @@ jobs:
           helm template storage-operator chart > /dev/null
           helm template storage-operator chart --set pvReclaimer.enabled=true > /dev/null
 
+      - name: Assert chart invariants
+        run: |
+          set -euo pipefail
+          out=$(helm template smb-operator chart)
+          # Single replica + leader election + readyz-after-reconcile deadlocks a RollingUpdate.
+          grep -A1 '^  strategy:' <<<"$out" | grep -q 'type: Recreate' || { echo "Deployment strategy must be Recreate"; exit 1; }
+
   versioning:
     name: Versioning
     runs-on: ubuntu-latest

@@ -179,7 +179,11 @@ func run(setupLog interface {
 		LeaderElection:          o.leaderElect,
 		LeaderElectionID:        LeaderElectionID,
 		LeaderElectionNamespace: o.namespace,
-		Cache:                   cache.Options{ByObject: byObject},
+		// Release the lease on SIGTERM so a replacement pod (Recreate) acquires it immediately
+		// instead of waiting out the lease duration. Safe because run() returns, and the process
+		// exits, as soon as mgr.Start returns.
+		LeaderElectionReleaseOnCancel: true,
+		Cache:                         cache.Options{ByObject: byObject},
 	})
 	if err != nil {
 		return err

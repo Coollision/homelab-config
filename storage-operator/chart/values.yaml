@@ -12,6 +12,13 @@ image:
 
 replicaCount: 1
 
+# Recreate, not RollingUpdate: with one replica, leader election and a readyz that only passes
+# after a successful reconcile, a surge pod can never take the lease or become Ready, so a
+# RollingUpdate deadlocks. Recreate also prevents two writers (e.g. the Python operator and
+# this one at first cutover) from running concurrently.
+strategy:
+  type: Recreate
+
 # Extra labels on the operator Deployment metadata only (not the selector). The SMB controller
 # copies the operator Deployment's labels onto every child object (smb-server, ConfigMaps, PV/PVCs).
 extraLabels: {}
