@@ -137,61 +137,95 @@ func (r *Reconciler) reconcileOnce(ctx context.Context) (ok bool, rerr error) {
 	return ok, nil
 }
 
+// reconcile is one pass: discover, refresh the mount table, and on a structural change
+// rewrite smb.conf, migration PV/PVCs, the smb-server Deployment and Service, then emit events.
 func (r *Reconciler) reconcile(ctx context.Context, logger logr.Logger) (bool, error) {
 	logger.Info("Starting reconciliation...")
-	pvcShares, err := r.DiscoverShares(ctx, logger)
+	all, migrationShares, err := r.discoverAll(ctx, logger)
 	if err != nil {
 		return false, err
 	}
-	migrationShares := r.DiscoverMigrationShares(ctx, logger)
-	all := append(slices.Clone(pvcShares), migrationShares...)
-	if len(migrationShares) > 0 {
-		logger.Info("Including migration share(s) in SMB server", "count", len(migrationShares), "shares", names(migrationShares))
-	}
-
-	changed, err := r.withRetry(ctx, "update_mount_table", func() (bool, error) {
-		return r.updateMountTable(ctx, logger, render.MountTable(all))
-	})
-	if err != nil {
+	if err := r.syncMountTable(ctx, logger, all); err != nil {
 		return false, err
 	}
-	if changed {
-		var detached []string
-		for _, s := range all {
-			if s.MountType == shares.MountNFS && !s.Attached {
-				detached = append(detached, s.Name)
-			}
-		}
-		if len(detached) > 0 {
-			sort.Strings(detached)
-			logger.Info("  Detached (unmounted, share still published): " + strings.Join(detached, ", "))
-		}
-	}
 
-	newShares := map[string]struct{}{}
-	newStructure := map[string]struct{}{}
-	for _, s := range all {
-		newShares[s.UniqueID()] = struct{}{}
-		newStructure[s.StructuralKey()] = struct{}{}
-	}
+	newShares, newStructure := shareSets(all)
 	// Starts empty, like Python: zero shares on a fresh start is "no change".
 	if setEqual(newStructure, r.currentStructure) {
 		logger.V(1).Info("No structural changes", "shares", len(all))
 		return true, nil
 	}
-
 	added := setDiff(newShares, r.currentShares)
 	removed := setDiff(r.currentShares, newShares)
 	logger.Info("Share configuration changed", "previous", len(r.currentShares), "current", len(newShares),
 		"added", added, "removed", removed)
 
+	if ok, err := r.applyStructure(ctx, logger, all, migrationShares); err != nil || !ok {
+		return false, err
+	}
+	r.currentShares = newShares
+	r.currentStructure = newStructure
+	logger.Info("Reconciliation completed successfully")
+	r.recordShareEvents(ctx, added, removed)
+	return true, nil
+}
+
+// discoverAll returns the PVC shares followed by the migration shares, plus the latter alone.
+func (r *Reconciler) discoverAll(ctx context.Context, logger logr.Logger) (all, migration []shares.Share, err error) {
+	pvcShares, err := r.DiscoverShares(ctx, logger)
+	if err != nil {
+		return nil, nil, err
+	}
+	migration = r.DiscoverMigrationShares(ctx, logger)
+	all = append(slices.Clone(pvcShares), migration...)
+	if len(migration) > 0 {
+		logger.Info("Including migration share(s) in SMB server", "count", len(migration), "shares", names(migration))
+	}
+	return all, migration, nil
+}
+
+// syncMountTable writes the mount table and, when it changed, logs the detached NFS shares.
+func (r *Reconciler) syncMountTable(ctx context.Context, logger logr.Logger, all []shares.Share) error {
+	changed, err := r.withRetry(ctx, "update_mount_table", func() (bool, error) {
+		return r.updateMountTable(ctx, logger, render.MountTable(all))
+	})
+	if err != nil || !changed {
+		return err
+	}
+	var detached []string
+	for _, s := range all {
+		if s.MountType == shares.MountNFS && !s.Attached {
+			detached = append(detached, s.Name)
+		}
+	}
+	if len(detached) > 0 {
+		sort.Strings(detached)
+		logger.Info("  Detached (unmounted, share still published): " + strings.Join(detached, ", "))
+	}
+	return nil
+}
+
+// shareSets returns the unique-ID and structural-key sets of all.
+func shareSets(all []shares.Share) (ids, structure map[string]struct{}) {
+	ids = map[string]struct{}{}
+	structure = map[string]struct{}{}
+	for _, s := range all {
+		ids[s.UniqueID()] = struct{}{}
+		structure[s.StructuralKey()] = struct{}{}
+	}
+	return ids, structure
+}
+
+// applyStructure writes smb.conf, the migration PV/PVCs, the Deployment and the Service, in
+// that order. It returns false without error when the Deployment apply was not successful.
+func (r *Reconciler) applyStructure(ctx context.Context, logger logr.Logger, all, migration []shares.Share) (bool, error) {
 	if _, err := r.withRetry(ctx, "update_smb_config", func() (bool, error) {
 		return true, r.updateSMBConfig(ctx, logger, render.SMBConf(r.cfg(), all))
 	}); err != nil {
 		return false, err
 	}
 
-	r.EnsureMigrationPVCs(ctx, logger, migrationShares)
+	r.EnsureMigrationPVCs(ctx, logger, migration)
 
 	dep, err := render.Deployment(r.cfg(), all, r.childBaseLabels(ctx, logger), r.now())
 	if err != nil {
@@ -200,20 +234,19 @@ func (r *Reconciler) reconcile(ctx context.Context, logger logr.Logger) (bool, e
 	success, err := r.withRetry(ctx, "apply_deployment", func() (bool, error) {
 		return r.applyDeployment(ctx, logger, dep)
 	})
-	if err != nil {
+	if err != nil || !success {
 		return false, err
-	}
-	if !success {
-		return false, nil
 	}
 	if _, err := r.withRetry(ctx, "ensure_service", func() (bool, error) {
 		return true, r.ensureService(ctx, logger)
 	}); err != nil {
 		return false, err
 	}
-	r.currentShares = newShares
-	r.currentStructure = newStructure
-	logger.Info("Reconciliation completed successfully")
+	return true, nil
+}
+
+// recordShareEvents emits ShareAdded/ShareRemoved on each "<ns>/<pvc>" id.
+func (r *Reconciler) recordShareEvents(ctx context.Context, added, removed []string) {
 	for _, id := range added {
 		ns, pvc, _ := strings.Cut(id, "/")
 		r.recordEvent(ctx, "PersistentVolumeClaim", pvc, ns, "ShareAdded", "SMB share added: "+pvc, corev1.EventTypeNormal)
@@ -222,7 +255,6 @@ func (r *Reconciler) reconcile(ctx context.Context, logger logr.Logger) (bool, e
 		ns, pvc, _ := strings.Cut(id, "/")
 		r.recordEvent(ctx, "PersistentVolumeClaim", pvc, ns, "ShareRemoved", "SMB share removed", corev1.EventTypeNormal)
 	}
-	return true, nil
 }
 
 // ---------------------------------------------------------------------------------------------
