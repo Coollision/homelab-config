@@ -2,12 +2,15 @@ package pvreclaimer
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -27,10 +30,13 @@ func ReleasedPredicate() predicate.Predicate {
 }
 
 // SetupWithManager registers the pv-reclaimer controller, its metrics and its readiness check.
+// o.Mode is validated and normalised once here (empty becomes PatchModeClear).
 func SetupWithManager(mgr manager.Manager, o Options) (*Reconciler, error) {
-	if _, err := ParsePatchMode(string(o.Mode)); err != nil {
+	mode, err := ParsePatchMode(string(o.Mode))
+	if err != nil {
 		return nil, err
 	}
+	o.Mode = mode
 	r := &Reconciler{
 		Reader:   mgr.GetAPIReader(),
 		Client:   mgr.GetClient(),
@@ -38,25 +44,34 @@ func SetupWithManager(mgr manager.Manager, o Options) (*Reconciler, error) {
 		Metrics:  NewMetrics(metrics.Registry),
 		Opts:     o,
 	}
-	err := ctrl.NewControllerManagedBy(mgr).
+	err = ctrl.NewControllerManagedBy(mgr).
 		Named(ControllerName).
 		For(&corev1.PersistentVolume{}, builder.WithPredicates(ReleasedPredicate())).
 		Complete(r)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("building %s controller: %w", ControllerName, err)
 	}
-	// Ready once the PV informer has synced (i.e. the start-up pass has been queued).
-	if err := mgr.AddReadyzCheck(ControllerName, func(req *http.Request) error {
-		if r.Ready() {
-			return nil
-		}
-		if !mgr.GetCache().WaitForCacheSync(req.Context()) {
-			return errors.New("pv-reclaimer: PV cache not synced")
-		}
-		r.ready.Store(true)
-		return nil
-	}); err != nil {
+	if err := mgr.AddReadyzCheck(ControllerName, r.readyzCheck(mgr.GetCache())); err != nil {
 		return nil, err
 	}
 	return r, nil
+}
+
+// readyzCheck passes once the PV informer has synced (i.e. the start-up pass has been queued).
+// It does not block: an unsynced informer fails the probe until the next attempt.
+func (r *Reconciler) readyzCheck(informers cache.Informers) healthz.Checker {
+	return func(req *http.Request) error {
+		if r.Ready() {
+			return nil
+		}
+		inf, err := informers.GetInformer(req.Context(), &corev1.PersistentVolume{}, cache.BlockUntilSynced(false))
+		if err != nil {
+			return fmt.Errorf("pv-reclaimer: getting PV informer: %w", err)
+		}
+		if !inf.HasSynced() {
+			return errors.New("pv-reclaimer: PV informer not synced")
+		}
+		r.ready.Store(true)
+		return nil
+	}
 }

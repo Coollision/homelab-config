@@ -21,9 +21,12 @@ const conflictRequeue = time.Second
 
 // Event reasons emitted on the PV.
 const (
-	ReasonReclaimed    = "Reclaimed"
+	// ReasonReclaimed: claimRef was reset; the PV is Available again.
+	ReasonReclaimed = "Reclaimed"
+	// ReasonWouldReclaim: dry-run; repeats on every update/resync of a still-Released PV.
 	ReasonWouldReclaim = "WouldReclaim"
-	ReasonFailed       = "ReclaimFailed"
+	// ReasonFailed: the patch failed (Warning); repeats on each retry.
+	ReasonFailed = "ReclaimFailed"
 )
 
 // Reconciler clears spec.claimRef on Released PVs.
@@ -31,15 +34,18 @@ type Reconciler struct {
 	// Reader is used for the uncached re-read at the start of Reconcile.
 	Reader client.Reader
 	// Client sends the patches.
-	Client   client.Client
+	Client client.Client
+	// Recorder emits the Reclaimed/WouldReclaim/ReclaimFailed events on the PV.
 	Recorder events.EventRecorder
-	Metrics  *Metrics
-	Opts     Options
+	// Metrics counts handled PVs by result.
+	Metrics *Metrics
+	// Opts.Mode is normalised by SetupWithManager; an empty Mode patches like PatchModeClear.
+	Opts Options
 
 	ready atomic.Bool
 }
 
-// Ready reports whether the PV informer cache has synced (set by the readiness check).
+// Ready reports whether the PV informer has synced (latched by the readiness check).
 func (r *Reconciler) Ready() bool { return r.ready.Load() }
 
 // needsReclaim reports whether pv is Released and still carries the claim binding this mode removes.
@@ -113,19 +119,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 	if r.Opts.DryRun {
 		r.Metrics.Reclaimed.WithLabelValues(ResultDryRun).Inc()
-		r.Recorder.Eventf(&pv, nil, corev1.EventTypeNormal, ReasonWouldReclaim, "Reclaim", "dry-run: would reset claimRef (%s, was %s)", r.mode(), claim)
-		logger.Info("dry-run: would reclaim PV", "claim", claim, "mode", r.mode())
+		r.Recorder.Eventf(&pv, nil, corev1.EventTypeNormal, ReasonWouldReclaim, "Reclaim", "dry-run: would reset claimRef (%s, was %s)", r.Opts.Mode, claim)
+		logger.Info("dry-run: would reclaim PV", "claim", claim, "mode", r.Opts.Mode)
 		return ctrl.Result{}, nil
 	}
 	r.Metrics.Reclaimed.WithLabelValues(ResultReclaimed).Inc()
-	r.Recorder.Eventf(&pv, nil, corev1.EventTypeNormal, ReasonReclaimed, "Reclaim", "reset claimRef (%s, was %s); PV is Available again", r.mode(), claim)
-	logger.Info("reclaimed PV", "claim", claim, "mode", r.mode())
+	r.Recorder.Eventf(&pv, nil, corev1.EventTypeNormal, ReasonReclaimed, "Reclaim", "reset claimRef (%s, was %s); PV is Available again", r.Opts.Mode, claim)
+	logger.Info("reclaimed PV", "claim", claim, "mode", r.Opts.Mode)
 	return ctrl.Result{}, nil
-}
-
-func (r *Reconciler) mode() PatchMode {
-	if r.Opts.Mode == "" {
-		return PatchModeClear
-	}
-	return r.Opts.Mode
 }
