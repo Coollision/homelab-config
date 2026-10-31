@@ -7,7 +7,7 @@ func TestParseNFSEndpoint(t *testing.T) {
 		in, server, path string
 		ok               bool
 	}{
-		{"nfs://10.0.0.1/pvc-1", "10.0.0.1", "/pvc-1", true},
+		{"nfs://192.0.2.1/pvc-1", "192.0.2.1", "/pvc-1", true},
 		{"nfs://h/a/b", "h", "/a/b", true},
 		{"nfs://h/", "h", "/", true},
 		{"nfs://h", "", "", false},
