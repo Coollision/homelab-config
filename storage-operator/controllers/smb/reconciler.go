@@ -316,13 +316,18 @@ func (r *Reconciler) getLonghornVolume(ctx context.Context, name string) map[str
 // ---------------------------------------------------------------------------------------------
 // Writes
 
+// updatePVCAnnotations writes the smb-operator status annotations; failures are only logged.
 func (r *Reconciler) updatePVCAnnotations(ctx context.Context, logger logr.Logger, ns, name, status, sharePath string) {
 	patch := map[string]any{"metadata": map[string]any{"annotations": map[string]string{
 		render.AnnotPVCStatus:     status,
 		render.AnnotPVCSharePath:  sharePath,
 		render.AnnotPVCLastUpdate: r.now().UTC().Format(render.TimeFormat),
 	}}}
-	body, _ := json.Marshal(patch)
+	body, err := json.Marshal(patch)
+	if err != nil {
+		logger.Error(err, "Failed to encode PVC annotation patch", "pvc", ns+"/"+name)
+		return
+	}
 	pvc := &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name}}
 	if err := r.Writer.Patch(ctx, pvc, client.RawPatch(types.MergePatchType, body)); err != nil {
 		logger.Info("Failed to update PVC annotations", "pvc", ns+"/"+name, "error", err.Error())
@@ -443,8 +448,12 @@ func (r *Reconciler) updateSMBConfig(ctx context.Context, logger logr.Logger, co
 	return nil
 }
 
+// patchData merge-patches one data key of cm.
 func (r *Reconciler) patchData(ctx context.Context, cm *corev1.ConfigMap, key, value string) error {
-	body, _ := json.Marshal(map[string]any{"data": map[string]string{key: value}})
+	body, err := json.Marshal(map[string]any{"data": map[string]string{key: value}})
+	if err != nil {
+		return fmt.Errorf("encoding ConfigMap %s data patch: %w", cm.Name, err)
+	}
 	target := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Namespace: cm.Namespace, Name: cm.Name}}
 	return r.Writer.Patch(ctx, target, client.RawPatch(types.MergePatchType, body))
 }

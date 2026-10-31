@@ -20,20 +20,20 @@ import (
 
 // Labels and annotations.
 const (
-	LabelManagedBy       = "managed-by"
-	ManagedByValue       = "smb-operator"
-	LabelMigration       = "smb-operator/migration"
-	AnnotVersion         = "smb-operator/version"
-	AnnotSharesCount     = "smb-operator/shares-count"
-	AnnotShareList       = "smb-operator/share-list"
-	AnnotLastUpdated     = "smb-operator/last-updated"
-	AnnotPVCStatus       = "smb-operator/status"
-	AnnotPVCSharePath    = "smb-operator/share-path"
-	AnnotPVCLastUpdate   = "smb-operator/last-update"
-	TemplateVersion      = "2.1" // bumping this rolls the smb-server pod
-	CredentialsSecret    = "smb-credentials"
-	MigrationStorageClas = "longhorn"
-	TimeFormat           = "2006-01-02 15:04:05 UTC"
+	LabelManagedBy        = "managed-by"
+	ManagedByValue        = "smb-operator"
+	LabelMigration        = "smb-operator/migration"
+	AnnotVersion          = "smb-operator/version"
+	AnnotSharesCount      = "smb-operator/shares-count"
+	AnnotShareList        = "smb-operator/share-list"
+	AnnotLastUpdated      = "smb-operator/last-updated"
+	AnnotPVCStatus        = "smb-operator/status"
+	AnnotPVCSharePath     = "smb-operator/share-path"
+	AnnotPVCLastUpdate    = "smb-operator/last-update"
+	TemplateVersion       = "2.1" // bumping this rolls the smb-server pod
+	CredentialsSecret     = "smb-credentials"
+	MigrationStorageClass = "longhorn"
+	TimeFormat            = "2006-01-02 15:04:05 UTC"
 )
 
 // ChildLabels returns the operator Deployment's labels (incl. ArgoCD tracking) plus
@@ -227,7 +227,7 @@ func MigrationPV(s shares.Share, sizeMi string, labels map[string]string) *corev
 			VolumeMode:                    ptr.To(corev1.PersistentVolumeFilesystem),
 			AccessModes:                   []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 			PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimRetain,
-			StorageClassName:              MigrationStorageClas,
+			StorageClassName:              MigrationStorageClass,
 			PersistentVolumeSource: corev1.PersistentVolumeSource{CSI: &corev1.CSIPersistentVolumeSource{
 				Driver: "driver.longhorn.io", FSType: "ext4", VolumeHandle: s.LonghornVolumeName,
 			}},
@@ -240,7 +240,7 @@ func MigrationPVC(s shares.Share, namespace, sizeMi string, labels map[string]st
 	return &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{Name: s.MigrationPVCName(), Namespace: namespace, Labels: labels},
 		Spec: corev1.PersistentVolumeClaimSpec{
-			StorageClassName: ptr.To(MigrationStorageClas),
+			StorageClassName: ptr.To(MigrationStorageClass),
 			VolumeName:       s.MigrationPVName(),
 			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 			Resources: corev1.VolumeResourceRequirements{
