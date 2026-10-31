@@ -8,6 +8,13 @@
     mode: "0644"
   notify: Restart k3s
 
+# KillMode=process must be its own line: when it was glued onto ExecStart (old template), systemd ignored it and a
+# k3s restart killed every container on the node (Longhorn engines included, 2026-10-31).
+- name: Guard - KillMode=process is a standalone line in the k3s unit
+  ansible.builtin.command: grep -qxF KillMode=process "{{ systemd_dir }}/k3s.service"
+  changed_when: false
+  check_mode: false
+
 - name: Flag k3s restart when the binary or registries changed (k3s_pre)
   ansible.builtin.debug:
     msg: "k3s binary or registries.yaml changed; k3s will be restarted"

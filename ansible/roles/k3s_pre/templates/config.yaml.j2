@@ -15,6 +15,9 @@ token: {{ k3s_token }}
 write-kubeconfig-mode: "0600"
 {% endif %}
 
+# Pinned: k3s otherwise picks the node/etcd IP once at start, and a SLAAC IPv6 can win that race on boot
+# (an existing etcd member registered on the IPv4 then refuses to start).
+node-ip: {{ host_ip_address }}
 node-external-ip: {{ _ext_ips | join(',') }}
 {% if _server %}
 flannel-backend: "vxlan"
