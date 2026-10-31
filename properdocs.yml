@@ -15,6 +15,7 @@ nav:
   - Platform:
       - 01-platform/networking.md
       - 01-platform/storage.md
+      - 01-platform/storage-operator.md
       - 01-platform/databases.md
       - 01-platform/secrets-vault.md
       - 01-platform/certificates.md

@@ -9,7 +9,7 @@ Four pieces, each solving a different access pattern:
 | Longhorn | `system/storage/longhorn` | Default RWO block storage for almost every app's config/data volume |
 | SMB operator | `system/storage/longhorn-smb-operator` | Turns a Longhorn RWO volume into an RWX SMB share |
 | NFS provisioner | `system/storage/nfs` | RWX storage backed by the Synology NAS (media libraries, some configs) |
-| PV reclaimer | `system/storage/pv-reclaimer` | Auto-reclaims `Released` PVs so they don't pile up |
+| PV reclaimer | `system/storage/longhorn-smb-operator` (storage-operator) | Auto-reclaims `Released` PVs so they don't pile up |
 
 ## Longhorn
 
@@ -36,8 +36,9 @@ before reaching for `kubectl patch` at all).
 
 ## The SMB operator: bridging Longhorn RWO to RWX
 
-`system/storage/longhorn-smb-operator` is **not a Helm chart** — a hand-rolled Python
-controller (deployed via plain Kustomize) that watches Longhorn `Volume` CRs, and for any
+`system/storage/longhorn-smb-operator` is a thin wrapper chart around the standalone
+`storage-operator` chart (OCI dependency, replacing the old in-repo Python/Kustomize
+setup); build, config and runbook live on [Storage operator](storage-operator.md). The controller watches Longhorn `Volume` CRs, and for any
 volume needing shared access, mounts its NFS export into a shared Samba gateway pod and
 reconciles the share list live. Its single most important operating constraint —
 learned the hard way in a 30-hour outage — is documented in
@@ -57,11 +58,11 @@ target, this provisioner, and the SMB operator's re-export path.
 
 ## PV reclaimer
 
-A tiny custom controller that watches for PVs stuck in `Released` phase and reclaims them
-automatically — deploys very early (`syncWave: -5`) so it's watching from the start of a
-bootstrap. A webhook-notification hook exists in the config but is currently unwired
-(empty URL) — flagged as a real TODO, not a bug, if you're looking for why you never got
-a "PV reclaimed" alert.
+The `storage-operator` chart (wrapped by `longhorn-smb-operator`) hosts a Go PV reclaimer that
+watches for PVs stuck in `Released` phase and reclaims them automatically. It replaced the old
+shell-based `pv-reclaimer` app (removed); see
+[Storage operator](storage-operator.md#storage-operator-pv-reclaimer). The old webhook
+notification was not ported, so there is no "PV reclaimed" alert.
 
 ## Practical notes
 

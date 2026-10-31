@@ -1,0 +1,10 @@
+# Chart defaults reproduce the previous Python operator's ConfigMaps exactly (config, migration).
+# Deployment name stays `smb-operator`: the smb-server Service is owned by it (ownerReference).
+storage-operator:
+  smb:
+    enabled: true
+
+  # Replaces the old shell `pv-reclaimer` app. Defaults are parity with it (every Released PV,
+  # any policy, whole claimRef). Next hardening step: retainOnly: true.
+  pvReclaimer:
+    enabled: true
