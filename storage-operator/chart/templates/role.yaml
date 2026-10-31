@@ -1,0 +1,28 @@
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "storage-operator.fullname" . }}
+  namespace: {{ include "storage-operator.namespace" . }}
+  labels:
+    {{- include "storage-operator.labels" . | nindent 4 }}
+rules:
+  # Leader election (lease storage-operator-leader), shared by every controller.
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+{{- if .Values.smb.enabled }}
+  # config, migration, smb-config and smb-mounts ConfigMaps.
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  # smb-server Service is create-only.
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create"]
+  # smb-server Deployment (patch or replace) and the operator's own Deployment (labels, UID).
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+{{- end }}
+{{- end }}

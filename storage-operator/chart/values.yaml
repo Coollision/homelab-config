@@ -1,0 +1,137 @@
+nameOverride: ""
+# Keep "smb-operator": the smb-server Service carries an ownerReference to the Deployment with
+# this name, and the Deployment selector (app: <fullname>) is immutable. Renaming it deletes and
+# recreates the Deployment, and the garbage collector then deletes the Service (and its LB IP).
+fullnameOverride: smb-operator
+namespaceOverride: ""
+
+image:
+  repository: ghcr.io/coollision/storage-operator
+  tag: v0.0.0
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+# Extra labels on the operator Deployment metadata only (not the selector). The SMB controller
+# copies the operator Deployment's labels onto every child object (smb-server, ConfigMaps, PV/PVCs).
+extraLabels: {}
+
+serviceAccount:
+  create: true
+  name: ""
+
+rbac:
+  create: true
+
+operatorArgs:
+  metricsBindAddress: :8080
+  healthProbeBindAddress: :8081
+  leaderElect: true
+  extraArgs: []
+
+# Python LOG_LEVEL names: DEBUG, INFO, WARNING, ERROR.
+logLevel: INFO
+
+# Send every write with dryRun=All and log what would change (incl. a pod-template diff).
+# Also disables leader election, so a dry-run copy can run next to the live operator.
+dryRun: false
+
+# Name of the operator's own Deployment; defaults to the chart fullname.
+ownerDeploymentName: ""
+
+# Secret with keys ip, username, password (SMB_LOADBALANCER_IP / SMB_USERNAME / SMB_PASSWORD).
+# The smb-server pod also reads key "password" from a Secret named smb-credentials (fixed name,
+# parity with the Python operator).
+existingSecret: smb-credentials
+
+# --- controllers -------------------------------------------------------------------------------
+
+smb:
+  enabled: true
+
+# Second controller (see the pv-reclaimer plan). Not implemented yet: enabling it only renders its
+# RBAC and passes --enable-pv-reclaimer, which the binary logs and ignores.
+pvReclaimer:
+  enabled: false
+
+# --- SMB controller inputs ---------------------------------------------------------------------
+
+# Rendered verbatim to ConfigMap <config.name>, key config.yaml. Same schema as the Python operator.
+config:
+  create: true
+  name: smb-operator-config
+  data:
+    operator:
+      namespace: storage
+      reconcileInterval: 30
+      useWatchAPI: true
+    smb:
+      deploymentName: smb-server
+      serviceName: smb-server
+      image: crazymax/samba:latest
+      workgroup: WORKGROUP
+      serverString: Homelab Storage Server
+      # 'soft' is required: a hard NFS mount against a vanished Longhorn share-manager wedges smbd
+      # in uninterruptible sleep and the pod hangs in Terminating.
+      nfsMountOptions: vers=4.2,noresvport,soft,timeo=50,retrans=2
+      mountReconcileInterval: 15
+      initialMountWait: 30
+    longhorn:
+      namespace: storage
+      group: longhorn.io
+      version: v1beta2
+      plural: volumes
+    resources:
+      smbServer:
+        requests:
+          cpu: 200m
+          memory: 256Mi
+        limits:
+          cpu: 2000m
+          memory: 512Mi
+    retry:
+      maxRetries: 3
+      initialDelay: 1
+      backoffMultiplier: 2
+      retryableStatusCodes: [409, 429, 500, 503, 504]
+
+# Optional extra Longhorn volumes exposed as shares (ConfigMap smb-operator-migration, key
+# volumes.yaml). Entries: {name, shareName?, smb: rw|ro}. The annotations keep ArgoCD from
+# reverting live edits.
+migration:
+  create: true
+  name: smb-operator-migration
+  annotations:
+    argocd.argoproj.io/sync-options: ServerSideApply=true
+    argocd.argoproj.io/compare-options: IgnoreDifferences=true
+  volumes: []
+
+# --- pod -----------------------------------------------------------------------------------------
+
+resources:
+  requests:
+    cpu: 20m
+    memory: 64Mi
+  limits:
+    memory: 256Mi
+
+probes:
+  readiness:
+    path: /readyz
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+    successThreshold: 1
+  liveness:
+    path: /healthz
+    initialDelaySeconds: 15
+    periodSeconds: 20
+    timeoutSeconds: 3
+    failureThreshold: 3
+    successThreshold: 1
+
+podAnnotations: {}
+affinity: {}
+tolerations: []
+nodeSelector: {}

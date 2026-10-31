@@ -1,0 +1,28 @@
+{{- if and .Values.rbac.create .Values.smb.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "storage-operator.fullname" . }}
+  labels:
+    {{- include "storage-operator.labels" . | nindent 4 }}
+rules:
+  # smb-access PVCs live in any namespace: annotations (patch) and migrate-* temp PVCs.
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+  # migrate-* temp PVs for RWO migration shares.
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  # Volume status (shareEndpoint/shareState/state) drives attach/detach.
+  - apiGroups: [{{ .Values.config.data.longhorn.group | default "longhorn.io" | quote }}]
+    resources: [{{ .Values.config.data.longhorn.plural | default "volumes" | quote }}]
+    verbs: ["get", "list", "watch"]
+  # Events on PVCs in any namespace.
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+  - apiGroups: ["events.k8s.io"]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+{{- end }}
