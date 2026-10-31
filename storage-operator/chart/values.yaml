@@ -64,7 +64,8 @@ pvReclaimer:
   # Patch with dryRun=All and emit WouldReclaim events instead (use for the first cutover run).
   # Independent of the top-level dryRun: leader election stays on.
   dryRun: false
-  # Only reclaim PVs whose persistentVolumeReclaimPolicy is Retain.
+  # Only reclaim PVs whose persistentVolumeReclaimPolicy is Retain. Off = parity, which also
+  # reclaims Delete-policy and terminating PVs (races the CSI deleter); turn on after cutover.
   retainOnly: false
   # StorageClass allowlist; empty = every class.
   storageClasses: []

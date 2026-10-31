@@ -25,6 +25,11 @@ Defaults are shell parity: every Released PV, any reclaim policy, any StorageCla
 `--pv-reclaimer-honor-skip-annotation`, `--pv-reclaimer-patch-mode=keep-claim`. See
 [API.md](API.md#pv-reclaimer).
 
+> **Caveat (parity):** the defaults also reclaim Released PVs with `reclaimPolicy: Delete` and PVs
+> being deleted (`deletionTimestamp` set). That races the PV controller / CSI deleter (leaked
+> volume, or a new PVC binding a PV whose volume is gone). After cutover, set
+> `pvReclaimer.retainOnly: true` first.
+
 ## SMB controller
 
 Exposes Longhorn volumes over SMB from a single `smb-server` Deployment.

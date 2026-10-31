@@ -65,8 +65,9 @@ Deployment-level `smb-operator/last-updated` annotation differs.
 ### pv-reclaimer cutover
 
 Run the chart with `pvReclaimer.enabled=true, pvReclaimer.dryRun=true` beside the shell
-`pv-reclaimer` app and watch for `WouldReclaim` events / `result="dry_run"`; then set
-`dryRun=false` and remove the shell app in one commit. Locally:
+`pv-reclaimer` app and watch for `WouldReclaim` events / `result="dry_run"` (these repeat on every
+update and resync of a still-Released PV, so compare the set of PV names, not the counts); then
+set `dryRun=false` and remove the shell app in one commit. Next hardening step: `retainOnly: true`. Locally:
 `go run . --kubeconfig ~/.kube/config --enable-smb=false --enable-pv-reclaimer --pv-reclaimer-dry-run --leader-elect=false`.
 
 ## Design notes

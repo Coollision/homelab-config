@@ -114,7 +114,14 @@ Go port of the `pv-reclaimer` shell loop. Defaults reproduce it exactly.
 - **Metric**: `storage_operator_pv_reclaimed_total{result="reclaimed|dry_run|skipped|error"}`.
   `skipped` counts reconciles of Released PVs excluded by an opt-in filter (it can repeat for the
   same PV on later updates).
-- **Readiness**: `/readyz` check `pv-reclaimer` passes once the informer cache has synced.
+  In dry-run the PV stays Released, so `WouldReclaim` and `result="dry_run"` repeat on every
+  update and periodic resync of that PV: they are not one per PV. `ReclaimFailed` warnings repeat
+  on each retry (the events API aggregates them into one series with a count).
+- **Readiness**: `/readyz` check `pv-reclaimer` passes once the PV informer has synced.
+- **Default-parity caveat**: like the shell loop, the defaults also reclaim Released PVs with
+  `reclaimPolicy: Delete` and PVs that already carry a `deletionTimestamp`. That races the PV
+  controller / CSI deleter: the backing volume can leak, or a new PVC can bind a PV whose volume
+  is gone. Set `pvReclaimer.retainOnly: true` as the first hardening step after cutover.
 - **RBAC** (ClusterRole `<fullname>-pv-reclaimer`, only when `pvReclaimer.enabled`):
   `persistentvolumes` get/list/watch/patch; `events` (core and events.k8s.io) create/patch.
 - **Not ported**: `WEBHOOK_URL` (never read by the shell loop).
