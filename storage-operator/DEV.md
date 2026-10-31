@@ -5,6 +5,7 @@
 ```
 main.go                    flags, manager, cache restrictions, controller toggles
 controllers/smb/           SMB controller (reconciler, predicates, metrics, setup)
+controllers/pvreclaimer/   pv-reclaimer controller (options, reconciler, metrics, setup)
 internal/config/           config.yaml parsing (pure)
 internal/shares/           Share model + discovery decisions (pure)
 internal/render/           smb.conf, mounts.tsv, scripts, Deployment/Service/PV/PVC (pure)
@@ -25,6 +26,9 @@ helm lint chart && helm template x chart
 - `controllers/smb`: fake-client tests: discovery parity with the Python capture (shares,
   annotations, events), detach touches only the mount table, restart re-apply keeps the pod
   template, migration PV/PVC create + GC, replace-vs-patch, predicates, readiness/metrics.
+- `controllers/pvreclaimer`: table-driven fake-client reconcile tests (parity clear, Bound
+  untouched, Delete policy reclaimed by default, retain-only, allowlist, skip annotation,
+  keep-claim, dry-run, already-clear idempotency, conflict requeue) plus predicate/flag parsing.
 - envtest is not used yet: the assets were not available offline when this was written. The
   fake-client tests cover the same flows except real strategic-merge/defaulting on the apiserver;
   the `--dry-run` run against the cluster covers that.
@@ -54,6 +58,13 @@ nothing. The log shows `DRY-RUN: smb-server pod template unchanged (no pod roll)
 diffs for `smb.conf` and `mounts.tsv`. Leader election is off in dry-run mode, so it can run next
 to the live operator. Expected on the first pass: the pod template is unchanged; only the
 Deployment-level `smb-operator/last-updated` annotation differs.
+
+### pv-reclaimer cutover
+
+Run the chart with `pvReclaimer.enabled=true, pvReclaimer.dryRun=true` beside the shell
+`pv-reclaimer` app and watch for `WouldReclaim` events / `result="dry_run"`; then set
+`dryRun=false` and remove the shell app in one commit. Locally:
+`go run . --kubeconfig ~/.kube/config --enable-smb=false --enable-pv-reclaimer --pv-reclaimer-dry-run --leader-elect=false`.
 
 ## Design notes
 

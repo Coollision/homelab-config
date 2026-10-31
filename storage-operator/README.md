@@ -5,11 +5,25 @@ One controller-runtime manager hosting the homelab storage controllers:
 | Controller | Flag | Chart toggle | Status |
 |---|---|---|---|
 | `smb` | `--enable-smb` (default `true`) | `smb.enabled` | Go port of the Python `smb_operator_v2.py` |
-| `pv-reclaimer` | `--enable-pv-reclaimer` (default `false`) | `pvReclaimer.enabled` | hook only, not implemented |
+| `pv-reclaimer` | `--enable-pv-reclaimer` (default `false`) | `pvReclaimer.enabled` | Go port of the pv-reclaimer shell loop (see below) |
 
 All controllers share one leader-election lease (`storage-operator-leader`), one metrics endpoint
 (`:8080/metrics`) and one probe endpoint (`:8081/healthz`, `:8081/readyz` with a named check per
 controller).
+
+## pv-reclaimer controller
+
+Watches PersistentVolumes (predicate: `status.phase == Released`) and merge-patches
+`{"spec":{"claimRef":null}}` so the PV becomes Available again. The informer's initial list also
+handles PVs that were already Released at start-up, like the shell loop did. Each reconcile
+re-reads the PV from the API and patches only if it is still Released, guarded by its
+resourceVersion (a conflict is requeued).
+
+Defaults are shell parity: every Released PV, any reclaim policy, any StorageClass, whole
+`claimRef` cleared. Opt-in switches (all off): `--pv-reclaimer-dry-run`,
+`--pv-reclaimer-retain-only`, `--pv-reclaimer-storage-classes`,
+`--pv-reclaimer-honor-skip-annotation`, `--pv-reclaimer-patch-mode=keep-claim`. See
+[API.md](API.md#pv-reclaimer).
 
 ## SMB controller
 
@@ -61,7 +75,7 @@ Chart values: see [chart/values.yaml](chart/values.yaml) and [chart/README.md](c
 1. New package `controllers/<name>/` exposing `SetupWithManager(mgr manager.Manager, opts Options)`.
    Register metrics on `sigs.k8s.io/controller-runtime/pkg/metrics.Registry` and add a named
    readiness check with `mgr.AddReadyzCheck("<name>", ...)`.
-2. In `main.go`, replace the `--enable-<name>` placeholder with the setup call. If the controller
+2. In `main.go`, add an `--enable-<name>` flag and call the setup function behind it. If the controller
    needs its own informer restrictions, add them to the `byObject` map before `ctrl.NewManager`
    (note: the cache is shared; PVCs are already restricted to the `smb-access` label when the
    SMB controller is on).

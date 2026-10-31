@@ -14,7 +14,12 @@ helm install storage-operator oci://ghcr.io/coollision/charts/storage-operator -
 | `dryRun` | `false` | `--dry-run` |
 | `ownerDeploymentName` | fullname | `--owner-deployment` |
 | `smb.enabled` | `true` | SMB controller + its RBAC + config/migration ConfigMaps |
-| `pvReclaimer.enabled` | `false` | renders `<fullname>-pv-reclaimer` ClusterRole/Binding and passes `--enable-pv-reclaimer` (not implemented yet) |
+| `pvReclaimer.enabled` | `false` | renders `<fullname>-pv-reclaimer` ClusterRole/Binding and passes `--enable-pv-reclaimer` plus the flags below |
+| `pvReclaimer.dryRun` | `false` | `--pv-reclaimer-dry-run` (first cutover run: `true`) |
+| `pvReclaimer.retainOnly` | `false` | `--pv-reclaimer-retain-only` |
+| `pvReclaimer.storageClasses` | `[]` (all) | `--pv-reclaimer-storage-classes` |
+| `pvReclaimer.honorSkipAnnotation` | `false` | `--pv-reclaimer-honor-skip-annotation` |
+| `pvReclaimer.patchMode` | `clear` | `--pv-reclaimer-patch-mode` (`clear` or `keep-claim`) |
 | `config.{create,name,data}` | today's live config | `data` is rendered to `config.yaml` |
 | `migration.{create,name,annotations,volumes}` | empty list, ArgoCD SSA/ignore annotations | |
 | `operatorArgs.*` | `:8080`, `:8081`, `leaderElect: true`, `extraArgs: []` | |

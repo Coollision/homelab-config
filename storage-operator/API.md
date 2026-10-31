@@ -1,6 +1,7 @@
-# storage-operator — SMB controller reference
+# storage-operator — controller reference
 
-Everything here is identical to the Python `smb_operator_v2.py` unless marked **(Go)**.
+SMB sections are identical to the Python `smb_operator_v2.py` unless marked **(Go)**. The
+pv-reclaimer is described in [its own section](#pv-reclaimer).
 
 ## Environment
 
@@ -18,7 +19,12 @@ Everything here is identical to the Python `smb_operator_v2.py` unless marked **
 | Flag | Default | |
 |---|---|---|
 | `--enable-smb` | `true` | run the SMB controller |
-| `--enable-pv-reclaimer` | `false` | placeholder, logs "not implemented" |
+| `--enable-pv-reclaimer` | `false` | run the pv-reclaimer controller |
+| `--pv-reclaimer-dry-run` | `false` | pv-reclaimer patches with `dryRun=All`, `WouldReclaim` events; leader election stays on |
+| `--pv-reclaimer-retain-only` | `false` | only PVs with reclaim policy `Retain` |
+| `--pv-reclaimer-storage-classes` | `""` (all) | comma-separated StorageClass allowlist |
+| `--pv-reclaimer-honor-skip-annotation` | `false` | skip PVs annotated `storage-operator.homelab/pv-reclaimer-skip: "true"` |
+| `--pv-reclaimer-patch-mode` | `clear` | `clear` = drop whole `claimRef`; `keep-claim` = drop only `uid`/`resourceVersion` |
 | `--owner-deployment` | `smb-operator` | operator Deployment (child labels, Service owner) |
 | `--dry-run` | `false` | all writes with `dryRun=All`; logs smb.conf / mount-table / pod-template diffs; disables leader election |
 | `--leader-elect` | `true` | lease `storage-operator-leader` in `OPERATOR_NAMESPACE` |
@@ -90,3 +96,25 @@ Volume with `status.shareEndpoint` → NFS share; without → direct CSI share v
 `smb_operator_shares_managed`, `smb_operator_last_reconcile_timestamp_seconds`,
 `smb_operator_retry_count_total`, `smb_operator_events_sent_total`, plus controller-runtime's
 `controller_runtime_*{controller="smb"}`.
+
+## pv-reclaimer
+
+Go port of the `pv-reclaimer` shell loop. Defaults reproduce it exactly.
+
+- **Trigger**: PV create/update/delete/generic events where `status.phase == Released` (the
+  initial list covers PVs already Released at start-up).
+- **Reconcile**: uncached GET; nothing to do unless still Released with a `claimRef` (in
+  `keep-claim` mode: with a `claimRef.uid`/`resourceVersion`). Opt-in filters are then applied in
+  order: retain-only, StorageClass allowlist, skip annotation.
+- **Patch** (merge, includes `metadata.resourceVersion` for optimistic locking):
+  `clear` = `{"spec":{"claimRef":null}}`; `keep-claim` =
+  `{"spec":{"claimRef":{"uid":null,"resourceVersion":null}}}`. Conflict = requeue after 1s.
+- **Events** (events.k8s.io, reporting controller `pv-reclaimer`, regarding the PV):
+  `Normal Reclaimed`, `Normal WouldReclaim` (dry-run), `Warning ReclaimFailed`.
+- **Metric**: `storage_operator_pv_reclaimed_total{result="reclaimed|dry_run|skipped|error"}`.
+  `skipped` counts reconciles of Released PVs excluded by an opt-in filter (it can repeat for the
+  same PV on later updates).
+- **Readiness**: `/readyz` check `pv-reclaimer` passes once the informer cache has synced.
+- **RBAC** (ClusterRole `<fullname>-pv-reclaimer`, only when `pvReclaimer.enabled`):
+  `persistentvolumes` get/list/watch/patch; `events` (core and events.k8s.io) create/patch.
+- **Not ported**: `WEBHOOK_URL` (never read by the shell loop).
