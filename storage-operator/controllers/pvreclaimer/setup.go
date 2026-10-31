@@ -32,6 +32,7 @@ func SetupWithManager(mgr manager.Manager, o Options) (*Reconciler, error) {
 		return nil, err
 	}
 	r := &Reconciler{
+		Reader:   mgr.GetAPIReader(),
 		Client:   mgr.GetClient(),
 		Recorder: mgr.GetEventRecorder(ControllerName),
 		Metrics:  NewMetrics(metrics.Registry),

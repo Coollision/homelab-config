@@ -113,7 +113,7 @@ func TestReconcile(t *testing.T) {
 					return c.Patch(ctx, obj, p, opts...)
 				}}).Build()
 			rec := events.NewFakeRecorder(10)
-			r := &Reconciler{Client: c, Recorder: rec, Metrics: NewMetrics(nil), Opts: tt.opts}
+			r := &Reconciler{Reader: c, Client: c, Recorder: rec, Metrics: NewMetrics(nil), Opts: tt.opts}
 
 			if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "pv-1"}}); err != nil {
 				t.Fatalf("Reconcile: %v", err)
@@ -151,7 +151,7 @@ func TestReconcile(t *testing.T) {
 
 func TestReconcileIdempotent(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme(t)).WithObjects(newPV()).Build()
-	r := &Reconciler{Client: c, Recorder: events.NewFakeRecorder(10), Metrics: NewMetrics(nil)}
+	r := &Reconciler{Reader: c, Client: c, Recorder: events.NewFakeRecorder(10), Metrics: NewMetrics(nil)}
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "pv-1"}}
 	for range 2 {
 		if _, err := r.Reconcile(context.Background(), req); err != nil {
@@ -163,9 +163,36 @@ func TestReconcileIdempotent(t *testing.T) {
 	}
 }
 
+func TestReconcileConflictRequeues(t *testing.T) {
+	c := fake.NewClientBuilder().WithScheme(scheme(t)).WithObjects(newPV()).Build()
+	// Reader returns a stale copy, as if the PV was rebound after it was read.
+	stale := newPV()
+	stale.ResourceVersion = "1"
+	reader := fake.NewClientBuilder().WithScheme(scheme(t)).WithObjects(stale).Build()
+	var cur corev1.PersistentVolume
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "pv-1"}, &cur); err != nil {
+		t.Fatal(err)
+	}
+	cur.Status.Phase = corev1.VolumeBound
+	if err := c.Status().Update(context.Background(), &cur); err != nil {
+		t.Fatal(err)
+	}
+	r := &Reconciler{Reader: reader, Client: c, Recorder: events.NewFakeRecorder(1), Metrics: NewMetrics(nil)}
+	res, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "pv-1"}})
+	if err != nil || res.RequeueAfter == 0 {
+		t.Fatalf("Reconcile = %+v, %v; want requeue without error", res, err)
+	}
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "pv-1"}, &cur); err != nil {
+		t.Fatal(err)
+	}
+	if cur.Spec.ClaimRef == nil {
+		t.Fatal("claimRef cleared on a PV that changed since it was read")
+	}
+}
+
 func TestReconcileMissingPV(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme(t)).Build()
-	r := &Reconciler{Client: c, Recorder: events.NewFakeRecorder(1), Metrics: NewMetrics(nil)}
+	r := &Reconciler{Reader: c, Client: c, Recorder: events.NewFakeRecorder(1), Metrics: NewMetrics(nil)}
 	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "gone"}}); err != nil {
 		t.Fatalf("Reconcile on missing PV: %v", err)
 	}

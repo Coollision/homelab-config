@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"sync/atomic"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -15,6 +16,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+// conflictRequeue is the delay before retrying a PV that changed between read and patch.
+const conflictRequeue = time.Second
+
 // Event reasons emitted on the PV.
 const (
 	ReasonReclaimed    = "Reclaimed"
@@ -24,6 +28,9 @@ const (
 
 // Reconciler clears spec.claimRef on Released PVs.
 type Reconciler struct {
+	// Reader is used for the uncached re-read at the start of Reconcile.
+	Reader client.Reader
+	// Client sends the patches.
 	Client   client.Client
 	Recorder events.EventRecorder
 	Metrics  *Metrics
@@ -59,19 +66,23 @@ func (r *Reconciler) skipReason(pv *corev1.PersistentVolume) string {
 	return ""
 }
 
-// patch builds the merge patch for the configured mode.
-func (r *Reconciler) patch() client.Patch {
+// patch builds the merge patch for the configured mode. It carries the resourceVersion that was
+// read, so the apiserver rejects it with a conflict if the PV changed (e.g. got Bound) since.
+func (r *Reconciler) patch(pv *corev1.PersistentVolume) client.Patch {
+	claimRef := `null`
 	if r.Opts.Mode == PatchModeKeepClaim {
-		return client.RawPatch(types.MergePatchType, []byte(`{"spec":{"claimRef":{"uid":null,"resourceVersion":null}}}`))
+		claimRef = `{"uid":null,"resourceVersion":null}`
 	}
-	return client.RawPatch(types.MergePatchType, []byte(`{"spec":{"claimRef":null}}`))
+	return client.RawPatch(types.MergePatchType, fmt.Appendf(nil,
+		`{"metadata":{"resourceVersion":%q},"spec":{"claimRef":%s}}`, pv.ResourceVersion, claimRef))
 }
 
-// Reconcile re-reads the PV and patches it only while it is still Released.
+// Reconcile re-reads the PV from the API and patches it only while it is still Released. A
+// conflict (the PV changed in between) is requeued without an error event.
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx).WithValues("pv", req.Name)
 	var pv corev1.PersistentVolume
-	if err := r.Client.Get(ctx, req.NamespacedName, &pv); err != nil {
+	if err := r.Reader.Get(ctx, req.NamespacedName, &pv); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	if !r.needsReclaim(&pv) {
@@ -88,9 +99,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	if r.Opts.DryRun {
 		opts = append(opts, client.DryRunAll)
 	}
-	if err := r.Client.Patch(ctx, &pv, r.patch(), opts...); err != nil {
-		if apierrors.IsNotFound(err) {
+	if err := r.Client.Patch(ctx, &pv, r.patch(&pv), opts...); err != nil {
+		switch {
+		case apierrors.IsNotFound(err):
 			return ctrl.Result{}, nil
+		case apierrors.IsConflict(err):
+			logger.V(1).Info("PV changed since it was read; requeueing")
+			return ctrl.Result{RequeueAfter: conflictRequeue}, nil
 		}
 		r.Metrics.Reclaimed.WithLabelValues(ResultError).Inc()
 		r.Recorder.Eventf(&pv, nil, corev1.EventTypeWarning, ReasonFailed, "Reclaim", "clearing claimRef (was %s) failed: %v", claim, err)
