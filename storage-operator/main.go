@@ -1,7 +1,7 @@
 // storage-operator hosts the homelab storage controllers on one controller-runtime manager:
 //
 //   - smb (--enable-smb, default on): Go port of the Python smb-operator.
-//   - pv-reclaimer (--enable-pv-reclaimer, default off): placeholder, not implemented yet.
+//   - pv-reclaimer (--enable-pv-reclaimer, default off): Go port of the pv-reclaimer shell loop.
 //
 // All controllers share one leader-election lease, one metrics registry and one /healthz,
 // /readyz endpoint (with a named readiness check per enabled controller).
@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	"homelab/storage-operator/controllers/pvreclaimer"
 	"homelab/storage-operator/controllers/smb"
 	"homelab/storage-operator/internal/config"
 )
@@ -68,12 +69,22 @@ func main() {
 		ownerDeployment   string
 		namespace         string
 		configMapName     string
+		pvrDryRun         bool
+		pvrRetainOnly     bool
+		pvrClasses        string
+		pvrHonorSkip      bool
+		pvrPatchMode      string
 	)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to")
 	flag.BoolVar(&leaderElect, "leader-elect", true, "Enable leader election (lease "+LeaderElectionID+"); forced off with --dry-run")
 	flag.BoolVar(&enableSMB, "enable-smb", true, "Run the SMB server controller")
-	flag.BoolVar(&enablePVReclaimer, "enable-pv-reclaimer", false, "Run the PV reclaimer controller (not implemented yet)")
+	flag.BoolVar(&enablePVReclaimer, "enable-pv-reclaimer", false, "Run the PV reclaimer controller (clears spec.claimRef on Released PVs)")
+	flag.BoolVar(&pvrDryRun, "pv-reclaimer-dry-run", false, "pv-reclaimer: send patches with dryRun=All and emit WouldReclaim events (leader election stays on)")
+	flag.BoolVar(&pvrRetainOnly, "pv-reclaimer-retain-only", false, "pv-reclaimer: only reclaim PVs with reclaim policy Retain (default: any policy)")
+	flag.StringVar(&pvrClasses, "pv-reclaimer-storage-classes", "", "pv-reclaimer: comma-separated StorageClass allowlist (default empty: every class)")
+	flag.BoolVar(&pvrHonorSkip, "pv-reclaimer-honor-skip-annotation", false, "pv-reclaimer: skip PVs annotated "+pvreclaimer.SkipAnnotation+"=true")
+	flag.StringVar(&pvrPatchMode, "pv-reclaimer-patch-mode", string(pvreclaimer.PatchModeClear), "pv-reclaimer: 'clear' removes the whole claimRef, 'keep-claim' drops only its uid/resourceVersion")
 	flag.BoolVar(&dryRun, "dry-run", false, "Send all writes with dryRun=All and log what would change (pod-template diff)")
 	flag.StringVar(&ownerDeployment, "owner-deployment", "smb-operator", "Name of the operator's own Deployment (child labels + smb-server Service owner)")
 	flag.StringVar(&namespace, "namespace", envOr("OPERATOR_NAMESPACE", "storage"), "Namespace of the config ConfigMap (env OPERATOR_NAMESPACE)")
@@ -84,10 +95,20 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&zopts)))
 	setupLog := ctrl.Log.WithName("setup")
 
+	mode, err := pvreclaimer.ParsePatchMode(pvrPatchMode)
+	if err != nil {
+		setupLog.Error(err, "invalid flag")
+		os.Exit(2)
+	}
+
 	if err := run(setupLog, runOpts{
 		metricsAddr: metricsAddr, probeAddr: probeAddr, leaderElect: leaderElect && !dryRun,
 		enableSMB: enableSMB, enablePVReclaimer: enablePVReclaimer, dryRun: dryRun,
 		ownerDeployment: ownerDeployment, namespace: namespace, configMapName: configMapName,
+		pvReclaimer: pvreclaimer.Options{
+			DryRun: pvrDryRun, RetainOnly: pvrRetainOnly, StorageClasses: pvreclaimer.ParseStorageClasses(pvrClasses),
+			HonorSkipAnnotation: pvrHonorSkip, Mode: mode,
+		},
 	}); err != nil {
 		setupLog.Error(err, "fatal")
 		os.Exit(1)
@@ -99,6 +120,7 @@ type runOpts struct {
 	leaderElect, enableSMB, enablePVReclaimer bool
 	dryRun                                    bool
 	ownerDeployment, namespace, configMapName string
+	pvReclaimer                               pvreclaimer.Options
 }
 
 func run(setupLog interface {
@@ -169,9 +191,13 @@ func run(setupLog interface {
 		}
 	}
 	if o.enablePVReclaimer {
-		// Hook for controllers/pvreclaimer (see wiki pv-reclaimer-go): register it here with
-		// pvreclaimer.SetupWithManager(mgr, opts) once it exists.
-		setupLog.Info("pv-reclaimer controller is not implemented yet; --enable-pv-reclaimer is ignored")
+		p := o.pvReclaimer
+		setupLog.Info("pv-reclaimer controller configuration",
+			"dryRun", p.DryRun, "retainOnly", p.RetainOnly, "storageClasses", p.StorageClasses,
+			"honorSkipAnnotation", p.HonorSkipAnnotation, "patchMode", p.Mode)
+		if _, err := pvreclaimer.SetupWithManager(mgr, p); err != nil {
+			return fmt.Errorf("setting up pv-reclaimer controller: %w", err)
+		}
 	}
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		return err
