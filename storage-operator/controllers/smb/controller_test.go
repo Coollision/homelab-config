@@ -3,6 +3,7 @@ package smb
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -16,6 +17,7 @@ import (
 	dto "github.com/prometheus/client_model/go"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -486,4 +488,40 @@ func metricValue(c prometheus.Metric) float64 {
 		return m.Counter.GetValue()
 	}
 	return m.Gauge.GetValue()
+}
+
+func TestReconcileWithoutOwnerDeploymentFailsInsteadOfOrphaningService(t *testing.T) {
+	ctx := context.Background()
+	vol := volume("pvc-a", "storage", map[string]any{"accessMode": "rwx"}, map[string]any{"shareEndpoint": "nfs://192.0.2.31/pvc-a"})
+	// No operatorDeployment(): the owner UID cannot be resolved.
+	r, c := newReconciler(t, testConfig(t), rwxPVC("apps", "media", "pvc-a"), vol)
+
+	res, err := r.Reconcile(ctx, reconcile.Request{})
+	if !errors.Is(err, ErrOwnerUnresolved) {
+		t.Fatalf("Reconcile error = %v, want ErrOwnerUnresolved (backoff requeue)", err)
+	}
+	if res.RequeueAfter != 0 {
+		t.Errorf("RequeueAfter = %v, want 0 so the workqueue backoff applies", res.RequeueAfter)
+	}
+	if r.Ready() {
+		t.Error("must not become ready after a failed reconcile")
+	}
+	var svc corev1.Service
+	if err := c.Get(ctx, types.NamespacedName{Namespace: "storage", Name: "smb-server"}, &svc); !apierrors.IsNotFound(err) {
+		t.Fatalf("Service must not be created without an ownerReference (get err %v, refs %v)", err, svc.OwnerReferences)
+	}
+
+	// Once the Deployment exists, the next pass creates the Service with its owner.
+	if err := c.Create(ctx, operatorDeployment()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Reconcile(ctx, reconcile.Request{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Get(ctx, types.NamespacedName{Namespace: "storage", Name: "smb-server"}, &svc); err != nil {
+		t.Fatal(err)
+	}
+	if len(svc.OwnerReferences) != 1 || svc.OwnerReferences[0].UID != "op-uid" {
+		t.Errorf("owner refs %v", svc.OwnerReferences)
+	}
 }

@@ -21,6 +21,7 @@ go vet ./... && go test -race ./...
 helm lint chart && helm template x chart
 # Chart invariants (also asserted in CI):
 helm template smb-operator chart | grep -q 'type: Recreate'   # RollingUpdate deadlocks (1 replica + leader lease + readyz)
+helm template smb-operator chart | grep -q -- '--owner-deployment=smb-operator$'  # Service owner must exist
 ```
 
 - `internal/render`: golden parity (text byte-for-byte, objects via `equality.Semantic`) for

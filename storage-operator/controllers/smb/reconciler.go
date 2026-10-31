@@ -44,6 +44,11 @@ const (
 	LegacyLonghornNamespace = "longhorn-system"
 )
 
+// ErrOwnerUnresolved means the operator's own Deployment could not be read, so the smb-server
+// Service cannot get its ownerReference. Creating it anyway would leave an orphan, so the
+// reconcile fails and is requeued with backoff instead.
+var ErrOwnerUnresolved = errors.New("operator Deployment UID unresolved")
+
 // Options configure the controller.
 type Options struct {
 	Config *config.Config
@@ -93,17 +98,28 @@ func (r *Reconciler) now() time.Time {
 func (r *Reconciler) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Result, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.ReconcileOnce(ctx) {
+	ok, err := r.reconcileOnce(ctx)
+	if ok {
 		r.Metrics.ReconcileTotal.Inc()
 		r.Metrics.LastReconcile.Set(float64(r.now().UnixNano()) / 1e9)
 		r.Metrics.SharesManaged.Set(float64(len(r.currentShares)))
 		r.ready.Store(true)
 	}
+	if errors.Is(err, ErrOwnerUnresolved) {
+		// Workqueue rate-limited backoff instead of waiting a full reconcileInterval.
+		return ctrl.Result{}, err
+	}
 	return ctrl.Result{RequeueAfter: time.Duration(r.cfg().ReconcileInterval) * time.Second}, nil
 }
 
 // ReconcileOnce is reconcile() from the Python operator. It returns success.
-func (r *Reconciler) ReconcileOnce(ctx context.Context) (ok bool) {
+func (r *Reconciler) ReconcileOnce(ctx context.Context) bool {
+	ok, _ := r.reconcileOnce(ctx)
+	return ok
+}
+
+// reconcileOnce is ReconcileOnce that also returns the (already logged and counted) error.
+func (r *Reconciler) reconcileOnce(ctx context.Context) (ok bool, rerr error) {
 	logger := log.FromContext(ctx)
 	defer func() {
 		if p := recover(); p != nil {
@@ -116,9 +132,9 @@ func (r *Reconciler) ReconcileOnce(ctx context.Context) (ok bool) {
 	if err != nil {
 		logger.Error(err, "Reconciliation error")
 		r.Metrics.ReconcileErrors.Inc()
-		return false
+		return false, err
 	}
-	return ok
+	return ok, nil
 }
 
 func (r *Reconciler) reconcile(ctx context.Context, logger logr.Logger) (bool, error) {
@@ -336,28 +352,34 @@ func (r *Reconciler) recordEvent(ctx context.Context, kind, name, ns, reason, me
 }
 
 // operatorInfo returns (uid, labels) of the operator Deployment, cached after the first success.
-func (r *Reconciler) operatorInfo(ctx context.Context, logger logr.Logger) (string, map[string]string) {
+// On failure it logs, returns the last known labels and an error wrapping ErrOwnerUnresolved.
+func (r *Reconciler) operatorInfo(ctx context.Context, logger logr.Logger) (string, map[string]string, error) {
 	if r.operatorUID != "" {
-		return r.operatorUID, r.operatorLabels
+		return r.operatorUID, r.operatorLabels, nil
 	}
 	var d appsv1.Deployment
 	if err := r.Reader.Get(ctx, types.NamespacedName{Namespace: r.cfg().Namespace, Name: r.Opts.OwnerDeployment}, &d); err != nil {
 		logger.Info("Failed to get operator UID", "error", err.Error())
-		return "", r.operatorLabels
+		return "", r.operatorLabels, fmt.Errorf("%w: deployment %s/%s: %w", ErrOwnerUnresolved, r.cfg().Namespace, r.Opts.OwnerDeployment, err)
+	}
+	if d.UID == "" {
+		return "", r.operatorLabels, fmt.Errorf("%w: deployment %s/%s has no UID", ErrOwnerUnresolved, r.cfg().Namespace, r.Opts.OwnerDeployment)
 	}
 	r.operatorUID = string(d.UID)
 	r.operatorLabels = map[string]string{}
 	for k, v := range d.Labels {
 		r.operatorLabels[k] = v
 	}
-	return r.operatorUID, r.operatorLabels
+	return r.operatorUID, r.operatorLabels, nil
 }
 
+// childBaseLabels returns the operator Deployment's labels (empty when unresolved, as in Python).
 func (r *Reconciler) childBaseLabels(ctx context.Context, logger logr.Logger) map[string]string {
-	_, l := r.operatorInfo(ctx, logger)
+	_, l, _ := r.operatorInfo(ctx, logger)
 	return l
 }
 
+// childLabels merges extra onto childBaseLabels.
 func (r *Reconciler) childLabels(ctx context.Context, logger logr.Logger, extra map[string]string) map[string]string {
 	return render.ChildLabels(r.childBaseLabels(ctx, logger), extra)
 }
@@ -545,7 +567,10 @@ func (r *Reconciler) ensureService(ctx context.Context, logger logr.Logger) erro
 		return nil
 	}
 	logger.Info("Creating SMB service with owner reference...", "dryRun", r.Opts.DryRun)
-	uid, labels := r.operatorInfo(ctx, logger)
+	uid, labels, err := r.operatorInfo(ctx, logger)
+	if err != nil {
+		return fmt.Errorf("refusing to create Service %s/%s without ownerReference: %w", cfg.Namespace, cfg.SMBServiceName, err)
+	}
 	if err := r.Writer.Create(ctx, render.Service(cfg, labels, r.Opts.OwnerDeployment, uid)); err != nil {
 		return err
 	}

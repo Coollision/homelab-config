@@ -107,6 +107,8 @@ jobs:
           out=$(helm template smb-operator chart)
           # Single replica + leader election + readyz-after-reconcile deadlocks a RollingUpdate.
           grep -A1 '^  strategy:' <<<"$out" | grep -q 'type: Recreate' || { echo "Deployment strategy must be Recreate"; exit 1; }
+          # The smb-server Service is owned by this Deployment; the default owner must match its name.
+          grep -q -- '- --owner-deployment=smb-operator$' <<<"$out" || { echo "--owner-deployment must default to smb-operator"; exit 1; }
 
   versioning:
     name: Versioning
