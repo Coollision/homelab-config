@@ -1,0 +1,45 @@
+{
+  "metadata": {
+    "annotations": {
+      "service.kubernetes.io/topology-mode": "Auto"
+    },
+    "labels": {
+      "app": "samba",
+      "app.kubernetes.io/part-of": "longhorn-smb-operator",
+      "managed-by": "smb-operator"
+    },
+    "name": "samba-lb",
+    "namespace": "files",
+    "ownerReferences": [
+      {
+        "apiVersion": "apps/v1",
+        "blockOwnerDeletion": true,
+        "controller": true,
+        "kind": "Deployment",
+        "name": "smb-operator",
+        "uid": "00000000-0000-0000-0000-00000000beef"
+      }
+    ]
+  },
+  "spec": {
+    "loadBalancerIP": "198.51.100.7",
+    "ports": [
+      {
+        "name": "smb",
+        "port": 445,
+        "protocol": "TCP",
+        "targetPort": 445
+      },
+      {
+        "name": "netbios",
+        "port": 139,
+        "protocol": "TCP",
+        "targetPort": 139
+      }
+    ],
+    "selector": {
+      "app": "samba"
+    },
+    "type": "LoadBalancer"
+  }
+}

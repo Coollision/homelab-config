@@ -1,0 +1,172 @@
+{
+  "annotations": {
+    "apps/attached": {
+      "smb-operator/share-path": "//192.0.2.10/attached",
+      "smb-operator/status": "active"
+    },
+    "apps/badmode": {
+      "smb-operator/share-path": "//192.0.2.10/badmode",
+      "smb-operator/status": "active"
+    },
+    "apps/emptymode": {
+      "smb-operator/share-path": "//192.0.2.10/emptymode",
+      "smb-operator/status": "active"
+    },
+    "apps/renamed": {
+      "smb-operator/share-path": "//192.0.2.10/Pictures",
+      "smb-operator/status": "active"
+    },
+    "apps/unbound": {
+      "smb-operator/share-path": "",
+      "smb-operator/status": "pending"
+    },
+    "ops/badendpoint": {
+      "smb-operator/share-path": "",
+      "smb-operator/status": "error"
+    },
+    "ops/detached": {
+      "smb-operator/share-path": "",
+      "smb-operator/status": "detached"
+    },
+    "ops/legacyns": {
+      "smb-operator/share-path": "//192.0.2.10/legacyns",
+      "smb-operator/status": "active"
+    },
+    "ops/missing": {
+      "smb-operator/share-path": "",
+      "smb-operator/status": "error"
+    },
+    "ops/noslash": {
+      "smb-operator/share-path": "",
+      "smb-operator/status": "error"
+    },
+    "ops/rwo": {
+      "smb-operator/share-path": "",
+      "smb-operator/status": "error"
+    }
+  },
+  "events": [
+    {
+      "component": "smb-operator",
+      "kind": "PersistentVolumeClaim",
+      "message": "PVC is not bound to a volume",
+      "name": "unbound",
+      "namespace": "apps",
+      "reason": "NotBound",
+      "type": "Warning"
+    },
+    {
+      "component": "smb-operator",
+      "kind": "PersistentVolumeClaim",
+      "message": "Longhorn volume pvc-missing not found",
+      "name": "missing",
+      "namespace": "ops",
+      "reason": "VolumeNotFound",
+      "type": "Warning"
+    },
+    {
+      "component": "smb-operator",
+      "kind": "PersistentVolumeClaim",
+      "message": "Longhorn volume pvc-e is detached; SMB share is present but unmounted until the volume reattaches",
+      "name": "detached",
+      "namespace": "ops",
+      "reason": "ShareDetached",
+      "type": "Normal"
+    },
+    {
+      "component": "smb-operator",
+      "kind": "PersistentVolumeClaim",
+      "message": "Volume does not have NFS share endpoint (must be RWX)",
+      "name": "rwo",
+      "namespace": "ops",
+      "reason": "NoShareEndpoint",
+      "type": "Warning"
+    }
+  ],
+  "shares": [
+    {
+      "access_mode": "shared",
+      "attached": true,
+      "endpoint": "192.0.2.31:/pvc-a",
+      "longhorn_volume_name": "",
+      "mount_type": "nfs",
+      "name": "attached",
+      "namespace": "apps",
+      "nfs_path": "/pvc-a",
+      "nfs_server": "192.0.2.31",
+      "path": "/shares/attached",
+      "pvc_name": "attached",
+      "structural_key": "apps/attached|attached|/shares/attached|nfs|shared"
+    },
+    {
+      "access_mode": "read-only",
+      "attached": true,
+      "endpoint": "192.0.2.32:/pvc-b/sub",
+      "longhorn_volume_name": "",
+      "mount_type": "nfs",
+      "name": "Pictures",
+      "namespace": "apps",
+      "nfs_path": "/pvc-b/sub",
+      "nfs_server": "192.0.2.32",
+      "path": "/shares/Pictures",
+      "pvc_name": "renamed",
+      "structural_key": "apps/renamed|Pictures|/shares/Pictures|nfs|read-only"
+    },
+    {
+      "access_mode": "shared",
+      "attached": true,
+      "endpoint": "192.0.2.33:/pvc-c",
+      "longhorn_volume_name": "",
+      "mount_type": "nfs",
+      "name": "badmode",
+      "namespace": "apps",
+      "nfs_path": "/pvc-c",
+      "nfs_server": "192.0.2.33",
+      "path": "/shares/badmode",
+      "pvc_name": "badmode",
+      "structural_key": "apps/badmode|badmode|/shares/badmode|nfs|shared"
+    },
+    {
+      "access_mode": "shared",
+      "attached": true,
+      "endpoint": "192.0.2.33:/pvc-c2",
+      "longhorn_volume_name": "",
+      "mount_type": "nfs",
+      "name": "emptymode",
+      "namespace": "apps",
+      "nfs_path": "/pvc-c2",
+      "nfs_server": "192.0.2.33",
+      "path": "/shares/emptymode",
+      "pvc_name": "emptymode",
+      "structural_key": "apps/emptymode|emptymode|/shares/emptymode|nfs|shared"
+    },
+    {
+      "access_mode": "shared",
+      "attached": false,
+      "endpoint": "",
+      "longhorn_volume_name": "",
+      "mount_type": "nfs",
+      "name": "detached",
+      "namespace": "ops",
+      "nfs_path": "",
+      "nfs_server": "",
+      "path": "/shares/detached",
+      "pvc_name": "detached",
+      "structural_key": "ops/detached|detached|/shares/detached|nfs|shared"
+    },
+    {
+      "access_mode": "shared",
+      "attached": true,
+      "endpoint": "192.0.2.36:/pvc-g",
+      "longhorn_volume_name": "",
+      "mount_type": "nfs",
+      "name": "legacyns",
+      "namespace": "ops",
+      "nfs_path": "/pvc-g",
+      "nfs_server": "192.0.2.36",
+      "path": "/shares/legacyns",
+      "pvc_name": "legacyns",
+      "structural_key": "ops/legacyns|legacyns|/shares/legacyns|nfs|shared"
+    }
+  ]
+}

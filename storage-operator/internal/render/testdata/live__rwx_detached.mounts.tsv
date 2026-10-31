@@ -1,0 +1,3 @@
+# Managed by smb-operator — do not edit.
+# name	path	endpoint (empty = detached, reconciler keeps it unmounted)
+media	/shares/media	

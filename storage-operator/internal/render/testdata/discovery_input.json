@@ -1,0 +1,51 @@
+{
+  "pvcs": {
+    "pvcs": [
+      {"namespace": "apps", "name": "unbound", "labels": {"smb-access": "shared"}, "volumeName": ""},
+      {"namespace": "apps", "name": "attached", "labels": {"smb-access": "shared"}, "volumeName": "pvc-a"},
+      {"namespace": "apps", "name": "renamed", "labels": {"smb-access": "read-only", "smb-share-name": "Pictures"}, "volumeName": "pvc-b"},
+      {"namespace": "apps", "name": "badmode", "labels": {"smb-access": "rw"}, "volumeName": "pvc-c"},
+      {"namespace": "apps", "name": "emptymode", "labels": {"smb-access": ""}, "volumeName": "pvc-c2"},
+      {"namespace": "ops", "name": "missing", "labels": {"smb-access": "shared"}, "volumeName": "pvc-missing"},
+      {"namespace": "ops", "name": "badendpoint", "labels": {"smb-access": "shared"}, "volumeName": "pvc-d"},
+      {"namespace": "ops", "name": "noslash", "labels": {"smb-access": "shared"}, "volumeName": "pvc-d2"},
+      {"namespace": "ops", "name": "detached", "labels": {"smb-access": "shared"}, "volumeName": "pvc-e"},
+      {"namespace": "ops", "name": "rwo", "labels": {"smb-access": "shared"}, "volumeName": "pvc-f"},
+      {"namespace": "ops", "name": "legacyns", "labels": {"smb-access": "shared"}, "volumeName": "pvc-g"}
+    ],
+    "volumes": {
+      "pvc-a": {"spec": {"accessMode": "rwx"}, "status": {"shareEndpoint": "nfs://192.0.2.31/pvc-a"}},
+      "pvc-b": {"spec": {"accessMode": "rwx"}, "status": {"shareEndpoint": "nfs://192.0.2.32/pvc-b/sub"}},
+      "pvc-c": {"spec": {"accessMode": "rwx"}, "status": {"shareEndpoint": "nfs://192.0.2.33/pvc-c"}},
+      "pvc-c2": {"spec": {"accessMode": "rwx"}, "status": {"shareEndpoint": "nfs://192.0.2.33/pvc-c2"}},
+      "pvc-d": {"spec": {"accessMode": "rwx"}, "status": {"shareEndpoint": "http://192.0.2.34/x"}},
+      "pvc-d2": {"spec": {"accessMode": "rwx"}, "status": {"shareEndpoint": "nfs://192.0.2.35"}},
+      "pvc-e": {"spec": {"accessMode": "rwx"}, "status": {"state": "detached", "shareState": "stopped"}},
+      "pvc-f": {"spec": {"accessMode": "rwo"}, "status": {"state": "attached"}},
+      "pvc-g": {"namespace": "longhorn-system", "spec": {"accessMode": "rwx"}, "status": {"shareEndpoint": "nfs://192.0.2.36/pvc-g"}}
+    }
+  },
+  "migration": {
+    "migration": {"volumes": [
+      {"name": "vol-rwx", "shareName": "old-rwx", "smb": "ro"},
+      {"name": "vol-rwo"},
+      {"name": "  vol-pad  ", "shareName": " padded ", "smb": " RW "},
+      {"name": "vol-bad-smb", "smb": "write"},
+      {"name": "vol-missing"},
+      {"name": "vol-badep"},
+      {"shareName": "noname"},
+      {"name": ""}
+    ]},
+    "volumes": {
+      "vol-rwx": {"spec": {"accessMode": "rwx", "size": "1073741824"}, "status": {"shareEndpoint": "nfs://192.0.2.41/vol-rwx"}},
+      "vol-rwo": {"spec": {"accessMode": "rwo", "size": "2147483648"}, "status": {}},
+      "vol-pad": {"spec": {"accessMode": "rwo"}, "status": {}},
+      "vol-bad-smb": {"spec": {"accessMode": "rwx"}, "status": {"state": "detached"}},
+      "vol-badep": {"spec": {"accessMode": "rwx"}, "status": {"shareEndpoint": "nfs:/broken"}}
+    }
+  },
+  "migration_empty": {
+    "migration": {"volumes": []}
+  },
+  "none": {}
+}

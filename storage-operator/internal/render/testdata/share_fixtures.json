@@ -1,0 +1,25 @@
+{
+  "empty": [],
+  "rwx_attached": [
+    {"name": "media", "path": "/shares/media", "namespace": "apps", "pvc_name": "media-data", "access_mode": "shared", "nfs_server": "192.0.2.21", "nfs_path": "/pvc-1111"}
+  ],
+  "rwx_detached": [
+    {"name": "media", "path": "/shares/media", "namespace": "apps", "pvc_name": "media-data", "access_mode": "shared", "attached": false}
+  ],
+  "read_only": [
+    {"name": "docs", "path": "/shares/docs", "namespace": "apps", "pvc_name": "docs", "access_mode": "read-only", "nfs_server": "192.0.2.22", "nfs_path": "/pvc-2222"}
+  ],
+  "migration_rwx": [
+    {"name": "old", "path": "/shares/old", "namespace": "storage", "pvc_name": "migration-vol-old", "access_mode": "shared", "mount_type": "nfs", "nfs_server": "192.0.2.23", "nfs_path": "/vol-old", "longhorn_volume_name": "vol-old"}
+  ],
+  "migration_direct": [
+    {"name": "cfg", "path": "/shares/cfg", "namespace": "storage", "pvc_name": "migration-vol-cfg", "access_mode": "read-only", "mount_type": "direct", "longhorn_volume_name": "vol-cfg"}
+  ],
+  "mixed": [
+    {"name": "media", "path": "/shares/media", "namespace": "apps", "pvc_name": "media-data", "access_mode": "shared", "nfs_server": "192.0.2.21", "nfs_path": "/pvc-1111"},
+    {"name": "backup", "path": "/shares/backup", "namespace": "ops", "pvc_name": "backup", "access_mode": "shared", "attached": false},
+    {"name": "docs", "path": "/shares/docs", "namespace": "apps", "pvc_name": "docs", "access_mode": "read-only", "nfs_server": "192.0.2.22", "nfs_path": "/pvc-2222"},
+    {"name": "cfg", "path": "/shares/cfg", "namespace": "storage", "pvc_name": "migration-vol-cfg", "access_mode": "shared", "mount_type": "direct", "longhorn_volume_name": "vol-cfg"},
+    {"name": "long", "path": "/shares/long", "namespace": "storage", "pvc_name": "migration-a-very-long-longhorn-volume-name-that-exceeds-sixty-three-chars", "access_mode": "read-only", "mount_type": "direct", "longhorn_volume_name": "a-very-long-longhorn-volume-name-that-exceeds-sixty-three-chars"}
+  ]
+}

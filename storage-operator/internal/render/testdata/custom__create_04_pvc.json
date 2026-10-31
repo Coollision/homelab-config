@@ -1,0 +1,24 @@
+{
+  "metadata": {
+    "labels": {
+      "app": "smb-operator",
+      "app.kubernetes.io/part-of": "longhorn-smb-operator",
+      "managed-by": "smb-operator",
+      "smb-operator/migration": "true"
+    },
+    "name": "migrate-vol-badsize",
+    "namespace": "files"
+  },
+  "spec": {
+    "accessModes": [
+      "ReadWriteOnce"
+    ],
+    "resources": {
+      "requests": {
+        "storage": "1Gi"
+      }
+    },
+    "storageClassName": "longhorn",
+    "volumeName": "migrate-vol-badsize"
+  }
+}

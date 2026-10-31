@@ -1,0 +1,5 @@
+# Managed by smb-operator — do not edit.
+# name	path	endpoint (empty = detached, reconciler keeps it unmounted)
+media	/shares/media	192.0.2.21:/pvc-1111
+backup	/shares/backup	
+docs	/shares/docs	192.0.2.22:/pvc-2222

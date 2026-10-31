@@ -1,0 +1,27 @@
+{
+  "metadata": {
+    "labels": {
+      "app": "smb-operator",
+      "app.kubernetes.io/part-of": "longhorn-smb-operator",
+      "managed-by": "smb-operator",
+      "smb-operator/migration": "true"
+    },
+    "name": "migrate-vol-badsize"
+  },
+  "spec": {
+    "accessModes": [
+      "ReadWriteOnce"
+    ],
+    "capacity": {
+      "storage": "1Gi"
+    },
+    "csi": {
+      "driver": "driver.longhorn.io",
+      "fsType": "ext4",
+      "volumeHandle": "vol-badsize"
+    },
+    "persistentVolumeReclaimPolicy": "Retain",
+    "storageClassName": "longhorn",
+    "volumeMode": "Filesystem"
+  }
+}

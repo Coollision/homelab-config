@@ -1,0 +1,153 @@
+{
+  "apiVersion": "apps/v1",
+  "kind": "Deployment",
+  "metadata": {
+    "annotations": {
+      "smb-operator/share-list": "old",
+      "smb-operator/shares-count": "1",
+      "smb-operator/version": "2.1"
+    },
+    "labels": {
+      "app": "smb-server",
+      "app.kubernetes.io/part-of": "longhorn-smb-operator",
+      "managed-by": "smb-operator"
+    },
+    "name": "smb-server",
+    "namespace": "storage"
+  },
+  "spec": {
+    "replicas": 1,
+    "revisionHistoryLimit": 3,
+    "selector": {
+      "matchLabels": {
+        "app": "smb-server"
+      }
+    },
+    "strategy": {
+      "type": "Recreate"
+    },
+    "template": {
+      "metadata": {
+        "annotations": {
+          "smb-operator/share-list": "old",
+          "smb-operator/shares-count": "1",
+          "smb-operator/version": "2.1"
+        },
+        "labels": {
+          "app": "smb-server"
+        }
+      },
+      "spec": {
+        "containers": [
+          {
+            "command": [
+              "/bin/bash",
+              "-c",
+              "#!/bin/bash\nset -e\necho 'Starting SMB server initialization...'\necho ''\n\n# Create SMB user for authentication\nuseradd -M -s /usr/sbin/nologin smbuser 2>/dev/null || true\necho -e \"$SMB_PASSWORD\\n$SMB_PASSWORD\" | smbpasswd -a -s smbuser\necho 'SMB user smbuser configured'\necho ''\n\necho 'NFS share (reconciler-managed): old'\nmkdir -p /shares/old\necho ''\n\n# Install and start the NFS mount reconciler\ncat > /usr/local/bin/smb-mount-reconciler.sh <<'SMB_OPERATOR_RECONCILER_EOF'\n#!/bin/bash\n# Managed by smb-operator. Reconciles /shares/* NFS mounts against the mount table.\nTABLE=/etc/smb-mounts/mounts.tsv\nOPTS='vers=4.2,noresvport,soft,timeo=50,retrans=2'\nINTERVAL=15\n\nlog() { echo \"[mount-reconciler] $*\"; }\n\n# Current NFS mount for a path, as 'server:/export', or empty if not mounted.\ncurrent_mount() {\n  awk -v p=\"$1\" '$2==p && $3 ~ /^nfs/ {print $1}' /proc/self/mounts | tail -n 1\n}\n\n# Detach a mount. Try a clean unmount first, time-boxed because it can block on a\n# dead server, then fall back to a lazy unmount which always succeeds immediately.\n#\n# Success is judged by the resulting state, not by exit codes: a umount killed by\n# `timeout` can still complete in the kernel, so the mount is gone while every command\n# in the chain reported failure. Trusting the rc there produced spurious \"could not\n# unmount\" warnings and made the caller skip a reconcile cycle.\ndetach() {\n  local mp=\"$1\"\n  timeout 5 umount \"$mp\" 2>/dev/null \\\n    || timeout 5 umount -f \"$mp\" 2>/dev/null \\\n    || umount -l \"$mp\" 2>/dev/null\n  [ -z \"$(current_mount \"$mp\")\" ]\n}\n\n# Is this mount path listed in the table at all?\nin_table() {\n  awk -F'\\t' -v p=\"$1\" '$1 !~ /^#/ && $2 == p { found = 1 } END { exit !found }' \"$TABLE\"\n}\n\n# Bring one mount point in line with its desired endpoint ('' means keep it unmounted).\nreconcile_one() {\n  local mpath=\"$1\" want=\"$2\" have\n  have=\"$(current_mount \"$mpath\")\"\n\n  [ \"$want\" = \"$have\" ] && return 0\n\n  if [ -n \"$have\" ]; then\n    if detach \"$mpath\"; then\n      log \"unmounted $have from $mpath\"\n    else\n      log \"WARNING: could not unmount $mpath (had $have)\"\n      return 1\n    fi\n  fi\n\n  if [ -z \"$want\" ]; then\n    log \"$mpath is detached (no endpoint); serving empty share\"\n    return 0\n  fi\n\n  mkdir -p \"$mpath\"\n  if timeout 30 mount -t nfs -o \"$OPTS\" \"$want\" \"$mpath\"; then\n    log \"mounted $want -> $mpath\"\n  else\n    log \"mount failed: $want -> $mpath (will retry in ${INTERVAL}s)\"\n  fi\n}\n\nlog \"started (interval=${INTERVAL}s, opts=${OPTS})\"\n\nwhile true; do\n  if [ -r \"$TABLE\" ]; then\n    while IFS=$'\\t' read -r name mpath endpoint; do\n      case \"$name\" in ''|'#'*) continue ;; esac\n      [ -n \"$mpath\" ] || continue\n      reconcile_one \"$mpath\" \"$endpoint\"\n    done < \"$TABLE\"\n\n    # Drop any /shares/* NFS mount the table no longer knows about.\n    while read -r src mp fstype _; do\n      case \"$fstype\" in nfs*) ;; *) continue ;; esac\n      case \"$mp\" in /shares/*) ;; *) continue ;; esac\n      if ! in_table \"$mp\"; then\n        detach \"$mp\" && log \"unmounted orphaned $src from $mp\"\n      fi\n    done < /proc/self/mounts\n  else\n    log \"mount table $TABLE not readable yet\"\n  fi\n  sleep \"$INTERVAL\"\ndone\nSMB_OPERATOR_RECONCILER_EOF\nchmod +x /usr/local/bin/smb-mount-reconciler.sh\n/usr/local/bin/smb-mount-reconciler.sh &\necho 'Mount reconciler started'\necho ''\n\necho 'Waiting up to 30s for initial mounts...'\nfor _ in $(seq 1 30); do\n  want=$(awk -F'\\t' '$1 !~ /^#/ && NF>=3 && $3 != \"\" {c++} END {print c+0}' /etc/smb-mounts/mounts.tsv 2>/dev/null || echo 0)\n  have=$(awk '$3 ~ /^nfs/ && $2 ~ /^\\/shares\\// {c++} END {print c+0}' /proc/self/mounts)\n  [ \"$have\" -ge \"$want\" ] && break\n  sleep 1\ndone\necho ''\n\necho 'Starting Samba daemon...'\nexec /usr/sbin/smbd --foreground --no-process-group"
+            ],
+            "env": [
+              {
+                "name": "SMB_PASSWORD",
+                "valueFrom": {
+                  "secretKeyRef": {
+                    "key": "password",
+                    "name": "smb-credentials"
+                  }
+                }
+              }
+            ],
+            "image": "crazymax/samba:latest",
+            "lifecycle": {
+              "preStop": {
+                "exec": {
+                  "command": [
+                    "/bin/bash",
+                    "-c",
+                    "echo 'Shutting down gracefully...'\nsleep 5\necho 'Unmounting /shares/old'\ntimeout 5 umount -f /shares/old 2>/dev/null || umount -l /shares/old 2>/dev/null || echo '  already gone: /shares/old'\necho 'preStop complete'\nexit 0"
+                  ]
+                }
+              }
+            },
+            "livenessProbe": {
+              "failureThreshold": 3,
+              "initialDelaySeconds": 15,
+              "periodSeconds": 10,
+              "tcpSocket": {
+                "port": 445
+              },
+              "timeoutSeconds": 3
+            },
+            "name": "samba",
+            "ports": [
+              {
+                "containerPort": 445,
+                "protocol": "TCP"
+              },
+              {
+                "containerPort": 139,
+                "protocol": "TCP"
+              }
+            ],
+            "readinessProbe": {
+              "failureThreshold": 3,
+              "initialDelaySeconds": 5,
+              "periodSeconds": 5,
+              "successThreshold": 1,
+              "tcpSocket": {
+                "port": 445
+              },
+              "timeoutSeconds": 3
+            },
+            "resources": {
+              "limits": {
+                "cpu": "2000m",
+                "memory": "512Mi"
+              },
+              "requests": {
+                "cpu": "200m",
+                "memory": "256Mi"
+              }
+            },
+            "securityContext": {
+              "privileged": true
+            },
+            "volumeMounts": [
+              {
+                "mountPath": "/etc/samba/smb.conf",
+                "name": "smb-config",
+                "subPath": "smb.conf"
+              },
+              {
+                "mountPath": "/etc/smb-mounts",
+                "name": "smb-mounts",
+                "readOnly": true
+              }
+            ]
+          }
+        ],
+        "terminationGracePeriodSeconds": 30,
+        "volumes": [
+          {
+            "configMap": {
+              "items": [
+                {
+                  "key": "smb.conf",
+                  "path": "smb.conf"
+                }
+              ],
+              "name": "smb-config"
+            },
+            "name": "smb-config"
+          },
+          {
+            "configMap": {
+              "name": "smb-mounts",
+              "optional": true
+            },
+            "name": "smb-mounts"
+          }
+        ]
+      }
+    }
+  }
+}

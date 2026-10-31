@@ -1,0 +1,37 @@
+{
+  "live": {
+    "namespace": "storage",
+    "lbIP": "192.0.2.10",
+    "username": "smbuser",
+    "py": {
+      "smb_image": "crazymax/samba:latest",
+      "smb_server_string": "Homelab Storage Server",
+      "smb_resources": {"requests": {"cpu": "200m", "memory": "256Mi"}, "limits": {"cpu": "2000m", "memory": "512Mi"}}
+    },
+    "yaml": "operator:\n  namespace: storage\n  reconcileInterval: 30\n  useWatchAPI: true\n  logLevel: INFO\n  healthPort: 8080\nsmb:\n  deploymentName: smb-server\n  serviceName: smb-server\n  image: crazymax/samba:latest\n  workgroup: WORKGROUP\n  serverString: Homelab Storage Server\n  nfsMountOptions: vers=4.2,noresvport,soft,timeo=50,retrans=2\n  mountReconcileInterval: 15\n  initialMountWait: 30\n  security:\n    encryptionLevel: default\n    ntlmAuth: yes\n    restrictAnonymous: \"1\"\n    disableGuestAccess: true\nlonghorn:\n  namespace: storage\n  group: longhorn.io\n  version: v1beta2\n  plural: volumes\nresources:\n  smbServer:\n    requests:\n      cpu: 200m\n      memory: 256Mi\n    limits:\n      cpu: 2000m\n      memory: 512Mi\n  operator:\n    requests:\n      cpu: 50m\n      memory: 128Mi\n    limits:\n      memory: 256Mi\nretry:\n  maxRetries: 3\n  initialDelay: 1\n  backoffMultiplier: 2\n  retryableStatusCodes: [409, 429, 500, 503, 504]\n"
+  },
+  "defaults": {
+    "namespace": "storage",
+    "lbIP": "192.0.2.10",
+    "username": "smbuser",
+    "py": {},
+    "yaml": "operator:\n  namespace: storage\n"
+  },
+  "custom": {
+    "namespace": "files",
+    "lbIP": "198.51.100.7",
+    "username": "alice",
+    "py": {
+      "smb_deployment_name": "samba",
+      "smb_service_name": "samba-lb",
+      "smb_image": "example/samba:1.2.3",
+      "smb_workgroup": "HOME",
+      "smb_server_string": "Files",
+      "nfs_mount_options": "vers=4.1,soft,timeo=30",
+      "mount_reconcile_interval": 7,
+      "initial_mount_wait": 12,
+      "smb_resources": {"requests": {"cpu": "10m", "memory": "64Mi"}, "limits": {"cpu": "1", "memory": "1Gi"}}
+    },
+    "yaml": "operator:\n  namespace: files\nsmb:\n  deploymentName: samba\n  serviceName: samba-lb\n  image: example/samba:1.2.3\n  workgroup: HOME\n  serverString: Files\n  nfsMountOptions: vers=4.1,soft,timeo=30\n  mountReconcileInterval: 7\n  initialMountWait: 12\nresources:\n  smbServer:\n    requests: {cpu: 10m, memory: 64Mi}\n    limits: {cpu: \"1\", memory: 1Gi}\n"
+  }
+}

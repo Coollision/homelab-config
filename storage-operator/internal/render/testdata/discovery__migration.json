@@ -1,0 +1,62 @@
+{
+  "annotations": {},
+  "events": [],
+  "shares": [
+    {
+      "access_mode": "read-only",
+      "attached": true,
+      "endpoint": "192.0.2.41:/vol-rwx",
+      "longhorn_volume_name": "vol-rwx",
+      "mount_type": "nfs",
+      "name": "old-rwx",
+      "namespace": "storage",
+      "nfs_path": "/vol-rwx",
+      "nfs_server": "192.0.2.41",
+      "path": "/shares/old-rwx",
+      "pvc_name": "migration-vol-rwx",
+      "structural_key": "storage/migration-vol-rwx|old-rwx|/shares/old-rwx|nfs|read-only"
+    },
+    {
+      "access_mode": "shared",
+      "attached": true,
+      "endpoint": "",
+      "longhorn_volume_name": "vol-rwo",
+      "mount_type": "direct",
+      "name": "vol-rwo",
+      "namespace": "storage",
+      "nfs_path": "",
+      "nfs_server": "",
+      "path": "/shares/vol-rwo",
+      "pvc_name": "migration-vol-rwo",
+      "structural_key": "storage/migration-vol-rwo|vol-rwo|/shares/vol-rwo|direct|shared"
+    },
+    {
+      "access_mode": "shared",
+      "attached": true,
+      "endpoint": "",
+      "longhorn_volume_name": "vol-pad",
+      "mount_type": "direct",
+      "name": "padded",
+      "namespace": "storage",
+      "nfs_path": "",
+      "nfs_server": "",
+      "path": "/shares/padded",
+      "pvc_name": "migration-vol-pad",
+      "structural_key": "storage/migration-vol-pad|padded|/shares/padded|direct|shared"
+    },
+    {
+      "access_mode": "shared",
+      "attached": true,
+      "endpoint": "",
+      "longhorn_volume_name": "vol-bad-smb",
+      "mount_type": "direct",
+      "name": "vol-bad-smb",
+      "namespace": "storage",
+      "nfs_path": "",
+      "nfs_server": "",
+      "path": "/shares/vol-bad-smb",
+      "pvc_name": "migration-vol-bad-smb",
+      "structural_key": "storage/migration-vol-bad-smb|vol-bad-smb|/shares/vol-bad-smb|direct|shared"
+    }
+  ]
+}
