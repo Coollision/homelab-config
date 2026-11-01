@@ -14,7 +14,8 @@
 
 - name: "GPU: i915 loaded GuC/HuC firmware [{{ k3s_node_name }}]"
   # pipefail cannot change the outcome: failed_when below decides alone.
-  ansible.builtin.shell: set -o pipefail; dmesg | grep -iE 'HuC{{ ":" }} authenticated|GuC{{ ":" }}? submission enabled' | wc -l
+  # The dmesg ring buffer forgets the boot-time i915 lines after a day or so; the journal keeps them.
+  ansible.builtin.shell: set -o pipefail; { journalctl -k -b --no-pager 2>/dev/null; dmesg; } | grep -iE 'HuC{{ ":" }} authenticated|GuC{{ ":" }}? submission enabled' | wc -l
   args:
     executable: /bin/bash
   register: node_update_guc_huc

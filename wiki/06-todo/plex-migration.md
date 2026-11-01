@@ -11,10 +11,10 @@
 
 - Plex on the NAS already does **hardware transcoding** (hw decode + hw encode on every video transcode) and the
   NAS is not short of CPU for it. Moving Plex is a GitOps and tidiness decision, not a performance fix.
-- The second mini (N150) has **no `/dev/dri`**: the Debian 12 kernel (6.1) does not know that GPU's PCI ID. Fix:
-  kernel from `bookworm-backports` (6.12). The first mini (N100) has `/dev/dri` but **hardware transcoding does not
-  work there either** until the missing i915 GuC/HuC firmware (`firmware-misc-nonfree`) is installed. Both fixes are
-  independent of Plex and are the real prerequisite for any move.
+- **Fixed (verified 2026-11-01):** both minis are on Debian 13 (kernel 6.12) with `firmware-misc-nonfree`. Both have
+  `/dev/dri/card0` + `renderD128`, and i915 reports GuC submission/SLPC/RC enabled, and `gpu_check.yml` (container `vainfo`, H.264 + HEVC decode and encode) passes. The N150 mini originally had no
+  `/dev/dri` because the Debian 12 kernel (6.1) did not know its PCI ID, and the N100 mini lacked the GuC/HuC firmware.
+  The text below keeps that history.
 - The NAS benchmark shows plenty of headroom (3 concurrent 1080p HEVC streams at ~2.5x realtime each), and most
   transcodes come from client quality caps that can be changed for free (see "Cheaper wins").
 - **If Plex moves, run one plain PMS pod pinned to a GPU node.** Distributed transcoding (ClusterPlex) is feasible but
