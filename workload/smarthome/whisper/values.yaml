@@ -1,54 +1,183 @@
 fullnameOverride: whisper
-# TEMPORARY: down for STT benchmarking (string, since the lib's `default "1"` swallows int 0)
-replicaCount: "0"
-statefulset:
+# Wyoming bridge: Home Assistant talks Wyoming to whisper-service:10300, this forwards the audio to the
+# whisper.cpp server (workload/smarthome/whisper-cpp, iGPU) over HTTP. Stateless; see wiki/02-smarthome/voice.md.
+# The script runs on the python + wyoming already inside this image, so there is no image of our own to build.
+deployment:
   image:
     repository: rhasspy/wyoming-whisper
+    # pinned: the script imports the image's wyoming package (1.10.x API); renovate bumps are manual (see renovate.json)
     tag: 3.8.1
+  command: ["/usr/src/.venv/bin/python3", "/app/bridge.py"]
   ports:
     whisper: 10300
-  args:
-    - --data-dir
-    - /data
-    - --download-dir
-    - /data
-    - --language
-    - nl
-    - --model
-    - small-int8
-    - --beam-size
-    - "3"
-    - --compute-type
-    - int8
-    - --device
-    - cpu
-    # all 4 E-cores; must match resources.limits.cpu or CFS throttling adds latency
-    - --cpu-threads
-    - "4"
-    # biases the decoder with domain vocabulary; fixes first-word errors on short commands
-    - --initial-prompt
-    - "Zet het licht aan in de keuken. Zijn de luiken in de kinderkamer gesloten? Doe het rolluik van het grote raam omhoog. Zet de plafondspots in de woonkamer uit. Speel muziek in de keuken. Wat is de temperatuur buiten? Doe de lampen in de badkamer, slaapkamer, gang, berging en op zolder uit. Zet de lamp op het bureau aan. Doe de lamp boven de eetplaats aan en zet de spa, de boiler en het nachtlampje uit."
 config:
   TZ: Europe/Brussels
+  PYTHONUNBUFFERED: "1"
+podAnnotations:
+  # restart the pod when the script below changes
+  reloader.stakater.com/auto: "true"
+probes:
+  readiness:
+    tcpSocket:
+      port: 10300
+    periodSeconds: 10
+  liveness:
+    tcpSocket:
+      port: 10300
+    periodSeconds: 30
+    failureThreshold: 3
 resources:
   requests:
-    cpu: 250m
-    memory: 1024Mi
+    cpu: 20m
+    memory: 64Mi
   limits:
-    cpu: 4000m
-    memory: 1536Mi
-storage:
-  - mountPath: /data
-    nameSuffix: data
-    size: 6Gi
-    type: longhorn
-    volumeName: whisper-data
-    replicas: 2
+    memory: 192Mi
+configMaps:
+  - name: whisper-bridge
+    data:
+      bridge.py: |
+        """Wyoming ASR -> whisper.cpp HTTP bridge.
 
-affinity:
-  node:
-    required:
-      - matchExpressions:
-          - key: type
-            operator: In
-            values: ["mini"]
+        Home Assistant speaks Wyoming (tcp :10300); whisper.cpp's server speaks HTTP. Audio is buffered until
+        AudioStop, wrapped as a 16 kHz mono s16 WAV and POSTed to whisper-cpp. Any failure returns an empty
+        Transcript so a Home Assistant pipeline never hangs on this service.
+        """
+        import asyncio
+        import io
+        import json
+        import logging
+        import os
+        import urllib.request
+        import uuid
+        import wave
+        from functools import partial
+
+        import wyoming
+        from wyoming.asr import Transcribe, Transcript
+        from wyoming.audio import AudioChunk, AudioChunkConverter, AudioStart, AudioStop
+        from wyoming.event import Event
+        from wyoming.info import AsrModel, AsrProgram, Attribution, Describe, Info
+        from wyoming.server import AsyncEventHandler, AsyncServer
+
+        URL = os.environ.get("WHISPER_CPP_URL", "http://whisper-cpp-service:8099/inference")
+        URI = os.environ.get("LISTEN_URI", "tcp://0.0.0.0:10300")
+        MODEL = os.environ.get("MODEL_NAME", "small")
+        LANGUAGE = os.environ.get("LANGUAGE", "nl")
+        MAX_SECONDS = float(os.environ.get("MAX_SECONDS", "8"))  # whisper-cpp runs with -ac 400 = 8 s
+        TIMEOUT = float(os.environ.get("TIMEOUT", "30"))
+
+        _LOG = logging.getLogger("bridge")
+        _FORMAT = dict(rate=16000, width=2, channels=1)
+
+        INFO = Info(
+            asr=[
+                AsrProgram(
+                    name="whisper-cpp",
+                    description="whisper.cpp on the Intel iGPU, via HTTP",
+                    attribution=Attribution(name="ggml-org", url="https://github.com/ggml-org/whisper.cpp"),
+                    installed=True,
+                    version="1",
+                    models=[
+                        AsrModel(
+                            name=MODEL,
+                            description=MODEL,
+                            attribution=Attribution(name="OpenAI", url="https://github.com/openai/whisper"),
+                            installed=True,
+                            languages=[LANGUAGE],
+                            version="1",
+                        )
+                    ],
+                )
+            ]
+        )
+
+
+        def wav_bytes(pcm: bytes) -> bytes:
+            buf = io.BytesIO()
+            with wave.open(buf, "wb") as w:
+                w.setnchannels(_FORMAT["channels"])
+                w.setsampwidth(_FORMAT["width"])
+                w.setframerate(_FORMAT["rate"])
+                w.writeframes(pcm)
+            return buf.getvalue()
+
+
+        def transcribe_blocking(pcm: bytes) -> str:
+            boundary = uuid.uuid4().hex
+            parts = [
+                ("response_format", None, b"json"),
+                ("file", "audio.wav", wav_bytes(pcm)),
+            ]
+            body = b""
+            for name, filename, data in parts:
+                disp = f'form-data; name="{name}"' + (f'; filename="{filename}"' if filename else "")
+                body += f"--{boundary}\r\nContent-Disposition: {disp}\r\n\r\n".encode() + data + b"\r\n"
+            body += f"--{boundary}--\r\n".encode()
+            req = urllib.request.Request(
+                URL, data=body, headers={"Content-Type": f"multipart/form-data; boundary={boundary}"}
+            )
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+                return json.load(resp).get("text", "").strip()
+
+
+        class Handler(AsyncEventHandler):
+            def __init__(self, *args, **kwargs) -> None:
+                super().__init__(*args, **kwargs)
+                self.converter = AudioChunkConverter(**_FORMAT)
+                self.pcm = bytearray()
+
+            async def handle_event(self, event: Event) -> bool:
+                if Describe.is_type(event.type):
+                    await self.write_event(INFO.event())
+                elif AudioStart.is_type(event.type):
+                    self.pcm.clear()
+                elif AudioChunk.is_type(event.type):
+                    self.pcm += self.converter.convert(AudioChunk.from_event(event)).audio
+                elif AudioStop.is_type(event.type):
+                    await self.finish()
+                # Transcribe only carries a language hint; the model language is fixed, so it is ignored
+                return True
+
+            async def finish(self) -> None:
+                pcm, self.pcm = bytes(self.pcm), bytearray()
+                seconds = len(pcm) / (_FORMAT["rate"] * _FORMAT["width"])
+                if seconds > MAX_SECONDS:
+                    _LOG.warning("%.1f s of audio, whisper-cpp only looks at the first %.0f s", seconds, MAX_SECONDS)
+                text = ""
+                try:
+                    text = await asyncio.get_running_loop().run_in_executor(None, partial(transcribe_blocking, pcm))
+                    _LOG.info("%.1f s -> %r", seconds, text)
+                except Exception:  # an empty transcript is a clean "didn't catch that"; raising would hang the pipeline
+                    _LOG.exception("transcription failed")
+                await self.write_event(Transcript(text=text, language=LANGUAGE).event())
+
+
+        async def warm_up() -> None:
+            """Send one second of silence until whisper-cpp answers: the first request compiles the GPU shaders."""
+            silence = bytes(_FORMAT["rate"] * _FORMAT["width"])
+            for _ in range(60):
+                try:
+                    await asyncio.get_running_loop().run_in_executor(None, partial(transcribe_blocking, silence))
+                    _LOG.info("whisper-cpp warm")
+                    return
+                except Exception as err:
+                    _LOG.info("waiting for whisper-cpp (%s)", err)
+                    await asyncio.sleep(5)
+
+
+        async def main() -> None:
+            logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+            _LOG.info("wyoming %s, %s -> %s", getattr(wyoming, "__version__", "?"), URI, URL)
+            server = AsyncServer.from_uri(URI)
+            warm = asyncio.create_task(warm_up())
+            await server.run(Handler)
+            warm.cancel()
+
+
+        if __name__ == "__main__":
+            asyncio.run(main())
+storage:
+  - mountPath: /app
+    type: configMap
+    configMapName: whisper-bridge
+    nameSuffix: bridge

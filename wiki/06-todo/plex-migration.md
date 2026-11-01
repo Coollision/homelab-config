@@ -6,6 +6,10 @@
 > the NAS and nothing about it changed. Phase 3 (moving Plex) is optional and the case for it is weak. Still open: the
 > transcode benchmark on the minis and the Phase 2 decision. Delete this page, folding the outcome into the media-stack
 > overview, once the phases you chose are done.
+>
+> **Update (2026-11-01):** the Intel GPU device plugin is installed (`system/inteldeviceplugins-system`) and advertises
+> `gpu.intel.com/i915` with 4 sharing slots per mini. A Plex pod should request that resource instead of mounting
+> `/dev/dri`; it shares the iGPU with the `whisper-cpp` speech-to-text server.
 
 ## TL;DR
 

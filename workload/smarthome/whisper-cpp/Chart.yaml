@@ -1,0 +1,11 @@
+apiVersion: v2
+name: whisper-cpp
+description: whisper.cpp HTTP server on the Intel iGPU (Vulkan); fronted by the whisper Wyoming bridge
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies:
+  - name: shared-lib
+    version: 0.1.0
+    repository: file://../../../lib/shared-lib

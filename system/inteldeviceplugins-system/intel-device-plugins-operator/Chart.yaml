@@ -1,0 +1,9 @@
+apiVersion: v2
+name: intel-device-plugins-operator
+description: Intel Device Plugins operator (CRDs + webhooks for the GPU plugin)
+type: application
+version: 0.1.0
+dependencies:
+  - name: intel-device-plugins-operator
+    version: 0.37.1
+    repository: https://intel.github.io/helm-charts
