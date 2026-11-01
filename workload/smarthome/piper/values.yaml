@@ -14,11 +14,15 @@ config:
   TZ: Europe/Brussels
 resources:
   requests:
-    cpu: 10m
-    memory: 64Mi
+    cpu: 50m
+    memory: 256Mi
   limits:
-    cpu: 1000m
-    memory: 96Mi
+    # synthesis is bursty: measured 12 s of speech in ~1.4 s with 3 CPUs vs ~6.6 s at a 1 CPU cap, and a short
+    # reply in 0.3 s vs 1.8 s; the burst is short, so a higher cap does not starve etcd / zigbee2mqtt
+    cpu: 2000m
+    # idle ~70Mi, peak ~385Mi measured on a 190-character reply; 96Mi and 256Mi both OOM-killed it, which shows up
+    # as "error playing audio" in the browser
+    memory: 768Mi
 storage:
   - mountPath: /data
     nameSuffix: data
