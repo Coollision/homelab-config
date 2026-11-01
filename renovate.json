@@ -15,6 +15,19 @@
       "allowedVersions": "<13"
     },
     {
+      "description": "whisper Wyoming bridge - its script runs on this image's wyoming package; bumps need a manual test and must not automerge",
+      "matchPackageNames": ["rhasspy/wyoming-whisper"],
+      "automerge": false,
+      "labels": ["test-voice-bridge"]
+    },
+    {
+      "description": "Intel device plugins - operator and GPU plugin charts must stay on the same version",
+      "matchBaseBranches": ["master"],
+      "matchPackageNames": ["intel-device-plugins-operator", "intel-device-plugins-gpu"],
+      "groupName": "intel device plugins",
+      "groupSlug": "intel-device-plugins"
+    },
+    {
       "description": "System & ArgoCD - automerge patch and minor",
       "matchBaseBranches": ["master"],
       "matchFileNames": ["system/**", "argocd/**"],

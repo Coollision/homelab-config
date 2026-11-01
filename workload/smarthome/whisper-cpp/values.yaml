@@ -1,0 +1,125 @@
+fullnameOverride: whisper-cpp
+# Speech-to-text engine behind the `whisper` Wyoming bridge, see wiki/02-smarthome/voice.md and
+# wiki/02-smarthome/voice-benchmark.md. Runs on whichever mini has a free iGPU slot (2.1 s on the N150, 2.7 s on the N100).
+deployment:
+  image:
+    repository: ghcr.io/ggml-org/whisper.cpp
+    tag: main-vulkan
+    # pinned on purpose: Intel Vulkan compute has had accuracy bugs, so re-run scripts/voice-bench before bumping
+    digest: ee9d1d37f72a0936f3952dc0fc192c0528e09031eb106b1bd82a546936704bd4
+  # a rollout would otherwise start a second server next to the old one (2 x 2 Gi + a shared iGPU)
+  strategy:
+    type: Recreate
+  ports:
+    http: 8099
+  command: ["whisper-server"]
+  args:
+    - -m
+    - /models/ggml-small.bin
+    - -l
+    - nl
+    # fewer than the 4 cores: the minis also run etcd / zigbee2mqtt, and the GPU does the heavy lifting
+    - -t
+    - "3"
+    - -bs
+    - "3"
+    # audio context = max 8 s per command (0.02 s per unit); the big speed-up (6.8 s -> 2.1 s), accuracy unchanged
+    - -ac
+    - "400"
+    # biases the decoder with domain vocabulary: noisy-room word error 23-26 % -> 10-12 %
+    - --prompt
+    - "Zet het licht aan in de keuken. Zijn de luiken in de kinderkamer gesloten? Doe het rolluik van het grote raam omhoog. Zet de plafondspots in de woonkamer uit. Speel muziek in de keuken. Wat is de temperatuur buiten? Doe de lampen in de badkamer, slaapkamer, gang, berging en op zolder uit. Zet de lamp op het bureau aan. Doe de lamp boven de eetplaats aan en zet de spa, de boiler en het nachtlampje uit."
+    - --host
+    - 0.0.0.0
+    - --port
+    - "8099"
+  lifecycle:
+    # The first request after a start compiles the Vulkan shaders (several seconds). Warm up in the background so the
+    # hook returns at once; the whisper bridge also sends a warm-up request when it starts.
+    postStart:
+      exec:
+        command:
+          - bash
+          - -c
+          - |
+            (
+              for i in $(seq 1 120); do curl -s -o /dev/null http://127.0.0.1:8099/ && break; sleep 1; done
+              { printf 'RIFF\x24\x7d\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x80\x3e\x00\x00\x00\x7d\x00\x00\x02\x00\x10\x00data\x00\x7d\x00\x00'; head -c 32000 /dev/zero; } > /tmp/warm.wav
+              curl -s --max-time 120 -o /dev/null -F file=@/tmp/warm.wav -F response_format=json http://127.0.0.1:8099/inference
+            ) >/dev/null 2>&1 &
+            exit 0
+probes:
+  # the server only listens once the model is loaded, so a TCP check covers the slow part
+  startup:
+    tcpSocket:
+      port: 8099
+    periodSeconds: 5
+    failureThreshold: 60
+  readiness:
+    httpGet:
+      path: /
+      port: 8099
+    periodSeconds: 10
+  # only proves the HTTP loop is alive, not that the GPU still works
+  liveness:
+    httpGet:
+      path: /
+      port: 8099
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+initContainers:
+  # The model is re-downloaded on every pod start (emptyDir instead of a Longhorn volume: 488 MB, freely
+  # re-fetchable, and no volume pinning the pod to one node). Revision + sha256 pinned; temp file + mv so a
+  # half-finished download never passes the "already there" check.
+  - name: fetch-model
+    image: ghcr.io/ggml-org/whisper.cpp@sha256:ee9d1d37f72a0936f3952dc0fc192c0528e09031eb106b1bd82a546936704bd4
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        f=/models/ggml-small.bin
+        [ -s "$f" ] && exit 0
+        curl -fL --retry 5 --retry-delay 5 -o "$f.tmp" \
+          https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.bin
+        echo "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b  $f.tmp" | sha256sum -c -
+        mv "$f.tmp" "$f"
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        memory: 256Mi
+    volumeMounts:
+      - name: whisper-cpp-models
+        mountPath: /models
+config:
+  TZ: Europe/Brussels
+resources:
+  requests:
+    cpu: 1500m
+    memory: 2Gi
+  limits:
+    memory: 3Gi
+    # the iGPU, via the Intel device plugin (system/inteldeviceplugins-system); sharedDevNum lets pods share it
+    gpu.intel.com/i915: 1
+storage:
+  - mountPath: /models
+    nameSuffix: models
+    type: emptyDir
+    sizeLimit: 1Gi
+affinity:
+  node:
+    # either mini (iGPU); keeps it off the VM / Pi
+    required:
+      - matchExpressions:
+          - key: type
+            operator: In
+            values: ["mini"]
+    # master-green also runs etcd + the control plane: only land there if worker-blue is full
+    preferred:
+      - weight: 50
+        matchExpressions:
+          - key: node-role.kubernetes.io/control-plane
+            operator: DoesNotExist

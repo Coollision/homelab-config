@@ -35,3 +35,7 @@ docs/printflow-printstash-handoff.md
 .env
 # properdocs build output
 site/
+
+# real voice recordings (private)
+audio-real/
+scripts/voice-bench/audio/

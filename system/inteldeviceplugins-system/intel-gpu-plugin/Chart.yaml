@@ -1,0 +1,9 @@
+apiVersion: v2
+name: intel-gpu-plugin
+description: Intel GPU device plugin (advertises gpu.intel.com/i915 on nodes with an Intel iGPU)
+type: application
+version: 0.1.0
+dependencies:
+  - name: intel-device-plugins-gpu
+    version: 0.37.1
+    repository: https://intel.github.io/helm-charts

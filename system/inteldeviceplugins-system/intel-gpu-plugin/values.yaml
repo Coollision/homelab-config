@@ -1,0 +1,10 @@
+# Needs the GpuDevicePlugin CRD from the intel-device-plugins-operator app: sync that one first, or this
+# app fails its first sync (no retry configured) and needs a manual re-sync.
+# Keep the chart version in lockstep with the operator's (renovate groups them).
+intel-device-plugins-gpu:
+  # >1 lets several pods share one iGPU (whisper-cpp now, Plex later); default 1 would serialize them
+  sharedDevNum: 4
+  # the plugin exposes /sys/class/drm to the per-node monitoring sidecar, which this cluster doesn't scrape
+  enableMonitoring: false
+  # labels GPU nodes via the NFD that already runs in kube-system
+  nodeFeatureRule: true

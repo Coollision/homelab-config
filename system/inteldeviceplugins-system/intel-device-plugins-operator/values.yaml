@@ -1,0 +1,11 @@
+intel-device-plugins-operator:
+  manager:
+    devices:
+      # only the iGPU plugin is used; the other device kinds need hardware this cluster doesn't have
+      gpu: true
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      memory: 128Mi

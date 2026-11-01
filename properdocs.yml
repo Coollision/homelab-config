@@ -30,6 +30,7 @@ nav:
       - 02-smarthome/zigbee.md
       - 02-smarthome/matter-thread.md
       - 02-smarthome/voice.md
+      - 02-smarthome/voice-benchmark.md
       - 02-smarthome/automation-mcp.md
   - Media Stack:
       - 03-media-stack/overview.md
@@ -46,6 +47,7 @@ nav:
       - 06-todo/ansible-housekeeping.md
       - 06-todo/music-stack.md
       - 06-todo/plex-migration.md
+      - 06-todo/whisper-upgrade.md
 
 theme:
   name: material

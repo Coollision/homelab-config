@@ -5,27 +5,55 @@
 Home Assistant's Assist voice pipeline uses two backend services talking the Wyoming
 protocol — neither has any Multus/VLAN legs; both are purely cluster-internal.
 
-## Whisper (speech-to-text) — `workload/smarthome/whisper`
+## Whisper (speech-to-text) — `whisper` bridge + `whisper-cpp`
 
-Runs on CPU (not the node's integrated GPU — see below), tuned specifically for a small,
-low-power CPU:
+Speech-to-text is two apps in the `smarthome` namespace:
 
-- `--cpu-threads` is set to **match** the pod's CPU resource limit exactly. Mismatching
-  these causes CFS-throttling latency that's easy to misdiagnose as "the model is just
-  slow."
-- A domain-specific initial prompt (in the household's spoken language, biased toward
-  home-automation vocabulary — room names, device types) fixes first-word misrecognition
-  on short voice commands. **Keep this short** — the model has a hard token cap on the
-  prompt, and an overly long prompt causes it to hallucinate prompt words back into
-  transcriptions instead of improving accuracy. Only grow it with words the model
-  actually mis-hears; Home Assistant's own conversation/entity matching already does
-  fuzzy matching, so the prompt doesn't need to be exhaustive.
+```text
+Home Assistant ──Wyoming──▶ whisper-service:10300      workload/smarthome/whisper      (bridge, any node)
+                                   │ HTTP :8099
+                                   ▼
+                       whisper-cpp-service:8099        workload/smarthome/whisper-cpp  (whisper.cpp, Intel iGPU)
+```
 
-**iGPU acceleration was evaluated and rejected** — on this hardware class, the
-integrated-GPU path had negligible speed gains and open accuracy bugs in its Vulkan
-compute path, with only unmaintained Wyoming bridges available for it. Worth
-re-evaluating only on meaningfully more capable GPU hardware, not on an incremental CPU
-upgrade.
+- **`whisper-cpp`** runs the `whisper.cpp` server (`small` model, Vulkan) on the **Intel iGPU**. It asks the scheduler
+  for `gpu.intel.com/i915`, which the Intel device plugin advertises on both mini nodes
+  (`system/inteldeviceplugins-system`, sharing slots set by `sharedDevNum`). There is deliberately **no preference
+  for one mini**: the N150 and N100 iGPUs differ by only about 0.6 s per command, and a pod that moves just works.
+  The model (488 MB) lives in an `emptyDir` and is re-downloaded on every pod start (pinned Hugging Face revision,
+  sha256 checked): no Longhorn volume, so nothing ties the pod to one node.
+- **`whisper`** is a small **Wyoming bridge** (the `rhasspy/wyoming-whisper` image running a script from a
+  ConfigMap): it buffers the audio until the end of the utterance, wraps it as a WAV, POSTs it to `whisper-cpp` and
+  returns the text. It returns an empty transcript on any failure, so a pipeline never hangs on it. The service name
+  `whisper-service` did not change, so Home Assistant needed no change. The image tag is pinned because the script uses
+  that image's `wyoming` package; Renovate bumps of it are labelled `test-voice-bridge` and never automerge.
+
+Settings that matter (measured on the iGPU, see [Voice benchmark](voice-benchmark.md#igpu)):
+
+- **`-ac 400`** (audio context) limits a command to 8 s of audio and is the big speed-up (6.8 s to 2.1 s) with no
+  accuracy loss. A longer command is cut off (the bridge logs a warning above 8 s). Real commands recorded so far were
+  under 5 s.
+- A domain-specific **`--prompt`** (household language, home-automation vocabulary) cuts word error in a noisy room
+  from 23–26 % to 10–12 %. Keep it to words the model actually mis-hears; Home Assistant matches entity names fuzzily.
+- **`-t 3`**: the minis also run etcd and zigbee2mqtt, and the GPU does the heavy lifting.
+- **Warm-up**: the first request after a start compiles the Vulkan shaders (several seconds). `whisper-cpp` warms
+  itself up in a `postStart` hook and the bridge sends one warm-up request when it starts.
+- The `whisper-cpp` image is pinned by digest: Intel Vulkan compute has had accuracy bugs, so re-run
+  `scripts/voice-bench` ([Re-running](voice-benchmark.md#rerun)) before bumping it.
+- The old setup, `faster-whisper` on a mini's CPU (9.6 s), is the rollback: restore its values from git history and the
+  bridge goes away; `whisper-service` keeps its name.
+- Do **not** run speech-to-text on the Raspberry Pi, the VM worker or the NAS (15–22 s per command).
+
+**Result in real use (2026-11-01):** a command spoken in the kitchen's normal voice transcribes in about **2.2 s**
+with **8 % word error** on the benchmark's clips, the same as the synthetic voice
+([details](voice-benchmark.md#real-voice)).
+
+**iGPU acceleration: rejected in 2026-07, reversed in 2026-11.** The first evaluation (July) found negligible gains and
+open accuracy bugs in the Vulkan compute path, with only unmaintained Wyoming bridges available. The November
+[benchmark](voice-benchmark.md#igpu), once both minis' iGPUs worked for compute, showed the opposite with `whisper.cpp`
+and a shortened audio context. The earlier "unstable accuracy" turned out to be a benchmark bug, not the GPU.
+
+Whisper was scaled to zero during the benchmark (so it did not compete for CPU); that is over.
 
 ## Piper (text-to-speech) — `workload/smarthome/piper`
 

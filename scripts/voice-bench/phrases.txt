@@ -1,0 +1,10 @@
+01|Zet het licht aan in de keuken.
+02|Zijn de luiken in de kinderkamer gesloten?
+03|Doe het rolluik van het grote raam omhoog.
+04|Zet de plafondspots in de woonkamer uit.
+05|Wat is de temperatuur buiten?
+06|Doe de lamp boven de eetplaats aan en zet de spa en de boiler uit.
+07|Speel muziek in de keuken.
+08|Zet de verwarming in de slaapkamer op negentien graden.
+09|Doe alle lampen in de gang, berging en op zolder uit.
+10|Ik ga slapen, doe alles uit behalve het nachtlampje van de kinderkamer, en zet de deur op slot.
