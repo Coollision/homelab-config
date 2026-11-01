@@ -16,6 +16,13 @@ spec:
         app.kubernetes.io/name: {{ include "aws-tunnels-operator.name" . }}
     spec:
       serviceAccountName: {{ include "aws-tunnels-operator.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: manager
           image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
@@ -62,6 +69,11 @@ spec:
             timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
             failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
             successThreshold: {{ .Values.probes.liveness.successThreshold }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           resources:
 {{ toYaml .Values.resources | indent 12 }}
           volumeMounts:
@@ -70,8 +82,17 @@ spec:
             # lives in the Secret, not a PVC.
             - name: sso-cache
               mountPath: /operator-home/.aws/sso/cache
+            # HOME must be writable for the aws CLI (cli cache etc.) with a read-only root fs.
+            - name: home
+              mountPath: /operator-home
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: sso-cache
+          emptyDir: {}
+        - name: home
+          emptyDir: {}
+        - name: tmp
           emptyDir: {}
 {{- with .Values.affinity }}
       affinity:
