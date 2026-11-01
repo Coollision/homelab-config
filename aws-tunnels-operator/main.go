@@ -58,6 +58,8 @@ func main() {
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         true,
 		LeaderElectionID:       "aws-tunnels-operator-leader",
+		// Hand the lease over on shutdown so a rollout doesn't leave ~15s with no active reconciler.
+		LeaderElectionReleaseOnCancel: true,
 	})
 	if err != nil {
 		os.Exit(1)
