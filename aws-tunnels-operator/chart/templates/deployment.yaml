@@ -77,19 +77,16 @@ spec:
           resources:
 {{ toYaml .Values.resources | indent 12 }}
           volumeMounts:
-            # Writable SSO token cache. Ephemeral on purpose: the operator re-seeds it from the
-            # <stack>-sso-token Secret each reconcile and persists rotations back, so durable state
-            # lives in the Secret, not a PVC.
-            - name: sso-cache
-              mountPath: /operator-home/.aws/sso/cache
-            # HOME must be writable for the aws CLI (cli cache etc.) with a read-only root fs.
+            # Writable HOME (aws CLI cache + the SSO token cache at .aws/sso/cache). Ephemeral on
+            # purpose: the operator re-seeds the token cache from the <stack>-sso-token Secret each
+            # reconcile and persists rotations back, so durable state lives in the Secret, not a PVC.
+            # Deliberately ONE volume: a nested mount would make the kubelet create .aws as root and
+            # the non-root user could not create .aws/cli.
             - name: home
               mountPath: /operator-home
             - name: tmp
               mountPath: /tmp
       volumes:
-        - name: sso-cache
-          emptyDir: {}
         - name: home
           emptyDir: {}
         - name: tmp
