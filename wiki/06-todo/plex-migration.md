@@ -11,6 +11,11 @@
 > `gpu.intel.com/i915` with 4 sharing slots per mini. A Plex pod should request that resource instead of mounting
 > `/dev/dri`; it shares the iGPU with the `whisper-cpp` speech-to-text server.
 
+>
+> **Update (2026-11-02):** scale-out ideas (ClusterPlex, an own Go shim and operator, splitting one stream across
+> transcoders) were researched and parked without a decision; see "Scaling beyond 3 streams". Mini iGPU benchmark
+> results are recorded there.
+
 ## TL;DR
 
 - Plex on the NAS already does **hardware transcoding** (hw decode + hw encode on every video transcode) and the
@@ -82,6 +87,9 @@ What the data says per group:
 
 - [ ] Plex Web on the LAN: set home streaming quality to Maximum on the browser(s) you use. ~23% of all video transcodes.
 - [ ] Optional: preferred text subtitles over image subtitles for the titles you watch in the browser.
+- [x] **Superseded 2026-11-03:** `WanPerStreamMaxUploadRate` is now 27000 (equal to the total cap), because Plex treats the
+      LAN Chrome client as remote and applies the cap to it; see "Why LAN Plex Web got the remote cap". The 4 Mbps
+      decision below was made 2026-10-23.
 - [x] `WanPerStreamMaxUploadRate` stays at 4 Mbps (decided 2026-10-23). Raising it to ~8–10 Mbps would let more remote
       viewers direct-play 1080p, at the cost of up to 3 × that on the uplink (total cap 27 Mbps, which would then
       need raising too). Revisit if remote viewers complain about quality, if the uplink gets faster, or if remote
@@ -238,6 +246,162 @@ Not started. Design notes so the decision is informed:
   installed as rollback for a couple of weeks.
 - **Acceptance:** same watch history in Tautulli, hardware transcodes still `hw decode/encode = 1`, a 4K →
   1080p transcode works, nightly Butler window does not push either mini over its memory limit.
+
+## Scaling beyond 3 streams: ideas explored (2026-11-02, parked)
+
+Goal that prompted this: grow past the cap of 3 concurrent transcodes, and transcode heavier material on low-power
+hardware, while watching at 2x–3x playback speed. **Nothing was built or decided.** This section records what was
+researched so it can be picked up later. Findings marked *(inferred)* come from agent reasoning, not from a
+measurement or a fetched source; re-check them against a real transcoder command line in the PMS logs before relying on them.
+
+### Facts that frame the decision
+
+- **The cap of 3 is a setting, not hardware.** `TranscodeCountLimit` = 3 equals the measured peak concurrency. The NAS
+  benchmark sustained 3 concurrent 1080p HEVC at ~2.5x each, so the limit can likely rise before any scale-out.
+- **One stream is one process on one iGPU.** More nodes add parallel *streams*, not speed for a single stream.
+- **2x–3x playback** *(inferred)*: Plex clients speed up playback themselves and just fetch segments sooner, so a
+  transcode must sustain `speed × 1.0` realtime. Single-stream rates (NAS: 6.9x / 5.6x / 3.8x) cover 3x except
+  4K HEVC 10-bit, which is marginal. The real constraint is concurrency on one iGPU.
+
+### ClusterPlex as the off-the-shelf option
+
+- Upstream chart (1.1.10) has **no GPU support** (no `gpu.intel.com/i915` request, no device mounts, no nodeSelector)
+  and **no autoscaling** (`worker.config.replicas` is fixed); KEDA is not installed in this cluster.
+- **Slow update path:** last release v1.4.16 on 2025-10-12, last commit 2026-02-12, 19 open issues, one maintainer.
+  It tracks Plex through the LinuxServer image (`latest` / `VERSION=docker`), so PMS updates fast but the shim does not.
+  Pin PMS, worker and `clusterplexVersion` to the same Plex build if ever tried.
+- **History of breakage** (issue tracker, checked): most were codec/EAE version discovery after a Plex update
+  (2021, twice in 2022, 2024 with PMS 1.40.3+). Fixes mostly took 1–7 days, the slowest 4–11 weeks. Others: EAE
+  watchfolder permissions, a transcoder that does not exit, HDR hardware transcode, LinuxServer mod not loading.
+
+### The "own Go build" gamble (design only)
+
+Stock LinuxServer Plex plus a Go shim as an LSIO docker mod (renames `Plex Transcoder` to `Plex Transcoder.real`,
+forwards argv/env to a worker), plus an operator.
+
+- **Architecture:** a warm worker per GPU node scaled to 0 on idle; a Job per session is ruled out (every seek would
+  mean a 3–8 s cold start). **Local fallback** (run the real transcoder if no worker answers in ~1.5 s) makes it safe.
+- **Paths:** identical `/media`, `/transcode`, `/codecs` mounts on PMS and workers, no argument rewriting.
+- **Operator:** one `PlexServer` CRD; rolls Plex updates through a canary (config copy, codec pre-warm, synthetic
+  transcode, then roll PMS) and keeps the previous digest. Rollback after a Plex DB migration is **not** reliably
+  reversible, so back up the DB before every upgrade.
+- **Plex hooks worth using:** polling `/status/sessions`, `/transcode/sessions`, `/identity`. Webhooks need Plex Pass
+  and are lossy. Do not write to the Plex DB, parse logs or depend on plex.tv.
+- **Breakage surface** (likelihood per Plex release): codec dir layout and EAE **high**; localhost callback flags
+  medium (a worker-local proxy avoids rewriting them); argv shape medium-high but passed through untouched; binary
+  path low. Expect roughly 2–4 shim fixes a year, about one of them real work *(inferred)*. A nightly canary that runs a
+  real SDR, HDR and EAC3 transcode against each new LSIO tag, gating the Renovate bump, is the mitigation.
+- **Effort:** about 3,800 lines of Go across three milestones, roughly 3–4 weeks of evenings, plus upkeep.
+- **Biggest unverified assumption:** that PMS accepts progress/manifest callbacks from a non-loopback pod. One `curl`
+  from another pod against the session progress URL settles it; if rejected, remote workers do not work.
+- **Verdict at today's load:** no-go on distributed transcoding. A worthwhile subset is a single stock LSIO pod
+  requesting `gpu.intel.com/i915: 1` with `/transcode` on a node-local `emptyDir`, plus a small controller or
+  CronJob for the nightly canary, a pre-upgrade DB backup and metrics from `/status/sessions`.
+
+### Two transcoders on one stream
+
+Judged **feasible on paper, not worth it** *(no live sources were fetched)*. Mechanism: the shim splits the timeline
+into keyframe-aligned chunks and has different workers produce alternate segments, re-serialising progress for PMS.
+
+- **Blockers:** audio encoder priming at every chunk join (clicks or drift); Plex's DASH/fMP4 needs byte-compatible
+  init data and continuous timestamps across workers (undocumented, changes between releases); PMS assumes one
+  in-order, throttled producer; rate control resets per chunk.
+- **Gain is small:** with 2 workers and 6 s chunks, 4K HEVC 10-bit goes from 3.8x to about 5.0x (not 7.6x) once
+  per-chunk startup is counted; 1080p H.264 gains almost nothing. Break-even is lost when startup exceeds chunk
+  length divided by single-worker speed. No known project does this for live playback; Tdarr and similar are offline.
+- **Cheap kill-or-confirm test** (stock jellyfin-ffmpeg, only proves the Jellyfin path): two ffmpeg processes making
+  alternate 30 s HLS chunks (`-force_key_frames`, `-copyts`, `-segment_start_number`), a hand-written playlist, played
+  in hls.js at 2x and 3x. Pass: at least 1.6x speedup and clean joins. Run it only when the GPUs are idle.
+
+### Jellyfin / Seerr, asides
+
+- **Seerr** is the merged Overseerr + Jellyseerr (merged February 2026, from third-party sources); supports Plex,
+  Jellyfin and Emby and talks to Radarr/Sonarr by URL and key. It works with Plex today and commits to nothing.
+- **Jellyfin** is an easier remote-transcode target (plain ffmpeg argv, stable interface, rffmpeg exists; expect 0–1
+  fixes a year) but gives up the Plex client apps, remote-user experience and watch history. Not a transcoding reason
+  to switch for this load.
+
+### Benchmark results (both minis)
+
+Measured 2026-11-02 with jellyfin-ffmpeg 7.1.2 (container image 10.11.3), `iHD` 25.3.4 on `/dev/dri/renderD128`
+on both minis (H.264 and HEVC Main10 decode and encode). Method: VAAPI decode, scale to 720p, H.264 encode at 4 Mbps,
+real 60 s clips cut from the library, median of 3 runs, `whisper-cpp` idle. The N100 mini and the N150 mini are 4 cores each.
+
+Single stream, x realtime:
+
+| Clip | N150 mini | N100 mini | NAS baseline |
+|---|---|---|---|
+| 1080p H.264 | 11.2x | 10.2x | 6.9x |
+| 1080p HEVC 10-bit | 9.8x | 8.8x | 5.6x |
+| 4K HEVC 10-bit SDR | 7.3x | 5.4x | 3.8x |
+| 4K HDR10, `tonemap_vaapi` to SDR | 2.94x | 2.58x | not measured |
+
+Concurrent streams, x realtime **per stream** (aggregate in brackets):
+
+| Test | N150 mini | N100 mini |
+|---|---|---|
+| 1080p HEVC, 3 streams | 4.0x (12.0x) | 3.04x (9.1x) |
+| 1080p HEVC, 5 streams | 2.41x (12.1x) | 1.80x (9.0x) |
+| 4K SDR, 3 streams | 2.70x (8.1x) | 1.78x (5.3x) |
+| 4K SDR, 5 streams | 1.62x (8.1x) | 1.06x (5.3x) |
+
+What it says:
+
+- **Both minis beat the NAS iGPU by 1.5–2x** on every clip, so moving Plex there would be faster even before any scale-out.
+- **Aggregate throughput is flat as streams are added**: the media engine is the ceiling and work is shared evenly, so
+  more streams on one iGPU just divides the same capacity. Two nodes roughly add their aggregates (about 20 x for 1080p HEVC).
+- **Against the 2x–3x playback goal** (a transcode must sustain at least the playback speed): single streams are fine
+  everywhere. 3 concurrent 1080p HEVC streams still clear 3x on both minis (the N100 only just). Missing 3x: 4K HDR
+  tone-mapping on both minis (2.9x and 2.6x), 3 concurrent 4K streams, and 5 concurrent streams of anything.
+- So raising `TranscodeCountLimit` to 5 is safe for 1080p at normal speed, but heavy 4K HDR at 2x–3x is the case a
+  single iGPU does not cover. That is the only scenario where a second node would matter.
+- The N100 mini looked partly CPU-bound under load (host CPU 83–97%, versus 46–56% on the N150), *inferred*: prefer
+  the N150 mini for Plex. Software x264 reached only 3.28x on the N150 mini and 1.17x on the N100 mini at 95–98% CPU,
+  so the GPU path is clearly doing the work.
+- **Not measured:** GPU engine utilisation (`intel_gpu_top` is not installed on the nodes), Jellyfin's OpenCL
+  tone-map filter (Plex's tone-mapping path may differ from `tonemap_vaapi`), and Plex itself (these are ffmpeg runs).
+
+### Why LAN Plex Web got the remote cap (2026-11-03)
+
+Symptom: a 4K HEVC HDR10 title (about 3.5 Mbps) played in Plex Web in Chrome from the client VLAN was re-encoded to
+1080p HEVC at about 3.7 Mbps and lagged on the NAS iGPU, although quality was "Original" and Tautulli/the dashboard said
+`location=lan`.
+
+**Cause chain (measured from the debug log and session data):** Plex Web sends `maxVideoBitrate=<WanPerStreamMaxUploadRate>`
+in the transcode start request (`autoAdjustQuality=1`, `location=lan`); PMS logs "Clipped max bitrate ... based on
+client-requested limit", and a `video.width limitation applies: 3840 > 1920` line appears with the capped bitrate; the
+video is then transcoded. With the pref at 0 (or high), the client sends no/high `maxVideoBitrate` and the same file
+direct-streams (only the 7.1 HE-AAC audio is transcoded). The subtitle (external SRT) is converted to ASS but **not**
+burned in (`decision=transcode`, `location=segments-subs`); it was never the cause.
+
+**Why Plex thinks the client is remote is unresolved.** PMS tags every request from the routed client VLAN `(WAN)` (the NAS
+has a single interface on the server VLAN, so only that subnet is `(Subnet)`), even though the client subnet is in
+LAN Networks. Same symptom is reported on the Plex forum since 2020 without a documented fix.
+
+Tried, no effect: bypassing the DSM reverse proxy (direct `IP:32400`); LAN Networks as CIDR and as netmask form (clean value,
+no parse errors); restarting PMS; `IPNetworkType` `dualstack` to `ipv4` (plex.tv still lists the server's IPv6 address as its
+public address and reports `publicAddressMatches=false`, while the client, NAS and cluster share one public IPv4);
+Plex Web quality set to Original. DNS is not blocking `*.plex.direct` (the local name resolves to the NAS).
+Not tried: removing the custom server access URL (would break remote friends), `allowedNetworks` (drops sign-in for the
+network), or giving the NAS an interface on the client VLAN.
+
+**Decision:** `WanPerStreamMaxUploadRate` = 27000 kbps. The total remote cap (27 Mbps) and one stream per user still protect
+the uplink. Everything else touched during the investigation was reverted (`LanNetworksBandwidth`, `IPNetworkType`,
+`TranscoderHEVCEncodingMode`, debug logging). Worth a Plex Web bug report if it bothers again: attach the PMS version
+(1.43.5), the `(WAN)` tag lines, the start request params and the plex.tv resources data.
+
+**Benchmark caveat:** Plex actually encodes HEVC 10-bit (`hevc_vaapi`, p010) because `TranscoderHEVCEncodingMode` is `always`,
+while the benchmark above used H.264 output, so absolute transcode speeds are optimistic. A re-run with HEVC output
+would give the realistic numbers; switching the mode to `hevc-sources` would keep H.264 sources on the cheaper H.264 path.
+
+### If picking this up again (cheapest first)
+
+- [x] Benchmark both minis (done 2026-11-02, see above). 4K HDR tone-mapping is 2.9x / 2.6x, below the 4x bar, so heavy
+      4K HDR at 2x–3x is the one case where scale-out would still help; everything else fits on one iGPU.
+- [ ] Raise `TranscodeCountLimit` (3 → 5) based on the concurrency numbers; watch Tautulli for buffering.
+- [ ] Run one stock LSIO Plex pod on a GPU node (node-local transcode `emptyDir`, `gpu.intel.com/i915: 1`, Longhorn RWO config).
+- [ ] Build the canary + backup controller only if updates start to hurt; it is useful with or without workers.
+- [ ] Only if one iGPU saturates: verify the loopback-callback assumption, then consider the shim and warm-worker design.
 
 ## Open questions
 
