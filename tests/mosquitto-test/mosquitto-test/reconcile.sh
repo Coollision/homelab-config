@@ -58,7 +58,12 @@ CONF
 mosquitto -c /tmp/bootstrap.conf >/tmp/bootstrap.log 2>&1 &
 BROKER=$!
 
-ctrl() { mosquitto_ctrl -h 127.0.0.1 -p $PORT -u "$ADMIN_USER" -P "$ADMIN_PASS" dynsec "$@" 2>&1; }
+# mosquitto_ctrl nags on stderr about the (localhost-only) plaintext connection; strip it so
+# the output only contains real results/errors.
+ctrl() {
+  mosquitto_ctrl -h 127.0.0.1 -p $PORT -u "$ADMIN_USER" -P "$ADMIN_PASS" dynsec "$@" 2>&1 |
+    grep -v -e "without encryption" -e "visible on the network"
+}
 
 # Idempotent call: "already ..." is fine, anything else is an error (counted, logged without
 # the arguments because they can carry passwords).
@@ -80,7 +85,7 @@ r() {
 
 : > /tmp/roles
 i=0
-until ctrl listClients >/dev/null 2>&1; do
+until ctrl listClients | grep -qx "$ADMIN_USER"; do
   i=$((i + 1))
   if [ $i -gt 40 ]; then
     echo "reconcile: ERROR bootstrap broker unusable (admin credential mismatch with the state file?)"
