@@ -1,0 +1,72 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+patches:
+  - target:
+      group: apps
+      version: v1
+      kind: StatefulSet
+      name: mosquitto-test
+    patch: |-
+      - op: add
+        path: /spec/template/spec/initContainers
+        value:
+        - name: mosquitto-init
+          image: eclipse-mosquitto:2.0.22-openssl
+          command: ["/bin/sh", "/mosquitto/config/reconcile.sh"]
+          volumeMounts:
+          - name: mosquitto-config
+            mountPath: /mosquitto/config
+          - name: mosquitto-test
+            mountPath: /mosquitto/data
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/0
+        value:
+          name: mosquitto-config
+          mountPath: /mosquitto/config
+      - op: replace
+        path: /spec/serviceName
+        value: mosquitto-test-mqtt
+      - op: add
+        path: /spec/template/spec/volumes/0
+        value:
+          name: mosquitto-config
+          configMap:
+            name: mosquitto-test-config
+  - target:
+      group: ""
+      version: v1
+      kind: Service
+      name: mosquitto-test-service
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: mosquitto-test-mqtt
+      - op: replace
+        path: /spec/type
+        value: LoadBalancer
+      - op: add
+        path: /spec/externalTrafficPolicy
+        value: Local
+      - op: replace
+        path: /spec/ports/0/port
+        value: 1880
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+configMapGenerator:
+  - name: mosquitto-test-config
+    files:
+      - mosquitto.conf
+      - reconcile.sh
+    literals:
+      - acl-learning=true
+      - admin-credential=admin:test-admin-pw
+      - credential1=zigbee2mqtt:test-pw-z2m
+      - credential2=homeAssistant:test-pw-ha
+      - credential3=emsChip:test-pw-ems
+      - credential4=debug:test-pw-debug
+      - credential5=shelly:test-pw-shelly
+      - credential6=moonraker:test-pw-moon
+      - credential7=norole:test-pw-norole
