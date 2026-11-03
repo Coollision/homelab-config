@@ -101,17 +101,21 @@ for t in publishClientSend publishClientReceive subscribe; do c setDefaultACLAcc
 c setDefaultACLAccess unsubscribe allow
 
 # --- roles -------------------------------------------------------------------------------
-role() { # role <user> [nolearn]
+role() { # role <user> [ro]: "ro" roles only ever get read access, also in learning mode
   CUR="r-$1"
   echo "$1" >> /tmp/roles
   c createRole "$CUR"
-  [ "${2:-}" = nolearn ] && return 0
+  # '#' would otherwise cover the admin channel: only the admin role may touch $CONTROL.
+  for t in publishClientSend publishClientReceive subscribePattern; do c addRoleACL "$CUR" $t '$CONTROL/#' deny 10; done
   if [ "$LEARNING" = "true" ]; then
-    rw '#'
+    if [ "${2:-}" = ro ]; then ro '#'; rwsend '#'; else rw '#'; fi
+  elif [ "${2:-}" = ro ]; then
+    r removeRoleACL "$CUR" publishClientSend '#'
   else
     for t in publishClientSend publishClientReceive subscribePattern unsubscribePattern; do r removeRoleACL "$CUR" $t '#'; done
   fi
 }
+rwsend() { c addRoleACL "$CUR" publishClientSend "$1" allow; }
 rw() { for t in publishClientSend publishClientReceive subscribePattern unsubscribePattern; do c addRoleACL "$CUR" $t "$1" allow; done; }
 ro() { for t in publishClientReceive subscribePattern unsubscribePattern; do c addRoleACL "$CUR" $t "$1" allow; done; }
 retire() { r removeRoleACL "r-$1" "$2" "$3"; } # retire <user> <acltype> <topic>: ACLs dropped from git must be listed here
@@ -138,7 +142,7 @@ rw 'homeassistant/#'
 role moonraker
 rw 'K1C-F1CE/#'
 
-role debug nolearn
+role debug ro
 ro '#'
 ro '$SYS/#'
 
