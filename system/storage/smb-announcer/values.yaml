@@ -28,8 +28,7 @@ config:
       name: smb-credentials
       key: ip
 
-# The list is read once at start and this cluster has no Reloader: after editing it, restart the pod
-# (`kubectl -n storage rollout restart deploy/smb-announcer`, or delete the pod).
+# The list is read once at start; the lib's checksum/configmaps pod annotation rolls the pod when it changes.
 configMaps:
   - name: smb-announcer-records
     data:

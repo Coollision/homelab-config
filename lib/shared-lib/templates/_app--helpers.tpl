@@ -107,3 +107,18 @@ hostNetwork: true
 dnsPolicy: {{ .Values.dnsPolicy }}
 {{- end -}}
 {{- end -}}
+
+{{- /* Pod-template checksums of the chart's own `configMaps` / `secrets` values (the common Helm
+checksum/config pattern): editing their content changes the pod template, so the Deployment or
+StatefulSet rolls on the next ArgoCD sync. Only emitted when the chart defines any, so charts without
+them keep an unchanged pod template. ConfigMaps/Secrets created elsewhere are not covered. */ -}}
+{{- define "shared-lib.configChecksumAnnotations" -}}
+{{- $out := dict -}}
+{{- if .Values.configMaps -}}
+{{- $_ := set $out "checksum/configmaps" (toYaml .Values.configMaps | sha256sum) -}}
+{{- end -}}
+{{- if .Values.secrets -}}
+{{- $_ := set $out "checksum/secrets" (toYaml .Values.secrets | sha256sum) -}}
+{{- end -}}
+{{- toYaml $out -}}
+{{- end -}}
