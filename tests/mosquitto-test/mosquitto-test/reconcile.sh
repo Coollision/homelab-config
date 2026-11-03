@@ -3,73 +3,113 @@
 #
 # Declarative (this file + Vault, reapplied every pod start):
 #   - the default ACL policy (deny all)
-#   - the roles r-<user> below
+#   - the ACLs of the roles r-<user> below (added when missing, removed only via `retire`)
 #   - the "managed" users: credential1..N from Vault ("user:password"), password rotated, role attached
 # Imperative (survives restarts, never touched here):
-#   - any user/role/group created at runtime with mosquitto_ctrl
+#   - any user/group created at runtime with mosquitto_ctrl, including their role assignments
+#     (roles are never deleted, so a runtime user bound to r-shelly keeps it)
 #
-# Mechanics: a throwaway broker on 127.0.0.1:1884 loads the same state file, we drive it
-# with mosquitto_ctrl, then stop it so the plugin flushes the file before the real broker starts.
+# Mechanics: a throwaway broker on 127.0.0.1:18830 loads the same state file, we drive it
+# with mosquitto_ctrl, then stop it. The plugin saves the file after every change.
+#
+# Failure policy: the broker is a single pod, so a failing reconcile must not become an outage.
+# With an existing state file we log loudly and start on the last known state; on a fresh
+# volume (nothing to fall back to) we exit non-zero so the crash-loop is visible.
 set -u
 
 DB=/mosquitto/data/dynamic-security.json
 CFG=/mosquitto/config
-PORT=1884
+PORT=18830
 
 ADMIN="$(cat $CFG/admin-credential)"
 ADMIN_USER="${ADMIN%%:*}"
 ADMIN_PASS="${ADMIN#*:}"
 
-# Break-glass: "true" gives every managed role read/write on '#' (set in kustomization.yaml).
+# "true" gives every managed role read/write on '#' (break-glass, set in kustomization.yaml).
 LEARNING="$(cat $CFG/acl-learning 2>/dev/null || echo false)"
 
-[ -f "$DB" ] || mosquitto_ctrl dynsec init "$DB" "$ADMIN_USER" "$ADMIN_PASS" || exit 1
+HAD_DB=false
+[ -f "$DB" ] && HAD_DB=true
+ERRORS=0
+
+finish() { # finish <code-for-fresh-volume>
+  [ -n "${BROKER:-}" ] && { kill "$BROKER" 2>/dev/null; wait "$BROKER" 2>/dev/null; }
+  [ -f "$DB" ] && { chown 1883:1883 "$DB"; chmod 0600 "$DB"; }
+  if [ "$ERRORS" -gt 0 ]; then
+    echo "reconcile: FINISHED WITH $ERRORS ERROR(S) (had_db=$HAD_DB)"
+    $HAD_DB && exit 0
+    exit "$1"
+  fi
+  echo "reconcile: done ($(grep -c . /tmp/roles) roles, learning=$LEARNING)"
+  exit 0
+}
+
+if [ "$HAD_DB" = false ]; then
+  mosquitto_ctrl dynsec init "$DB" "$ADMIN_USER" "$ADMIN_PASS" || { echo "reconcile: dynsec init failed"; exit 1; }
+fi
 chown 1883:1883 "$DB" # broker drops to the mosquitto user and must rewrite this file
 
-cat > /tmp/bootstrap.conf <<EOF
+cat > /tmp/bootstrap.conf <<CONF
 listener $PORT 127.0.0.1
 allow_anonymous false
 plugin /usr/lib/mosquitto_dynamic_security.so
 plugin_opt_config_file $DB
-EOF
+CONF
 mosquitto -c /tmp/bootstrap.conf >/tmp/bootstrap.log 2>&1 &
 BROKER=$!
 
 ctrl() { mosquitto_ctrl -h 127.0.0.1 -p $PORT -u "$ADMIN_USER" -P "$ADMIN_PASS" dynsec "$@" 2>&1; }
 
-# Tolerate "already exists" (idempotency); print anything else without echoing arguments
-# (they can carry passwords).
+# Idempotent call: "already ..." is fine, anything else is an error (counted, logged without
+# the arguments because they can carry passwords).
 c() {
   out="$(ctrl "$@")"
   case "$out" in
-    "" | *"already exists"* | *"not found"*) ;;
-    *) echo "reconcile: $1 $2 -> $out" ;;
+    "" | *"already"*) ;;
+    *) echo "reconcile: ERROR $1 $2 -> $out"; ERRORS=$((ERRORS + 1)) ;;
+  esac
+}
+# Removal call: "not found" is fine.
+r() {
+  out="$(ctrl "$@")"
+  case "$out" in
+    "" | *"not found"* | *"does not exist"*) ;;
+    *) echo "reconcile: ERROR $1 $2 -> $out"; ERRORS=$((ERRORS + 1)) ;;
   esac
 }
 
+: > /tmp/roles
 i=0
 until ctrl listClients >/dev/null 2>&1; do
   i=$((i + 1))
-  [ $i -gt 40 ] && { echo "reconcile: bootstrap broker never came up"; cat /tmp/bootstrap.log; exit 1; }
+  if [ $i -gt 40 ]; then
+    echo "reconcile: ERROR bootstrap broker unusable (admin credential mismatch with the state file?)"
+    cat /tmp/bootstrap.log
+    ERRORS=$((ERRORS + 1))
+    finish 1
+  fi
   sleep 0.5
 done
 
 # --- default policy: nothing allowed unless a role says so -------------------------------
-for t in publishClientToBroker publishBrokerToClient subscribe; do c setDefaultACLAccess $t deny; done
+for t in publishClientSend publishClientReceive subscribe; do c setDefaultACLAccess $t deny; done
 c setDefaultACLAccess unsubscribe allow
 
 # --- roles -------------------------------------------------------------------------------
-: > /tmp/roles
-role() { # role <user>: recreate r-<user> from scratch so removed ACLs actually disappear
+role() { # role <user> [nolearn]
   CUR="r-$1"
   echo "$1" >> /tmp/roles
-  c deleteRole "$CUR"
   c createRole "$CUR"
-  [ "$LEARNING" = "true" ] && rw '#'
-  return 0
+  [ "${2:-}" = nolearn ] && return 0
+  if [ "$LEARNING" = "true" ]; then
+    rw '#'
+  else
+    for t in publishClientSend publishClientReceive subscribePattern unsubscribePattern; do r removeRoleACL "$CUR" $t '#'; done
+  fi
 }
-rw() { for t in publishClientToBroker publishBrokerToClient subscribePattern unsubscribePattern; do c addRoleACL "$CUR" $t "$1" allow; done; }
-ro() { for t in publishBrokerToClient subscribePattern unsubscribePattern; do c addRoleACL "$CUR" $t "$1" allow; done; }
+rw() { for t in publishClientSend publishClientReceive subscribePattern unsubscribePattern; do c addRoleACL "$CUR" $t "$1" allow; done; }
+ro() { for t in publishClientReceive subscribePattern unsubscribePattern; do c addRoleACL "$CUR" $t "$1" allow; done; }
+retire() { r removeRoleACL "r-$1" "$2" "$3"; } # retire <user> <acltype> <topic>: ACLs dropped from git must be listed here
 
 role zigbee2mqtt
 rw 'zigbee2mqtt/#'
@@ -81,8 +121,8 @@ rw 'zigbee2mqtt/#'
 rw 'shellies/#'
 rw 'ems-esp/#'
 
-# One shared account for all Gen1 Shellies. With per-device users (mosquitto_ctrl createClient)
-# this can become 'shellies/%u/#' + 'shellies/announce' + 'shellies/command'.
+# One shared account for all Gen1 Shellies. With per-device users (mosquitto_ctrl createClient
+# + addClientRole <user> r-shelly) this can later become per-device topics.
 role shelly
 rw 'shellies/#'
 
@@ -93,7 +133,7 @@ rw 'homeassistant/#'
 role moonraker
 rw 'K1C-F1CE/#'
 
-role debug
+role debug nolearn
 ro '#'
 ro '$SYS/#'
 
@@ -105,9 +145,9 @@ for f in "$CFG"/credential*; do
   [ -n "$user" ] || continue
   out="$(ctrl createClient "$user" -p "$pass")"
   case "$out" in
-    *"already exists"*) c setClientPassword "$user" "$pass" ;;
+    *"already"*) c setClientPassword "$user" "$pass" ;;
     "") ;;
-    *) echo "reconcile: createClient $user -> $out" ;;
+    *) echo "reconcile: ERROR createClient $user -> $out"; ERRORS=$((ERRORS + 1)) ;;
   esac
   if grep -qx "$user" /tmp/roles; then
     c addClientRole "$user" "r-$user"
@@ -116,8 +156,4 @@ for f in "$CFG"/credential*; do
   fi
 done
 
-kill "$BROKER"
-wait "$BROKER" 2>/dev/null
-chown 1883:1883 "$DB"
-chmod 0600 "$DB"
-echo "reconcile: done ($(grep -c . /tmp/roles) roles, learning=$LEARNING)"
+finish 1

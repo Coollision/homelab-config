@@ -14,6 +14,9 @@ patches:
         - name: mosquitto-init
           image: eclipse-mosquitto:2.0.22-openssl
           command: ["/bin/sh", "/mosquitto/config/reconcile.sh"]
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 200m, memory: 64Mi}
           volumeMounts:
           - name: mosquitto-config
             mountPath: /mosquitto/config
@@ -52,11 +55,9 @@ patches:
         path: /spec/ports/0/port
         value: 1880
 
-generatorOptions:
-  disableNameSuffixHash: true
-
 configMapGenerator:
   - name: mosquitto-test-config
+    namespace: mosquitto-test
     files:
       - mosquitto.conf
       - reconcile.sh
