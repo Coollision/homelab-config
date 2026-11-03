@@ -1,0 +1,11 @@
+# The route also exposes the dynamic-security admin login, so only the admin subnet may use it
+# for now (widen the Vault value when TLS-capable devices on other VLANs should use the route).
+apiVersion: traefik.io/v1alpha1
+kind: MiddlewareTCP
+metadata:
+  name: mosquitto-admin-allow
+  namespace: smarthome
+spec:
+  ipAllowList:
+    sourceRange:
+      - <secret:kv/data/workload/smarthome/mosquitto~admin-source-range>
