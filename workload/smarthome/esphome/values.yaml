@@ -84,3 +84,14 @@ probes:
     tcpSocket:
       port: web
     periodSeconds: 5
+
+affinity:
+  node:
+    # Pin firmware builds to a mini (amd64): the esp-idf toolchain cached on the
+    # config volume is arch-specific, so hopping to the Pi broke builds with
+    # x86 binaries, and Pi compiles are far slower anyway.
+    required:
+      - matchExpressions:
+          - key: type
+            operator: In
+            values: ["mini"]
