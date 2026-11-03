@@ -31,6 +31,10 @@ patches:
         path: /spec/serviceName
         value: mosquitto-test-mqtt
       - op: add
+        path: /spec/template/spec/nodeSelector
+        value:
+          kubernetes.io/hostname: worker-silver
+      - op: add
         path: /spec/template/spec/volumes/0
         value:
           name: mosquitto-config
