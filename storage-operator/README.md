@@ -51,7 +51,7 @@ Exposes Longhorn volumes over SMB from a single `smb-server` Deployment.
   only exception is a *direct* (migration) share, which needs a pod volume and therefore a roll.
 - **Bonjour announcer.** `storage-operator announce` publishes a configured list of records
   (`_smb._tcp` + `_device-info._tcp` for the smb-server LoadBalancer IP) so Finder lists them under
-  Network. Same image, no Kubernetes access; run it on an interface in the clients' broadcast
+  Network, and (`wsdName`) over WS-Discovery so Windows Explorer lists them too. Same image, no Kubernetes access; run it on an interface in the clients' broadcast
   domain (a Multus macvlan, not hostNetwork). See API.md.
 
 Full reference: [API.md](API.md). Development, golden files and the dry run: [DEV.md](DEV.md).
