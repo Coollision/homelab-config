@@ -12,7 +12,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"go.uber.org/zap/zapcore"
 	corev1 "k8s.io/api/core/v1"
@@ -32,6 +34,7 @@ import (
 
 	"homelab/storage-operator/controllers/pvreclaimer"
 	"homelab/storage-operator/controllers/smb"
+	"homelab/storage-operator/internal/announce"
 	"homelab/storage-operator/internal/config"
 )
 
@@ -58,7 +61,47 @@ func logLevelFromEnv() zapcore.Level {
 	return zapcore.InfoLevel
 }
 
+// runAnnounce is the `announce` subcommand: a standalone Bonjour publisher for a list of static
+// records (see internal/announce). It shares this image so the SMB stack ships as one artifact;
+// it needs no Kubernetes access, only an interface in the clients' broadcast domain (a Multus
+// macvlan, not hostNetwork).
+func runAnnounce(args []string) int {
+	fs := flag.NewFlagSet("announce", flag.ExitOnError)
+	var file, ifaces string
+	fs.StringVar(&file, "config", "/etc/announce/records.yaml", "records file; ${VAR} references are expanded from the environment")
+	fs.StringVar(&ifaces, "interfaces", "", "comma-separated interface names to announce on (default: all multicast interfaces)")
+	_ = fs.Parse(args)
+	logf := func(format string, a ...any) { fmt.Fprintf(os.Stderr, "announce: "+format+"\n", a...) }
+
+	data, err := os.ReadFile(file)
+	if err != nil {
+		logf("fatal: %v", err)
+		return 1
+	}
+	records, err := announce.Parse(data, os.Getenv)
+	if err != nil {
+		logf("fatal: %v", err)
+		return 1
+	}
+	var names []string
+	for _, n := range strings.Split(ifaces, ",") {
+		if n = strings.TrimSpace(n); n != "" {
+			names = append(names, n)
+		}
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := announce.Run(ctx, records, names, logf); err != nil {
+		logf("fatal: %v", err)
+		return 1
+	}
+	return 0
+}
+
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "announce" {
+		os.Exit(runAnnounce(os.Args[2:]))
+	}
 	var (
 		metricsAddr       string
 		probeAddr         string

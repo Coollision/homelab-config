@@ -76,8 +76,8 @@ Volume with `status.shareEndpoint` → NFS share; without → direct CSI share v
 | PVC (output) | `smb-operator/share-path` | `//<LB IP>/<share>` when active |
 | PVC (output) | `smb-operator/last-update` | `YYYY-MM-DD HH:MM:SS UTC`, every reconcile |
 | children | operator Deployment labels + `managed-by: smb-operator` | |
-| smb-server Deployment + pod template | `smb-operator/version: "2.1"`, `shares-count`, `share-list` | |
-| smb-server Deployment only | `smb-operator/last-updated` | |
+| smb-server Deployment + pod template | `smb-operator/version: "2.2"` (the only one; share-specific values must never be in the template) | |
+| smb-server Deployment only | `smb-operator/last-updated`, `shares-count`, `share-list` | |
 | migrate-* PV/PVC | `smb-operator/migration: "true"` | |
 
 ## Events (core/v1, component `smb-operator`, name `<object>.<unix seconds>`)
@@ -125,3 +125,25 @@ Go port of the `pv-reclaimer` shell loop. Defaults reproduce it exactly.
 - **RBAC** (ClusterRole `<fullname>-pv-reclaimer`, only when `pvReclaimer.enabled`):
   `persistentvolumes` get/list/watch/patch; `events` (core and events.k8s.io) create/patch.
 - **Not ported**: `WEBHOOK_URL` (never read by the shell loop).
+
+## `announce` subcommand (Bonjour publisher)
+
+`/manager announce [--config records.yaml] [--interfaces net1,...]`: standalone, no Kubernetes
+access, no leader election. Publishes a *proxy* announcement per record (the A record is the
+record's IP, not the pod's) and withdraws them on SIGTERM. It is a publisher of a static list,
+never a reflector: it does not re-publish what it hears.
+
+```yaml
+records:
+  - instance: Homelab Storage   # Finder display name
+    host: smb-server            # mDNS host label (<host>.local), one DNS label
+    ip: ${SMB_LOADBALANCER_IP}  # IPv4; ${VAR} is expanded from the environment (keeps IPs out of git)
+    port: 445
+    type: _smb._tcp             # optional, default _smb._tcp
+    txt: []                     # optional key=value pairs
+    model: Xserve               # optional: adds _device-info (Finder icon)
+```
+
+Unknown fields, an unset `${VAR}`, a non-IPv4 `ip` or a bad `host`/`type` fail at start-up. Set
+`--interfaces` to the macvlan leg (`net1`) so nothing leaks onto the pod network (default: all).
+mDNS is L2: the pod needs a leg in the broadcast domain the clients browse from.

@@ -30,7 +30,7 @@ const (
 	AnnotPVCStatus        = "smb-operator/status"
 	AnnotPVCSharePath     = "smb-operator/share-path"
 	AnnotPVCLastUpdate    = "smb-operator/last-update"
-	TemplateVersion       = "2.1" // bumping this rolls the smb-server pod
+	TemplateVersion       = "2.2" // bumping this rolls the smb-server pod
 	CredentialsSecret     = "smb-credentials"
 	MigrationStorageClass = "longhorn"
 	TimeFormat            = "2006-01-02 15:04:05 UTC"
@@ -58,12 +58,11 @@ func shareList(ss []shares.Share) string {
 	return strings.Join(names, ",")
 }
 
-func templateAnnotations(ss []shares.Share) map[string]string {
-	return map[string]string{
-		AnnotVersion:     TemplateVersion,
-		AnnotSharesCount: strconv.Itoa(len(ss)),
-		AnnotShareList:   shareList(ss),
-	}
+// templateAnnotations is what the pod template carries. It must not depend on the share list:
+// anything share-specific in the template rolls the pod (and drops SMB clients) on every add or
+// remove. The share list lives on the Deployment metadata only.
+func templateAnnotations() map[string]string {
+	return map[string]string{AnnotVersion: TemplateVersion}
 }
 
 // Deployment renders the smb-server Deployment (generate_deployment). now feeds the
@@ -85,8 +84,8 @@ func Deployment(cfg *config.Config, ss []shares.Share, operatorLabels map[string
 	}
 
 	mounts := []corev1.VolumeMount{
-		{Name: "smb-config", MountPath: "/etc/samba/smb.conf", SubPath: SMBConfKey},
-		// Whole directory, never subPath: subPath ConfigMaps are never updated in a running pod.
+		// Whole directories, never subPath: subPath ConfigMaps are never updated in a running pod.
+		{Name: "smb-config", MountPath: SMBConfDir, ReadOnly: true},
 		{Name: "smb-mounts", MountPath: MountTableDir, ReadOnly: true},
 	}
 	volumes := []corev1.Volume{
@@ -118,7 +117,7 @@ func Deployment(cfg *config.Config, ss []shares.Share, operatorLabels map[string
 		Name:            "samba",
 		Image:           cfg.SMBImage,
 		SecurityContext: &corev1.SecurityContext{Privileged: ptr.To(true)},
-		Command:         []string{"/bin/bash", "-c", StartupScript(cfg, ss)},
+		Command:         []string{"/bin/bash", "-c", StartupScript(cfg)},
 		Env: []corev1.EnvVar{{
 			Name: "SMB_PASSWORD",
 			ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
@@ -150,11 +149,13 @@ func Deployment(cfg *config.Config, ss []shares.Share, operatorLabels map[string
 			InitialDelaySeconds: 15, PeriodSeconds: 10, TimeoutSeconds: 3, FailureThreshold: 3,
 		},
 		Lifecycle: &corev1.Lifecycle{PreStop: &corev1.LifecycleHandler{
-			Exec: &corev1.ExecAction{Command: []string{"/bin/bash", "-c", PreStopScript(ss)}},
+			Exec: &corev1.ExecAction{Command: []string{"/bin/bash", "-c", PreStopScript()}},
 		}},
 	}
 
-	depAnnots := templateAnnotations(ss)
+	depAnnots := templateAnnotations()
+	depAnnots[AnnotSharesCount] = strconv.Itoa(len(ss))
+	depAnnots[AnnotShareList] = shareList(ss)
 	depAnnots[AnnotLastUpdated] = now.UTC().Format(TimeFormat)
 
 	return &appsv1.Deployment{
@@ -173,7 +174,7 @@ func Deployment(cfg *config.Config, ss []shares.Share, operatorLabels map[string
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      map[string]string{"app": app},
-					Annotations: templateAnnotations(ss),
+					Annotations: templateAnnotations(),
 				},
 				Spec: corev1.PodSpec{
 					Containers:                    []corev1.Container{container},

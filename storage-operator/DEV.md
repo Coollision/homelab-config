@@ -8,6 +8,7 @@ controllers/smb/           SMB controller (reconciler, predicates, metrics, setu
 controllers/pvreclaimer/   pv-reclaimer controller (options, reconciler, metrics, setup)
 internal/config/           config.yaml parsing (pure)
 internal/shares/           Share model + discovery decisions (pure)
+internal/announce/         Bonjour publisher behind `main.go announce`
 internal/render/           smb.conf, mounts.tsv, scripts, Deployment/Service/PV/PVC (pure)
 internal/render/scripts/   mount-reconciler.sh.tmpl (go:embed, delimiters <% %>)
 internal/render/testdata/  golden files captured from the Python operator
@@ -38,6 +39,10 @@ helm template smb-operator chart | grep -q -- '--owner-deployment=smb-operator$'
 
 ## Refreshing golden files
 
+`startup.sh`, `prestop.sh` and `deployment.json` are **Go-owned** now (the pod template became
+share-independent, which the Python operator never was); regenerate them with
+`UPDATE_GOLDEN=1 go test ./internal/render/` and review the diff. `TestShareChangeKeepsPodTemplate`
+guards the invariant. `smb.conf`, `mounts.tsv` and the created objects are still Python-captured.
 The harness stubs `kubernetes` and `yaml`, so it needs no packages:
 
 ```bash

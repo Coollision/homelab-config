@@ -22,6 +22,11 @@ const (
 	MountReconcilerPath = "/usr/local/bin/smb-mount-reconciler.sh"
 	SMBConfigMap        = "smb-config"
 	SMBConfKey          = "smb.conf"
+	// SMBConfDir holds the smb-config ConfigMap as a whole-directory mount (never subPath, which
+	// kubelet never refreshes). smbd reads it through the /etc/samba/smb.conf symlink the
+	// startup script creates, so an updated smb.conf reaches the running smbd without a pod roll.
+	SMBConfDir  = "/etc/smb-conf"
+	SMBConfPath = SMBConfDir + "/" + SMBConfKey
 )
 
 const vetoFiles = "/.DS_Store/._*/.Spotlight-V100/.TemporaryItems/.Trashes/.fseventsd/Thumbs.db/desktop.ini/$RECYCLE.BIN/System Volume Information/lost+found/"
@@ -111,6 +116,7 @@ func MountReconciler(cfg *config.Config) string {
 	var b bytes.Buffer
 	err := reconcilerTemplate.Execute(&b, map[string]any{
 		"Table":    MountTablePath,
+		"Conf":     SMBConfPath,
 		"Opts":     cfg.NFSMountOptions,
 		"Interval": cfg.MountReconcileInterval,
 	})
@@ -120,15 +126,21 @@ func MountReconciler(cfg *config.Config) string {
 	return b.String()
 }
 
-// StartupScript renders the samba container command (generate_startup_script). It contains no
-// NFS endpoints by design, so attach/detach never changes the pod spec.
-func StartupScript(cfg *config.Config, ss []shares.Share) string {
+// StartupScript renders the samba container command (generate_startup_script). It contains
+// neither share names nor NFS endpoints by design: the mount reconciler creates and mounts every
+// share path from the mount table, and smbd re-reads smb.conf on request. Adding or removing a
+// share therefore never changes the pod template, so it never restarts smbd or drops clients.
+func StartupScript(cfg *config.Config) string {
 	u := cfg.SMBUsername
 	lines := []string{
 		"#!/bin/bash",
 		"set -e",
 		"echo 'Starting SMB server initialization...'",
 		"echo ''",
+		"",
+		"# smb.conf lives in a ConfigMap directory mount so updates reach the running smbd",
+		"mkdir -p /etc/samba",
+		fmt.Sprintf("ln -sf %s /etc/samba/smb.conf", SMBConfPath),
 		"",
 		"# Create SMB user for authentication",
 		fmt.Sprintf("useradd -M -s /usr/sbin/nologin %s 2>/dev/null || true", u),
@@ -137,17 +149,8 @@ func StartupScript(cfg *config.Config, ss []shares.Share) string {
 		"echo ''",
 		"",
 	}
-	for _, s := range ss {
-		if s.MountType == shares.MountDirect {
-			lines = append(lines, fmt.Sprintf("echo 'Direct CSI mount ready: %s'", s.Name))
-		} else {
-			lines = append(lines, fmt.Sprintf("echo 'NFS share (reconciler-managed): %s'", s.Name))
-		}
-		lines = append(lines, "mkdir -p "+s.Path)
-	}
-	lines = append(lines, "echo ''", "")
 	lines = append(lines,
-		"# Install and start the NFS mount reconciler",
+		"# Install and start the NFS mount reconciler (also reloads smbd when smb.conf changes)",
 		fmt.Sprintf("cat > %s <<'SMB_OPERATOR_RECONCILER_EOF'", MountReconcilerPath),
 		strings.TrimRight(MountReconciler(cfg), "\n"),
 		"SMB_OPERATOR_RECONCILER_EOF",
@@ -174,19 +177,20 @@ func StartupScript(cfg *config.Config, ss []shares.Share) string {
 	return strings.Join(lines, "\n")
 }
 
-// PreStopScript renders the preStop hook (generate_prestop_script).
-func PreStopScript(ss []shares.Share) string {
-	lines := []string{"echo 'Shutting down gracefully...'", "sleep 5"}
-	for _, s := range ss {
-		if s.MountType == shares.MountDirect {
-			continue
-		}
-		p := s.Path
-		lines = append(lines,
-			fmt.Sprintf("echo 'Unmounting %s'", p),
-			fmt.Sprintf("timeout 5 umount -f %s 2>/dev/null || umount -l %s 2>/dev/null || echo '  already gone: %s'", p, p, p),
-		)
+// PreStopScript renders the preStop hook (generate_prestop_script). It unmounts whatever NFS
+// shares are mounted under /shares at that moment, so it does not depend on the share list.
+func PreStopScript() string {
+	lines := []string{
+		"echo 'Shutting down gracefully...'",
+		"sleep 5",
+		"while read -r _ mp fstype _; do",
+		"  case \"$fstype\" in nfs*) ;; *) continue ;; esac",
+		"  case \"$mp\" in /shares/*) ;; *) continue ;; esac",
+		"  echo \"Unmounting $mp\"",
+		"  timeout 5 umount -f \"$mp\" 2>/dev/null || umount -l \"$mp\" 2>/dev/null || echo \"  already gone: $mp\"",
+		"done < /proc/self/mounts",
+		"echo 'preStop complete'",
+		"exit 0",
 	}
-	lines = append(lines, "echo 'preStop complete'", "exit 0")
 	return strings.Join(lines, "\n")
 }

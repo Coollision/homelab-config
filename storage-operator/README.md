@@ -43,6 +43,16 @@ Exposes Longhorn volumes over SMB from a single `smb-server` Deployment.
   annotations on the PVCs, core/v1 Events.
 - RWX NFS endpoints never appear in the pod spec; an in-pod bash reconciler mounts them from the
   `smb-mounts` table, so a Longhorn detach (e.g. scale-to-zero) does not restart SMB.
+- **Adding or removing a share does not restart smbd.** The pod template is share-independent:
+  `smb.conf` is a whole-directory ConfigMap mount (symlinked to `/etc/samba/smb.conf`), the
+  reconciler creates and mounts every share path from the table and runs
+  `smbcontrol smbd reload-config` when `smb.conf` changes. Connected clients (e.g. a Mac with
+  mounted shares) stay up. Expect up to ~1-2 minutes for kubelet to refresh the ConfigMaps. The
+  only exception is a *direct* (migration) share, which needs a pod volume and therefore a roll.
+- **Bonjour announcer.** `storage-operator announce` publishes a configured list of records
+  (`_smb._tcp` + `_device-info._tcp` for the smb-server LoadBalancer IP) so Finder lists them under
+  Network. Same image, no Kubernetes access; run it on an interface in the clients' broadcast
+  domain (a Multus macvlan, not hostNetwork). See API.md.
 
 Full reference: [API.md](API.md). Development, golden files and the dry run: [DEV.md](DEV.md).
 

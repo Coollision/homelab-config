@@ -23,10 +23,10 @@ func TestShellcheck(t *testing.T) {
 		recon := filepath.Join(dir, cn+".reconciler.sh")
 		_ = os.WriteFile(recon, []byte(MountReconciler(cfg)), 0o600)
 		files = append(files, recon)
-		for fn, ss := range fixtures {
+		for fn := range fixtures {
 			base := filepath.Join(dir, cn+"__"+fn)
-			_ = os.WriteFile(base+".startup.sh", []byte(StartupScript(cfg, ss)), 0o600)
-			_ = os.WriteFile(base+".prestop.sh", []byte("#!/bin/bash\n"+PreStopScript(ss)), 0o600)
+			_ = os.WriteFile(base+".startup.sh", []byte(StartupScript(cfg)), 0o600)
+			_ = os.WriteFile(base+".prestop.sh", []byte("#!/bin/bash\n"+PreStopScript()), 0o600)
 			files = append(files, base+".startup.sh", base+".prestop.sh")
 		}
 	}
