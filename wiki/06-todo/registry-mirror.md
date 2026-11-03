@@ -48,8 +48,8 @@ Open questions:
 
 ## Rollout notes
 
-- Changing `registries.yaml` restarts k3s on that node, which kills all pods on it (`KillMode=control-group`).
-  Drain one node at a time and wait for Longhorn to be healthy in between.
+- Changing `registries.yaml` restarts k3s on that node; with `KillMode=process` that leaves running pods alone, so no drain is needed.
+  Still go one node at a time and wait for Ready and healthy Longhorn in between.
 - k3s falls back to the original upstream if a mirror is down; verify per registry.
 - Rotate the ghcr/GitLab tokens when they leave the nodes.
 - Never print the diff of `registries.yaml`: it contains the registry tokens.

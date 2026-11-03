@@ -582,5 +582,11 @@ Three separate causes surfaced while moving the nodes to systemd-networkd ([Netw
   `trim_blocks`), gluing it onto `ExecStart` as a stray argument. systemd ignored it and used `control-group`, so restarting
   `k3s` / `k3s-node` killed all pods on the node. Reboots and `cluster_update` were unaffected because they drain first.
 - **Fix:** the template is split correctly, the live units were re-templated, and the k3s roles assert a standalone
-  `KillMode=process` line. Still treat any k3s restart as a drained, one-node-at-a-time operation and wait for Longhorn to be
-  healthy before the next node. `systemctl show k3s-node -p KillMode` shows what is actually in effect.
+  `KillMode=process` line.
+- **Rule now:** with `KillMode=process` a plain `systemctl restart k3s|k3s-node` only restarts the k3s process; containerd shims
+  and their containers (Longhorn instance-managers included) keep running, so **no cordon/drain is needed for a k3s-only
+  restart** (config, `registries.yaml`, k3s binary). Verified 2026-11-03: all nodes report `KillMode=process`, and on the
+  server node a container shim started before the last k3s restart is still alive. Still drain for reboots, kernel/OS
+  upgrades and anything that touches iscsid/network. Before relying on it, check `systemctl show k3s-node -p KillMode`
+  (`k3s` on servers); if it says `control-group`, the unit has drifted and a restart kills every pod. Restart one node at a
+  time and wait for Ready plus healthy Longhorn volumes before the next.
