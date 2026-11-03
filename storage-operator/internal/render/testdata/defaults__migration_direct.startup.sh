@@ -3,21 +3,22 @@ set -e
 echo 'Starting SMB server initialization...'
 echo ''
 
+# smb.conf lives in a ConfigMap directory mount so updates reach the running smbd
+mkdir -p /etc/samba
+ln -sf /etc/smb-conf/smb.conf /etc/samba/smb.conf
+
 # Create SMB user for authentication
 useradd -M -s /usr/sbin/nologin smbuser 2>/dev/null || true
 echo -e "$SMB_PASSWORD\n$SMB_PASSWORD" | smbpasswd -a -s smbuser
 echo 'SMB user smbuser configured'
 echo ''
 
-echo 'Direct CSI mount ready: cfg'
-mkdir -p /shares/cfg
-echo ''
-
-# Install and start the NFS mount reconciler
+# Install and start the NFS mount reconciler (also reloads smbd when smb.conf changes)
 cat > /usr/local/bin/smb-mount-reconciler.sh <<'SMB_OPERATOR_RECONCILER_EOF'
 #!/bin/bash
 # Managed by smb-operator. Reconciles /shares/* NFS mounts against the mount table.
 TABLE=/etc/smb-mounts/mounts.tsv
+CONF=/etc/smb-conf/smb.conf
 OPTS='vers=4.2,noresvport,soft,timeo=50,retrans=2'
 INTERVAL=15
 
@@ -51,6 +52,8 @@ in_table() {
 # Bring one mount point in line with its desired endpoint ('' means keep it unmounted).
 reconcile_one() {
   local mpath="$1" want="$2" have
+  # Every share path is created here, not at pod start, so shares added later need no pod roll.
+  mkdir -p "$mpath"
   have="$(current_mount "$mpath")"
 
   [ "$want" = "$have" ] && return 0
@@ -69,11 +72,28 @@ reconcile_one() {
     return 0
   fi
 
-  mkdir -p "$mpath"
   if timeout 30 mount -t nfs -o "$OPTS" "$want" "$mpath"; then
     log "mounted $want -> $mpath"
   else
     log "mount failed: $want -> $mpath (will retry in ${INTERVAL}s)"
+  fi
+}
+
+# Tell the running smbd to re-read smb.conf when the ConfigMap content changes. Existing client
+# connections to other shares stay up (a reload, not a restart). The first pass only records the
+# checksum: smbd is not running yet and reads the file itself on start.
+LAST_CONF_SUM=""
+reload_conf_if_changed() {
+  local sum
+  sum="$(cksum < "$CONF" 2>/dev/null)" || return 0
+  [ -n "$sum" ] && [ "$sum" != "$LAST_CONF_SUM" ] || return 0
+  if [ -z "$LAST_CONF_SUM" ]; then
+    LAST_CONF_SUM="$sum"
+  elif smbcontrol smbd reload-config 2>/dev/null; then
+    LAST_CONF_SUM="$sum"
+    log "smb.conf changed; smbd reloaded"
+  else
+    log "smb.conf changed; smbd reload failed (will retry in ${INTERVAL}s)"
   fi
 }
 
@@ -98,6 +118,7 @@ while true; do
   else
     log "mount table $TABLE not readable yet"
   fi
+  reload_conf_if_changed
   sleep "$INTERVAL"
 done
 SMB_OPERATOR_RECONCILER_EOF

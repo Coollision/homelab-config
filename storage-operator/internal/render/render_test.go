@@ -44,6 +44,11 @@ func loadJSON(t *testing.T, name string, v any) {
 	}
 }
 
+// updateGolden (UPDATE_GOLDEN=1) rewrites the golden files this package owns. The Python capture
+// harness is frozen: startup/prestop scripts and Deployments diverged from it on purpose (no
+// share-specific pod template, see TestShareChangeKeepsPodTemplate), so Go is now their source.
+var updateGolden = os.Getenv("UPDATE_GOLDEN") != ""
+
 func golden(t *testing.T, name string) string {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join("testdata", name))
@@ -51,6 +56,13 @@ func golden(t *testing.T, name string) string {
 		t.Fatal(err)
 	}
 	return string(b)
+}
+
+func writeGolden(t *testing.T, name, content string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join("testdata", name), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func loadConfigs(t *testing.T) map[string]*config.Config {
@@ -122,8 +134,12 @@ func TestGoldenText(t *testing.T) {
 			t.Run(base, func(t *testing.T) {
 				diffText(t, base+".smb.conf", SMBConf(cfg, ss), golden(t, base+".smb.conf"))
 				diffText(t, base+".mounts.tsv", MountTable(ss), golden(t, base+".mounts.tsv"))
-				diffText(t, base+".startup.sh", StartupScript(cfg, ss), golden(t, base+".startup.sh"))
-				diffText(t, base+".prestop.sh", PreStopScript(ss), golden(t, base+".prestop.sh"))
+				if updateGolden {
+					writeGolden(t, base+".startup.sh", StartupScript(cfg))
+					writeGolden(t, base+".prestop.sh", PreStopScript())
+				}
+				diffText(t, base+".startup.sh", StartupScript(cfg), golden(t, base+".startup.sh"))
+				diffText(t, base+".prestop.sh", PreStopScript(), golden(t, base+".prestop.sh"))
 			})
 		}
 	}
@@ -137,12 +153,18 @@ func TestGoldenDeployment(t *testing.T) {
 		for fn, ss := range fixtures {
 			base := cn + "__" + fn
 			t.Run(base, func(t *testing.T) {
-				var want appsv1.Deployment
-				loadJSON(t, base+".deployment.json", &want)
 				got, err := Deployment(cfg, ss, testOperatorLabels, now)
 				if err != nil {
 					t.Fatal(err)
 				}
+				if updateGolden {
+					d := got.DeepCopy()
+					delete(d.Annotations, AnnotLastUpdated)
+					b, _ := json.MarshalIndent(d, "", "  ")
+					writeGolden(t, base+".deployment.json", string(b))
+				}
+				var want appsv1.Deployment
+				loadJSON(t, base+".deployment.json", &want)
 				if v := got.Annotations[AnnotLastUpdated]; v != "2026-01-02 03:04:05 UTC" {
 					t.Errorf("last-updated = %q", v)
 				}
@@ -226,6 +248,54 @@ func TestResourceQuantityFormatting(t *testing.T) {
 		}
 		if q != want {
 			t.Errorf("%s = %s, want %s (apiserver canonical form)", k, q, want)
+		}
+	}
+}
+
+// Adding or removing a share must not change the pod template, or smbd restarts and every SMB
+// client loses its session. Only direct (pod-volume) shares may, since kubelet needs the volume.
+func TestShareChangeKeepsPodTemplate(t *testing.T) {
+	cfg := loadConfigs(t)["live"]
+	nfs := func(names ...string) []shares.Share {
+		var out []shares.Share
+		for _, n := range names {
+			out = append(out, shares.Share{Name: n, Path: "/shares/" + n, MountType: shares.MountNFS, Attached: true})
+		}
+		return out
+	}
+	now := time.Now()
+	base, err := Deployment(cfg, nfs("a", "b"), testOperatorLabels, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, ss := range map[string][]shares.Share{
+		"add":    nfs("a", "b", "c"),
+		"remove": nfs("a"),
+		"empty":  nil,
+	} {
+		got, err := Deployment(cfg, ss, testOperatorLabels, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !equality.Semantic.DeepEqual(base.Spec.Template, got.Spec.Template) {
+			gy, _ := yaml.Marshal(got.Spec.Template)
+			wy, _ := yaml.Marshal(base.Spec.Template)
+			diffText(t, name+" pod template", string(gy), string(wy))
+		}
+		if got.Annotations[AnnotShareList] == base.Annotations[AnnotShareList] && name != "empty" {
+			t.Errorf("%s: Deployment share-list annotation did not change", name)
+		}
+	}
+}
+
+func TestPodTemplateHasNoSubPathConfig(t *testing.T) {
+	d, err := Deployment(loadConfigs(t)["live"], nil, nil, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range d.Spec.Template.Spec.Containers[0].VolumeMounts {
+		if m.SubPath != "" {
+			t.Errorf("mount %s uses subPath %q: ConfigMap updates would never reach the pod", m.Name, m.SubPath)
 		}
 	}
 }
