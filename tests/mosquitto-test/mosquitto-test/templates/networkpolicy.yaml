@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mosquitto-test
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: mosquitto-test
+      app.kubernetes.io/name: mosquitto-test
+  policyTypes:
+    - Ingress
+  ingress:
+    # Selecting the pod makes everything else default-deny, so the plaintext listener must be
+    # opened explicitly (any source: LAN devices arrive with their real IP via the Local policy).
+    - ports:
+        - port: 1883
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app: traefik
+      ports:
+        - port: 1884

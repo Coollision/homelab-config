@@ -8,7 +8,9 @@ spec:
   routes:
     - match: HostSNI(`mqtt-test.<secret:kv/data/shared/domains~domain>`)
       services:
-        - name: mosquitto-test-mqtt
-          port: 1880
+        - name: mosquitto-test-proxy
+          port: 1884
+          proxyProtocol:
+            version: 2
   tls:
     passthrough: false

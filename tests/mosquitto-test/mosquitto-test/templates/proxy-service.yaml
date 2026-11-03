@@ -1,0 +1,13 @@
+# ClusterIP only, deliberately NOT on the LoadBalancer Service: this listener trusts PROXY headers.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mosquitto-test-proxy
+spec:
+  selector:
+    app.kubernetes.io/instance: mosquitto-test
+    app.kubernetes.io/name: mosquitto-test
+  ports:
+    - name: proxy
+      port: 1884
+      targetPort: 1884
