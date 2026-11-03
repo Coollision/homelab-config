@@ -68,6 +68,6 @@ configMapGenerator:
       - credential2=homeAssistant:test-pw-ha
       - credential3=emsChip:test-pw-ems
       - credential4=debug:test-pw-debug
-      - credential5=shelly:test-pw-shelly
+      - credential5=shelly:test-pw-shelly-v2
       - credential6=moonraker:test-pw-moon
       - credential7=norole:test-pw-norole
