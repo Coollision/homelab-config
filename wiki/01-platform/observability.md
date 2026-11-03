@@ -7,7 +7,7 @@ Three pieces feed one Grafana: metrics, logs, and a couple of SNMP/UPS exporters
 ## Metrics — `system/monitoring/monitoring`
 
 Wraps `kube-prometheus-stack`, aliased `promstack`, plus two hand-added exporters
-(`armexporter` for ARM-board metrics, `speedtestExporter` on a 5-minute interval). This
+(`armexporter` for ARM-board metrics, `speedtestExporter` on a 30-minute interval). This
 cluster deliberately does **not** run Thanos — if you see Thanos-related release notes on
 a version bump, they're not relevant here; see
 [Known Issues → no Thanos in use](../05-operations/known-issues.md#no-thanos-in-use).

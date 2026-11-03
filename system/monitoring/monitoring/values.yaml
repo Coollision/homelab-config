@@ -1,7 +1,7 @@
 useTraefikIngressRoutes: true
 speedtestExporter:
   enabled: true
-  scrapeInterval: 5m
+  scrapeInterval: 30m
 armexporter:
   enabled: true
 promstack:
