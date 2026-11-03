@@ -1,0 +1,11 @@
+apiVersion: v2
+name: smb-announcer
+description: Bonjour/mDNS announcer for the smb-server LoadBalancer IP (part of the SMB operator stack) so Finder lists it under Network.
+type: application
+version: 0.1.0
+appVersion: "0.2.0"
+
+dependencies:
+  - name: shared-lib
+    version: 0.1.0
+    repository: file://../../../lib/shared-lib

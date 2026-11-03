@@ -94,9 +94,47 @@ with one deprecation log line. Full key list and defaults: `API.md`.
 - **Detach / Sablier.** When a volume detaches (last consumer scaled to zero), its share is
   **kept** in `smb.conf` but unmounted until the volume reattaches; the PVC shows `detached`
   and a `ShareDetached` event each reconcile. The pod is never rolled for this.
+- **Adding or removing a share does not restart smbd** (template version 2.2). The pod template
+  is share-independent: `smb.conf` is a whole-directory ConfigMap mount symlinked to
+  `/etc/samba/smb.conf` (a `subPath` mount is never refreshed by kubelet), the in-pod reconciler
+  creates and mounts every share path from the mount table, and when it sees `smb.conf` change it
+  runs `smbcontrol smbd reload-config`. Clients connected to other shares (a Mac with mounted
+  shares) stay up. Expect ~1-2 minutes until kubelet refreshes the ConfigMaps; a new share can
+  briefly show as empty until its NFS mount lands. A removed share's open connections are closed
+  by the reload, and the Mac keeps a stale mount of it until ejected. The share list and count
+  live on the Deployment *metadata* only. The one exception is a direct (migration) share: it
+  needs a pod volume, so it rolls the pod. The upgrade to 2.2 itself rolls the pod once.
 - **Restarts.** The structural state is in memory, so the first non-empty reconcile after an
   operator restart re-applies the Deployment. The pod template is unchanged (no pod roll), but
   the Deployment `generation` bumps because the `smb-operator/last-updated` annotation changes.
+
+## Bonjour announcer {#storage-operator-announcer}
+
+`system/storage/smb-announcer` runs `storage-operator announce` (same image, no Kubernetes
+access) so the share server appears under Finder > Network. The smb-server pod sits behind a
+LoadBalancer on the overlay network and announces nothing, so this publishes **proxy
+announcements** from a record list (ConfigMap `smb-announcer-records`, `records.yaml`): `_smb._tcp`
+plus a `<host>.local` A record pointing at the smb-server LoadBalancer IP, and `_device-info._tcp`
+with `model=Xserve` for the icon. Clients connect straight to the LoadBalancer. The IP is
+`${SMB_LOADBALANCER_IP}` in the list, expanded from the `smb-credentials` Secret at start, so it
+never lands in git. The NAS is a second record (IP from a Vault value): its own Bonjour stays on
+VLAN 30 and is not forwarded to VLAN 5, so it is proxy-announced here too. Further hosts that
+aren't visible from VLAN 5 can be added as records (the list is read once at start and there is no Reloader: restart the pod after a list change, e.g. `kubectl -n storage rollout restart deploy/smb-announcer`).
+
+- **No hostNetwork, and not in the mdns-reflector pod.** It gets its own Multus macvlan leg on
+  VLAN 5 (`net1`, MAC `02:05:67:9d:64:68`, DHCP stub `_stub_smb-announcer-lan`: give the UniFi
+  client an alias like the other stubs) and announces on `net1` only. It deliberately does not
+  share the reflector pod, which straddles IoT (VLAN 40) and LAN (VLAN 5); this pod has only the
+  LAN leg, so a flaw in it is not next to the IoT interface.
+- **Publisher, not reflector.** It never re-publishes what it hears, so it cannot cause the
+  [reflector conflict loop](../05-operations/known-issues.md#mdns-reflector-must-not-re-publish).
+  It still parses mDNS that other devices (and the repeater) put on VLAN 5, via an unmaintained
+  library: keep it unprivileged (no capabilities, read-only root) and don't give it more.
+- **VLAN 40 sees it too.** The repeater forwards everything between the two VLANs, so IoT devices
+  also learn the storage server's name and IP. Keep IoT to Servers blocked on 445 in the firewall.
+- Verify from a Mac: `dns-sd -B _smb._tcp local.` lists the instance, `dns-sd -G v4 <host>.local`
+  returns the LoadBalancer IP. If a client on another VLAN needs it, the router's mDNS reflector
+  must forward `_smb._tcp` and `_device-info._tcp` to that VLAN.
 
 ## PV reclaimer {#storage-operator-pv-reclaimer}
 

@@ -1,0 +1,92 @@
+fullnameOverride: smb-announcer
+
+# `storage-operator announce`: the operator image's Bonjour publisher (storage_operator_go). It
+# publishes PROXY announcements from the record list below: _smb._tcp + a `<host>.local` A record that
+# points at the smb-server LoadBalancer IP, so Finder > Network lists the share server and clients
+# connect straight to the LoadBalancer, not to this pod. It only publishes static records and never
+# re-publishes what it hears (unlike the Avahi reflector that broke Matter, see known-issues:
+# mdns-reflector-must-not-re-publish). Kept out of the mdns-reflector pod on purpose: that pod
+# straddles IoT (VLAN 40) and LAN (VLAN 5); this one only has the LAN leg.
+# mDNS is L2: the pod announces directly on VLAN 5 (net1, below), where the clients are, so no
+# router-side mDNS reflection is needed for it.
+deployment:
+  image:
+    repository: ghcr.io/coollision/storage-operator
+    # first release that has the `announce` subcommand; renovate owns it after that
+    tag: v0.2.0
+  command: ["/manager"]
+  args:
+    - announce
+    - --config=/etc/announce/records.yaml
+    - --interfaces=net1
+
+config:
+  # same Secret the operator and smb-server read; key `ip` is the smb-server LoadBalancer IP,
+  # expanded into records.yaml at start-up so the address never lands in git
+  SMB_LOADBALANCER_IP:
+    secretKeyRef:
+      name: smb-credentials
+      key: ip
+
+# The list is read once at start and this cluster has no Reloader: after editing it, restart the pod
+# (`kubectl -n storage rollout restart deploy/smb-announcer`, or delete the pod).
+configMaps:
+  - name: smb-announcer-records
+    data:
+      records.yaml: |
+        records:
+          - instance: Homelab Storage
+            host: smb-server
+            ip: ${SMB_LOADBALANCER_IP}
+            port: 445
+            model: Xserve
+          # The NAS announces itself on its own VLAN (VLAN 30), but the router does not forward
+          # that mDNS to VLAN 5, so Finder on the LAN never sees it. Proxy-announce it from here.
+          # The IP is a Vault value (resolved at sync by the lovely plugin), never in git.
+          - instance: Gobelijn
+            host: gobelijn
+            ip: <secret:kv/data/shared/network~gobelijn-ip>
+            port: 445
+            model: Xserve
+
+storage:
+  - mountPath: /etc/announce
+    type: configMap
+    configMapName: smb-announcer-records
+    nameSuffix: records
+    readOnly: true
+
+disableService: true
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+resources:
+  requests:
+    cpu: 5m
+    memory: 16Mi
+  limits:
+    memory: 48Mi
+
+# Macvlan on the VLAN 5 sub-interface, same as the mdns-reflector's LAN leg. mDNS goes out on net1
+# only, so the announcement never leaks onto the pod network. Recreate (the shared-lib default)
+# matters: a rolling update would run two pods with this one MAC.
+multusNetworks:
+  - name: smb-announcer-vlan5
+    interface: net1
+    mac: 02:05:67:9d:64:68
+    dhcpHostname: _stub_smb-announcer-lan
+    parentInterface: vlan5
+    nodeLabelKey: vlan5-trunk
+    type: macvlan
+    mode: bridge
+    chainedPlugins:
+      - type: sbr
+    ipam:
+      type: dhcp
+
+labels:
+  app.kubernetes.io/component: smb-announcer

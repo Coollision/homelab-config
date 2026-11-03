@@ -52,6 +52,8 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
+      {{- /* automountServiceAccountToken (top-level value, default false): pods get NO ServiceAccount token unless a chart opts in with `automountServiceAccountToken: true` because it talks to the Kubernetes API. Shared by initContainers and sidecars. Applies to Deployment and StatefulSet. */}}
+      automountServiceAccountToken: {{ .Values.automountServiceAccountToken | default false }}
       {{- with (include "shared-lib.podSecurityContext" .) }}
       {{- . | nindent 6 }}
       {{- end }}
