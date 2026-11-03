@@ -13,9 +13,6 @@ deployment:
 config:
   TZ: Europe/Brussels
   PYTHONUNBUFFERED: "1"
-podAnnotations:
-  # restart the pod when the script below changes
-  reloader.stakater.com/auto: "true"
 probes:
   readiness:
     tcpSocket:

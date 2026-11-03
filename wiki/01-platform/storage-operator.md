@@ -119,7 +119,7 @@ with `model=Xserve` for the icon. Clients connect straight to the LoadBalancer. 
 `${SMB_LOADBALANCER_IP}` in the list, expanded from the `smb-credentials` Secret at start, so it
 never lands in git. The NAS is a second record (IP from a Vault value): its own Bonjour stays on
 VLAN 30 and is not forwarded to VLAN 5, so it is proxy-announced here too. Further hosts that
-aren't visible from VLAN 5 can be added as records (the list is read once at start and there is no Reloader: restart the pod after a list change, e.g. `kubectl -n storage rollout restart deploy/smb-announcer`).
+aren't visible from VLAN 5 can be added as records (the list is read once at start; the shared-lib `checksum/configmaps` pod annotation rolls the pod automatically when the list changes).
 
 - **No hostNetwork, and not in the mdns-reflector pod.** It gets its own Multus macvlan leg on
   VLAN 5 (`net1`, MAC `02:05:67:9d:64:68`, DHCP stub `_stub_smb-announcer-lan`: give the UniFi
