@@ -78,7 +78,9 @@ Almost no application in this repo hand-writes Kubernetes YAML. Instead, three t
   Ingress, a ServiceMonitor, Multus `NetworkAttachmentDefinition`s (VLAN legs), Longhorn
   or NFS storage, a Sablier scale-to-zero middleware, and an image pre-sync Job. Every
   consuming chart's `templates/app.yaml` is a one-liner:
-  `{{ include "shared-lib.all" . }}`.
+  `{{ include "shared-lib.all" . }}`. Pods get **no** ServiceAccount token by default
+  (`automountServiceAccountToken: false`); a chart that talks to the Kubernetes API must opt in
+  with the top-level value `automountServiceAccountToken: true`.
 - **`lib/arr-lib`** — a thin wrapper around `shared-lib` used only by the arr-stack apps
   that need their SQLite config rewritten to point at Postgres (`arrXmlPostgres` flag) —
   see [Media Stack](../03-media-stack/overview.md).
