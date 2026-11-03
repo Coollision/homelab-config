@@ -121,39 +121,31 @@ func Run(ctx context.Context, o Options) error {
 	}
 	r := newResponder(o.Devices, o.IP, o.Logf)
 
-	// Two sockets on purpose. The pod has a second, routed interface, so anything sent from a
-	// wildcard-bound socket would take its source address from the default route (the pod
-	// network) and Windows would never see the reply. uc is bound to the interface address, so
-	// every datagram we send, and every unicast probe we receive, uses that address and port 3702.
-	// mc only listens on the multicast group (Linux and macOS both allow binding a group address).
-	uc, err := net.ListenPacket("udp4", net.JoinHostPort(o.IP.String(), "3702"))
+	// One wildcard socket: it receives the multicast probes and unicast ones alike. (Binding the
+	// group address and the interface address separately works on macOS but fails with
+	// "address already in use" in a Linux pod, so do not split it.) The pod has a second, routed
+	// interface, so a plain WriteTo would take its source address from the default route (the pod
+	// network) and Windows would never see the reply. Every send therefore carries an explicit
+	// source address and interface through an IP_PKTINFO control message.
+	raw, err := net.ListenPacket("udp4", ":3702")
 	if err != nil {
-		return fmt.Errorf("wsd: listen udp %s:3702: %w", o.IP, err)
+		return fmt.Errorf("wsd: listen udp 3702: %w", err)
 	}
-	defer uc.Close()
-	ucp := ipv4.NewPacketConn(uc)
-	if err := ucp.SetMulticastInterface(o.Iface); err != nil {
-		return fmt.Errorf("wsd: multicast interface: %w", err)
-	}
-	_ = ucp.SetMulticastLoopback(false)
-
-	mc, err := net.ListenPacket("udp4", multicastAddr)
-	if err != nil {
-		return fmt.Errorf("wsd: listen multicast %s: %w", multicastAddr, err)
-	}
-	defer mc.Close()
-	mcp := ipv4.NewPacketConn(mc)
-	if err := mcp.JoinGroup(o.Iface, &net.UDPAddr{IP: net.ParseIP("239.255.255.250")}); err != nil {
+	defer raw.Close()
+	pc := ipv4.NewPacketConn(raw)
+	if err := pc.JoinGroup(o.Iface, &net.UDPAddr{IP: net.ParseIP("239.255.255.250")}); err != nil {
 		return fmt.Errorf("wsd: join multicast on %s: %w", o.Iface.Name, err)
 	}
+	_ = pc.SetMulticastLoopback(false)
 	dst, _ := net.ResolveUDPAddr("udp4", multicastAddr)
+	cm := &ipv4.ControlMessage{Src: o.IP, IfIndex: o.Iface.Index}
 
 	srv := &http.Server{Addr: fmt.Sprintf("%s:%d", o.IP, httpPort), Handler: r, ReadHeaderTimeout: 10 * time.Second}
 	httpErr := make(chan error, 1)
 	go func() { httpErr <- srv.ListenAndServe() }()
 
 	send := func(b []byte, to net.Addr) {
-		if _, err := uc.WriteTo(b, to); err != nil {
+		if _, err := pc.WriteTo(b, cm, to); err != nil {
 			o.Logf("wsd: send to %s: %v", to, err)
 		}
 	}
@@ -175,10 +167,10 @@ func Run(ctx context.Context, o Options) error {
 		}
 	}()
 
-	serve := func(conn net.PacketConn) {
+	go func() {
 		buf := make([]byte, maxDatagram)
 		for {
-			n, from, err := conn.ReadFrom(buf)
+			n, _, from, err := pc.ReadFrom(buf)
 			if err != nil {
 				return // socket closed on shutdown
 			}
@@ -191,9 +183,7 @@ func Run(ctx context.Context, o Options) error {
 				}()
 			}
 		}
-	}
-	go serve(uc)
-	go serve(mc)
+	}()
 
 	select {
 	case <-ctx.Done():
