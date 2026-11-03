@@ -62,7 +62,7 @@ configMapGenerator:
       - mosquitto.conf
       - reconcile.sh
     literals:
-      - acl-learning=true
+      - acl-learning=false
       - admin-credential=admin:test-admin-pw
       - credential1=zigbee2mqtt:test-pw-z2m
       - credential2=homeAssistant:test-pw-ha

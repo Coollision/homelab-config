@@ -159,7 +159,8 @@ for f in "$CFG"/credential*; do
     *) echo "reconcile: ERROR createClient $user -> $out"; ERRORS=$((ERRORS + 1)) ;;
   esac
   if grep -qx "$user" /tmp/roles; then
-    c addClientRole "$user" "r-$user"
+    # 2.0.22 answers "Internal error" (not "already ...") when the binding exists, so look first.
+    ctrl getClient "$user" | grep -q "r-$user" || c addClientRole "$user" "r-$user"
   else
     echo "reconcile: WARNING user '$user' has no role in reconcile.sh -> denied everything"
   fi
