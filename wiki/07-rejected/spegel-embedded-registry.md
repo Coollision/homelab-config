@@ -19,7 +19,7 @@ unnecessary.
   Home Assistant image).
 - It does not help when the internet is unreachable, and it does nothing for a first pull of a new image.
 - It cannot replace kube-fledged: copying what kube-fledged already placed on each node saves nothing.
-- Enabling it is a server-side flag plus a k3s restart on every node (`KillMode=control-group` kills all pods),
+- Enabling it is a server-side flag plus a k3s restart on every node (pod-safe with `KillMode=process`),
   for a benefit limited to maintenance drains and joining nodes.
 
 ## What to do instead

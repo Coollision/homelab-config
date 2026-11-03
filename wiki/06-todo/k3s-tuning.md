@@ -32,10 +32,9 @@ Kubelet `shutdownGracePeriod` / `shutdownGracePeriodCriticalPods` let pods termi
 Automated k3s upgrades (cordon + drain one node at a time, upgrade in order) instead of manual node-by-node work.
 Pair it with a Longhorn-health gate, otherwise it automates the risky "quick restart" case.
 
-- [ ] **First investigate `KillMode`.** The live k3s node unit has `KillMode=control-group`, which killed every pod and
-      the Longhorn engines on 2026-10-31. The upstream k3s installer normally uses `KillMode=process` so restarts leave
-      pods running. Find out where `control-group` comes from (ansible unit template? a different install path?) and
-      whether fixing it makes plain k3s restarts safe.
+- [x] **`KillMode` investigated.** The `control-group` came from a template bug (see
+      [Known Issues](../05-operations/known-issues.md#node-stack-gotchas)); fixed, units now `KillMode=process`, so plain k3s
+      restarts leave pods running and need no drain. The Plan's drain is then only needed for OS/reboot work.
 - [ ] Decide on upgrade windows and plans (servers first, one node at a time); use a drain config that respects
       PodDisruptionBudgets and Longhorn.
 - [ ] Add a gate: do not upgrade the next node until all Longhorn volumes are healthy (pre-check Job or a `prepare`
