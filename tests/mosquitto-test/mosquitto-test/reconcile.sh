@@ -129,6 +129,7 @@ rw 'homeassistant/#'
 rw 'zigbee2mqtt/#'
 rw 'shellies/#'
 rw 'ems-esp/#'
+rw 'printers/#' # automation publishing printer power readings (found by the prod topic capture)
 
 # One shared account for all Gen1 Shellies. With per-device users (mosquitto_ctrl createClient
 # + addClientRole <user> r-shelly) this can later become per-device topics.
@@ -141,6 +142,7 @@ rw 'homeassistant/#'
 
 role moonraker
 rw 'K1C-F1CE/#'
+ro 'printers/#' # provisional: assumed consumer of HA's printers/<name>/power, confirm in the usage capture
 
 role debug ro
 ro '#'
