@@ -15,11 +15,25 @@ rather than waiting for a Renovate PR.
 
 ## kube-fledged — image pre-caching
 
-`system/kube-system/kube-fledged` pre-pulls/caches container images on nodes via
-`ImageCache` CRs, rendered per-workload by `shared-lib`'s image pre-sync template (not
-centrally). Useful for large images
-(ESPHome's build toolchain, monitoring stack images) where a cold pull would otherwise
-delay a pod's first start noticeably.
+`system/kube-system/kube-fledged` pre-pulls container images on nodes labelled
+`kubefledged.io/cache=true` (set via `k3s_node_label` in ansible host_vars) through `ImageCache`
+CRs. The CRs are rendered per workload by `shared-lib`'s image pre-sync template
+(`imagePreSync: true` in the app's values), not centrally. Currently only Home Assistant uses it:
+it keeps the new image on every node that can host the pod, so the pod restarts quickly after a
+version bump (the pod itself uses `IfNotPresent`).
+
+- **Which nodes are labelled:** only nodes the workload can actually schedule on. HA needs the
+  `vlan5-trunk` label (Multus MACVLAN), so the VM worker (no VLAN trunk) is deliberately not
+  labelled.
+- **Wait job:** a sync-wave hook Job waits until the `ImageCache` leaves `Processing` before the
+  pod rolls. `Failed` does not block the rollout.
+- **Refresh:** `controllerImageCacheRefreshFrequency: 6h` re-pulls images that node image GC or
+  `crictl rmi --prune` evicted from nodes where the pod isn't running.
+- **Known noise:** the cache can report `Failed` when `crictl rmi` of the *old* tag times out
+  (`DeadlineExceeded`) on a node. That is cleanup only; check `kubectl get imagecache -A -o yaml`
+  failures for the real cause.
+- **Upstream:** slow-moving single-maintainer project (v0.11.0, July 2026, after a 4-year gap),
+  but still maintained. Idle footprint is a few MiB.
 
 ## Reloader — status unclear
 

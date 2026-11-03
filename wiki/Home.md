@@ -93,6 +93,16 @@ Planned work that is not built yet. Pages move to their normal section once done
 | Page | Covers |
 |---|---|
 | [Music stack](06-todo/music-stack.md) | First-rollout checklist, library cleanup run, slskd trial, deferred intake tooling |
+| [Registry mirror](06-todo/registry-mirror.md) | Broaden the NAS docker.io mirror to ghcr/quay/k8s registries; is kube-fledged still needed? |
+| [Zot mirror plan](06-todo/zot-registry-mirror.md) | Detailed plan: one Zot pull-through cache on the NAS for all upstreams, phases, risks, rollout |
+| [k3s tuning](06-todo/k3s-tuning.md) | Faster image pulls, graceful node shutdown, system-upgrade-controller + the KillMode question |
+
+### 07 · Rejected
+Ideas that were looked at and deliberately not built, with the reasoning.
+
+| Page | Covers |
+|---|---|
+| [Spegel embedded registry](07-rejected/spegel-embedded-registry.md) | Why k3s' peer-to-peer image mirror lost to a local NAS mirror |
 
 ## The one-paragraph mental model
 
