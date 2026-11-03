@@ -121,20 +121,31 @@ func Run(ctx context.Context, o Options) error {
 	}
 	r := newResponder(o.Devices, o.IP, o.Logf)
 
-	raw, err := net.ListenPacket("udp4", fmt.Sprintf(":%d", 3702))
+	// Two sockets on purpose. The pod has a second, routed interface, so anything sent from a
+	// wildcard-bound socket would take its source address from the default route (the pod
+	// network) and Windows would never see the reply. uc is bound to the interface address, so
+	// every datagram we send, and every unicast probe we receive, uses that address and port 3702.
+	// mc only listens on the multicast group (Linux and macOS both allow binding a group address).
+	uc, err := net.ListenPacket("udp4", net.JoinHostPort(o.IP.String(), "3702"))
 	if err != nil {
-		return fmt.Errorf("wsd: listen udp 3702: %w", err)
+		return fmt.Errorf("wsd: listen udp %s:3702: %w", o.IP, err)
 	}
-	defer raw.Close()
-	pc := ipv4.NewPacketConn(raw)
-	group := &net.UDPAddr{IP: net.ParseIP("239.255.255.250")}
-	if err := pc.JoinGroup(o.Iface, group); err != nil {
-		return fmt.Errorf("wsd: join multicast on %s: %w", o.Iface.Name, err)
-	}
-	if err := pc.SetMulticastInterface(o.Iface); err != nil {
+	defer uc.Close()
+	ucp := ipv4.NewPacketConn(uc)
+	if err := ucp.SetMulticastInterface(o.Iface); err != nil {
 		return fmt.Errorf("wsd: multicast interface: %w", err)
 	}
-	_ = pc.SetMulticastLoopback(false)
+	_ = ucp.SetMulticastLoopback(false)
+
+	mc, err := net.ListenPacket("udp4", multicastAddr)
+	if err != nil {
+		return fmt.Errorf("wsd: listen multicast %s: %w", multicastAddr, err)
+	}
+	defer mc.Close()
+	mcp := ipv4.NewPacketConn(mc)
+	if err := mcp.JoinGroup(o.Iface, &net.UDPAddr{IP: net.ParseIP("239.255.255.250")}); err != nil {
+		return fmt.Errorf("wsd: join multicast on %s: %w", o.Iface.Name, err)
+	}
 	dst, _ := net.ResolveUDPAddr("udp4", multicastAddr)
 
 	srv := &http.Server{Addr: fmt.Sprintf("%s:%d", o.IP, httpPort), Handler: r, ReadHeaderTimeout: 10 * time.Second}
@@ -142,7 +153,7 @@ func Run(ctx context.Context, o Options) error {
 	go func() { httpErr <- srv.ListenAndServe() }()
 
 	send := func(b []byte, to net.Addr) {
-		if _, err := raw.WriteTo(b, to); err != nil {
+		if _, err := uc.WriteTo(b, to); err != nil {
 			o.Logf("wsd: send to %s: %v", to, err)
 		}
 	}
@@ -164,15 +175,14 @@ func Run(ctx context.Context, o Options) error {
 		}
 	}()
 
-	go func() {
+	serve := func(conn net.PacketConn) {
 		buf := make([]byte, maxDatagram)
 		for {
-			n, _, from, err := pc.ReadFrom(buf)
+			n, from, err := conn.ReadFrom(buf)
 			if err != nil {
 				return // socket closed on shutdown
 			}
-			replies := r.handleUDP(append([]byte(nil), buf[:n]...))
-			for _, rep := range replies {
+			for _, rep := range r.handleUDP(append([]byte(nil), buf[:n]...)) {
 				rep, from := rep, from
 				go func() {
 					j, _ := rand.Int(rand.Reader, big.NewInt(int64(maxDelay/time.Millisecond)))
@@ -181,7 +191,9 @@ func Run(ctx context.Context, o Options) error {
 				}()
 			}
 		}
-	}()
+	}
+	go serve(uc)
+	go serve(mc)
 
 	select {
 	case <-ctx.Done():
