@@ -83,7 +83,7 @@ spec:
       serviceAccountName: image-cache-wait-sa
       containers:
       - name: image-cache-wait
-        image: alpine
-        command: ["sh", "-c", "apk add --no-cache kubectl jq && until kubectl -n {{ .Release.Namespace }} get imagecaches.kubefledged.io {{ include "helm.fullname" . }}-image-cache -o json | jq -e '.status.status != \"Processing\"' > /dev/null; do echo 'waiting for image cache to be ready'; sleep 10; done"]
+        image: docker.io/alpine/k8s:1.37.1
+        command: ["sh", "-c", "until kubectl -n {{ .Release.Namespace }} get imagecaches.kubefledged.io {{ include "helm.fullname" . }}-image-cache -o json | jq -e '.status.status != \"Processing\"' > /dev/null; do echo 'waiting for image cache to be ready'; sleep 10; done"]
       restartPolicy: Never
 {{- end }}

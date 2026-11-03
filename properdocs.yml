@@ -46,8 +46,14 @@ nav:
   - TODO:
       - 06-todo/ansible-housekeeping.md
       - 06-todo/music-stack.md
+      - 06-todo/k3s-tuning.md
       - 06-todo/plex-migration.md
+      - 06-todo/registry-mirror.md
+      - 06-todo/zot-registry-mirror.md
       - 06-todo/whisper-upgrade.md
+  - Rejected:
+      - 07-rejected/README.md
+      - 07-rejected/spegel-embedded-registry.md
 
 theme:
   name: material
