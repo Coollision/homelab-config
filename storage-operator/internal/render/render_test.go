@@ -134,16 +134,26 @@ func TestGoldenText(t *testing.T) {
 			t.Run(base, func(t *testing.T) {
 				diffText(t, base+".smb.conf", SMBConf(cfg, ss), golden(t, base+".smb.conf"))
 				diffText(t, base+".mounts.tsv", MountTable(ss), golden(t, base+".mounts.tsv"))
-				if updateGolden {
-					writeGolden(t, base+".startup.sh", StartupScript(cfg))
-					writeGolden(t, base+".prestop.sh", PreStopScript())
-				}
-				diffText(t, base+".startup.sh", StartupScript(cfg), golden(t, base+".startup.sh"))
-				diffText(t, base+".prestop.sh", PreStopScript(), golden(t, base+".prestop.sh"))
 			})
 		}
+		// Share-independent since the pod template stopped listing shares: one golden per config.
+		t.Run(cn+"/startup", func(t *testing.T) {
+			if updateGolden {
+				writeGolden(t, cn+".startup.sh", StartupScript(cfg))
+			}
+			diffText(t, cn+".startup.sh", StartupScript(cfg), golden(t, cn+".startup.sh"))
+		})
 	}
+	if updateGolden {
+		writeGolden(t, "prestop.sh", PreStopScript())
+	}
+	diffText(t, "prestop.sh", PreStopScript(), golden(t, "prestop.sh"))
 }
+
+// Deployment goldens only for the fixtures that exercise the pod spec (no shares; NFS plus direct
+// volumes). The other fixtures differ only in Deployment-level annotations, which
+// TestShareChangeKeepsPodTemplate covers without a file per fixture.
+var deploymentGoldenFixtures = map[string]bool{"none": true, "mixed": true}
 
 func TestGoldenDeployment(t *testing.T) {
 	cfgs := loadConfigs(t)
@@ -151,6 +161,9 @@ func TestGoldenDeployment(t *testing.T) {
 	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	for cn, cfg := range cfgs {
 		for fn, ss := range fixtures {
+			if !deploymentGoldenFixtures[fn] {
+				continue
+			}
 			base := cn + "__" + fn
 			t.Run(base, func(t *testing.T) {
 				got, err := Deployment(cfg, ss, testOperatorLabels, now)

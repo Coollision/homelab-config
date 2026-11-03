@@ -39,10 +39,12 @@ helm template smb-operator chart | grep -q -- '--owner-deployment=smb-operator$'
 
 ## Refreshing golden files
 
-`startup.sh`, `prestop.sh` and `deployment.json` are **Go-owned** now (the pod template became
-share-independent, which the Python operator never was); regenerate them with
+`<config>.startup.sh`, `prestop.sh` and `*__{none,mixed}.deployment.json` are **Go-owned** now (the
+pod template became share-independent, which the Python operator never was): one file per config,
+not per share fixture, because they no longer vary with the shares. Regenerate with
 `UPDATE_GOLDEN=1 go test ./internal/render/` and review the diff. `TestShareChangeKeepsPodTemplate`
-guards the invariant. `smb.conf`, `mounts.tsv` and the created objects are still Python-captured.
+guards the invariant. `smb.conf`, `mounts.tsv` and the created objects are still Python-captured
+per fixture (the capture harness's startup/prestop/deployment output is no longer compared).
 The harness stubs `kubernetes` and `yaml`, so it needs no packages:
 
 ```bash
