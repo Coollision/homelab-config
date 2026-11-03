@@ -45,3 +45,32 @@ func TestParseRejects(t *testing.T) {
 		}
 	}
 }
+
+func TestWSDName(t *testing.T) {
+	base := "records:\n  - instance: X\n    host: h\n    ip: 192.0.2.1\n    port: 445\n"
+	recs, err := Parse([]byte(base+"    wsdName: storage\n    workgroup: HOME\n"), env(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := wsdDevices(recs)
+	if len(d) != 1 || d[0].Name != "storage" || d[0].Workgroup != "HOME" || d[0].UUID == "" {
+		t.Fatalf("devices: %+v", d)
+	}
+	if len(wsdDevices(mustParse(t, base, env(nil)))) != 0 {
+		t.Error("a record without wsdName must not be announced over WSD")
+	}
+	for name, v := range map[string]string{"dotted": "a.b", "too long": "abcdefghijklmnop", "underscore": "a_b"} {
+		if _, err := Parse([]byte(base+"    wsdName: "+v+"\n"), env(nil)); err == nil {
+			t.Errorf("%s: expected an error", name)
+		}
+	}
+}
+
+func mustParse(t *testing.T, doc string, e func(string) string) []Record {
+	t.Helper()
+	r, err := Parse([]byte(doc), e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r
+}

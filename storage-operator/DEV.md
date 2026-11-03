@@ -8,7 +8,8 @@ controllers/smb/           SMB controller (reconciler, predicates, metrics, setu
 controllers/pvreclaimer/   pv-reclaimer controller (options, reconciler, metrics, setup)
 internal/config/           config.yaml parsing (pure)
 internal/shares/           Share model + discovery decisions (pure)
-internal/announce/         Bonjour publisher behind `main.go announce`
+internal/announce/         Bonjour publisher behind `main.go announce` (+ record list parsing)
+internal/wsd/              WS-Discovery responder for Windows Explorer (messages, UDP multicast, metadata HTTP)
 internal/render/           smb.conf, mounts.tsv, scripts, Deployment/Service/PV/PVC (pure)
 internal/render/scripts/   mount-reconciler.sh.tmpl (go:embed, delimiters <% %>)
 internal/render/testdata/  golden files captured from the Python operator

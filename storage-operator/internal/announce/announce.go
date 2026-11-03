@@ -15,6 +15,8 @@ import (
 
 	"github.com/grandcat/zeroconf"
 	"sigs.k8s.io/yaml"
+
+	"homelab/storage-operator/internal/wsd"
 )
 
 // Record is one announced host/service. Instance, Host, IP and Port are required.
@@ -28,6 +30,11 @@ type Record struct {
 	// Model adds a _device-info record (model=<Model>) for the same instance, which picks the
 	// Finder icon (e.g. "Xserve"). Empty skips it.
 	Model string `json:"model,omitempty"`
+	// WSDName, when set, also announces the record over WS-Discovery so Windows Explorer lists it
+	// under Network as this computer name. Explorer opens \\<WSDName>, so the network's DNS must
+	// resolve that bare name (DHCP search domain + an A/CNAME record). Needs exactly one interface.
+	WSDName   string `json:"wsdName,omitempty"`
+	Workgroup string `json:"workgroup,omitempty"` // shown with the WSD name; default WORKGROUP
 }
 
 // File is the on-disk list.
@@ -78,6 +85,9 @@ func (r Record) Validate() error {
 	}
 	if r.Port < 1 || r.Port > 65535 {
 		errs = append(errs, fmt.Errorf("port %d out of range", r.Port))
+	}
+	if n := r.WSDName; n != "" && (strings.ContainsAny(n, ". _/\\") || len(n) > 15) {
+		errs = append(errs, fmt.Errorf("wsdName %q must be a single label of at most 15 characters without dots, spaces, underscores or slashes", n))
 	}
 	if !strings.HasPrefix(r.Type, "_") || !strings.Contains(r.Type, "._") {
 		errs = append(errs, fmt.Errorf("type %q must look like _smb._tcp", r.Type))
@@ -137,6 +147,41 @@ func Run(ctx context.Context, records []Record, ifaceNames []string, logf func(f
 			logf("announcing %q %s on %s.local -> %s:%d (ifaces=%v)", r.Instance, s.typ, r.Host, r.IP, s.port, ifaceNames)
 		}
 	}
-	<-ctx.Done()
-	return nil
+	devices := wsdDevices(records)
+	if len(devices) == 0 {
+		<-ctx.Done()
+		return nil
+	}
+	if len(ifaces) != 1 {
+		return errors.New("wsdName needs exactly one --interfaces entry")
+	}
+	ip, err := ifaceIPv4(&ifaces[0])
+	if err != nil {
+		return err
+	}
+	return wsd.Run(ctx, wsd.Options{Devices: devices, Iface: &ifaces[0], IP: ip, Logf: logf})
+}
+
+// wsdDevices returns one WS-Discovery device per record that asks for it.
+func wsdDevices(records []Record) []wsd.Device {
+	var out []wsd.Device
+	for _, r := range records {
+		if r.WSDName != "" {
+			out = append(out, wsd.Device{Name: r.WSDName, Workgroup: r.Workgroup, UUID: wsd.NewUUID(r.WSDName)})
+		}
+	}
+	return out
+}
+
+func ifaceIPv4(i *net.Interface) (net.IP, error) {
+	addrs, err := i.Addrs()
+	if err != nil {
+		return nil, err
+	}
+	for _, a := range addrs {
+		if ipn, ok := a.(*net.IPNet); ok && ipn.IP.To4() != nil {
+			return ipn.IP.To4(), nil
+		}
+	}
+	return nil, fmt.Errorf("interface %s has no IPv4 address", i.Name)
 }

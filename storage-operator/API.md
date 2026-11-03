@@ -142,8 +142,21 @@ records:
     type: _smb._tcp             # optional, default _smb._tcp
     txt: []                     # optional key=value pairs
     model: Xserve               # optional: adds _device-info (Finder icon)
+    wsdName: storage            # optional: also announce over WS-Discovery as this Windows computer name
+    workgroup: WORKGROUP        # optional: shown with wsdName (default WORKGROUP)
 ```
 
 Unknown fields, an unset `${VAR}`, a non-IPv4 `ip` or a bad `host`/`type` fail at start-up. Set
 `--interfaces` to the macvlan leg (`net1`) so nothing leaks onto the pod network (default: all).
 mDNS is L2: the pod needs a leg in the broadcast domain the clients browse from.
+
+### Windows Explorer (WS-Discovery)
+
+Windows lists SMB servers under Network through WS-Discovery, not mDNS. A record with `wsdName`
+is also announced as a Windows "Computer" device: Hello/Bye and ProbeMatches/ResolveMatches on UDP
+multicast `239.255.255.250:3702`, plus a WS-Transfer metadata endpoint on TCP `5357` of the
+interface address (the XAddrs). Needs exactly one `--interfaces` entry, and the pod must be on the
+clients' L2 segment. A proxy like the Bonjour records: Explorer opens `\\<wsdName>`, which the
+network's own DNS must resolve to the real SMB host (DHCP search domain + A/CNAME record), or the
+entry shows up but errors when opened. `wsdName` is a single label of at most 15 characters. The
+device UUID is derived from the name, so it is stable across restarts.
