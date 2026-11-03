@@ -12,8 +12,8 @@ fullnameOverride: smb-announcer
 deployment:
   image:
     repository: ghcr.io/coollision/storage-operator
-    # first release that has the `announce` subcommand; renovate owns it after that
-    tag: v0.2.0
+    # v0.3.0 added WS-Discovery (wsdName); v0.3.2 sends its replies from the VLAN 5 address (v0.3.1 crashed on Linux); renovate owns the tag from here
+    tag: v0.3.2
   command: ["/manager"]
   args:
     - announce
@@ -39,6 +39,10 @@ configMaps:
             ip: ${SMB_LOADBALANCER_IP}
             port: 445
             model: Xserve
+            # Windows Explorer's Network view uses WS-Discovery, not mDNS. Explorer opens \\storage, which
+            # resolves through the LAN's DHCP search domain + an exact A record (the zone has a wildcard
+            # to ingress, so a missing record sends Windows to the wrong host).
+            wsdName: storage
           # The NAS announces itself on its own VLAN (VLAN 30), but the router does not forward
           # that mDNS to VLAN 5, so Finder on the LAN never sees it. Proxy-announce it from here.
           # The IP is a Vault value (resolved at sync by the lovely plugin), never in git.
@@ -47,6 +51,7 @@ configMaps:
             ip: <secret:kv/data/shared/network~gobelijn-ip>
             port: 445
             model: Xserve
+            wsdName: gobelijn
 
 storage:
   - mountPath: /etc/announce

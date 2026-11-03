@@ -126,6 +126,17 @@ aren't visible from VLAN 5 can be added as records (the list is read once at sta
   client an alias like the other stubs) and announces on `net1` only. It deliberately does not
   share the reflector pod, which straddles IoT (VLAN 40) and LAN (VLAN 5); this pod has only the
   LAN leg, so a flaw in it is not next to the IoT interface.
+- **Windows (WS-Discovery).** Explorer's Network view lists servers through WS-Discovery, not mDNS, so
+  each record with `wsdName` is also announced as a Windows "Computer" (UDP multicast 3702 plus a
+  metadata endpoint on TCP 5357 of the pod's VLAN 5 address). It is a proxy like the Bonjour
+  records: Explorer opens `\\<wsdName>`, so the name must resolve **in DNS**: the LAN network hands out
+  the DHCP domain (UniFi, network "Intern") and the `declerck.dev` zone needs an exact record per name
+  (`storage` A to the SMB LoadBalancer, `gobelijn` CNAME to the zone apex, which is the NAS). The zone also
+  has a wildcard to the ingress, so a missing exact record silently sends Windows to the wrong host.
+  Clients need a Private network profile to show discovered devices.
+- **Firewall.** Internal to Servers is fully allowed (SMB works from the LAN); IoT to Servers only allows
+  DNS/NTP (ports 53/123), one MQTT host and Home Assistant, so IoT cannot reach SMB even though it hears the
+  announcements. The multicast and the 5357 metadata fetch stay inside VLAN 5 and touch no firewall policy.
 - **Publisher, not reflector.** It never re-publishes what it hears, so it cannot cause the
   [reflector conflict loop](../05-operations/known-issues.md#mdns-reflector-must-not-re-publish).
   It still parses mDNS that other devices (and the repeater) put on VLAN 5, via an unmaintained
