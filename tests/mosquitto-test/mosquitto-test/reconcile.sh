@@ -44,19 +44,12 @@ finish() { # finish <code-for-fresh-volume>
   exit 0
 }
 
-if [ "$HAD_DB" = false ]; then
-  mosquitto_ctrl dynsec init "$DB" "$ADMIN_USER" "$ADMIN_PASS" || { echo "reconcile: dynsec init failed"; exit 1; }
-fi
-chown 1883:1883 "$DB" # broker drops to the mosquitto user and must rewrite this file
-
 cat > /tmp/bootstrap.conf <<CONF
 listener $PORT 127.0.0.1
 allow_anonymous false
 plugin /usr/lib/mosquitto_dynamic_security.so
 plugin_opt_config_file $DB
 CONF
-mosquitto -c /tmp/bootstrap.conf >/tmp/bootstrap.log 2>&1 &
-BROKER=$!
 
 # mosquitto_ctrl nags on stderr about the (localhost-only) plaintext connection; strip it so
 # the output only contains real results/errors.
@@ -84,17 +77,40 @@ r() {
 }
 
 : > /tmp/roles
-i=0
-until ctrl listClients | grep -qx "$ADMIN_USER"; do
-  i=$((i + 1))
-  if [ $i -gt 40 ]; then
-    echo "reconcile: ERROR bootstrap broker unusable (admin credential mismatch with the state file?)"
+
+# (Re)create the state file if missing and start the throwaway broker; 0 once the admin can log in.
+boot() {
+  if [ ! -f "$DB" ]; then
+    mosquitto_ctrl dynsec init "$DB" "$ADMIN_USER" "$ADMIN_PASS" || { echo "reconcile: dynsec init failed"; exit 1; }
+  fi
+  chown 1883:1883 "$DB" # broker drops to the mosquitto user and must rewrite this file
+  mosquitto -c /tmp/bootstrap.conf >/tmp/bootstrap.log 2>&1 &
+  BROKER=$!
+  i=0
+  until ctrl listClients | grep -qx "$ADMIN_USER"; do
+    i=$((i + 1))
+    [ $i -gt 40 ] && return 1
+    sleep 0.5
+  done
+}
+
+if ! boot; then
+  # "not authorised" in the log = the broker is up but rejects the admin (rotated Vault password,
+  # or a state file written by another Mosquitto version whose hashes this one cannot verify,
+  # e.g. after a 2.1 -> 2.0 rollback). Startup slowness never logs that, so it is safe to act on.
+  if $HAD_DB && grep -q "not authorised" /tmp/bootstrap.log; then
+    echo "reconcile: WARNING admin cannot log in to the existing state file; keeping it as $DB.bak-* and rebuilding managed users/roles (runtime-created users/roles must be recreated from the backup)"
+    kill "$BROKER" 2>/dev/null; wait "$BROKER" 2>/dev/null
+    mv "$DB" "$DB.bak-$(date +%s)"
+    HAD_DB=false # nothing left to fall back on: any further error must be fatal
+    boot || { echo "reconcile: ERROR rebuild failed"; cat /tmp/bootstrap.log; ERRORS=$((ERRORS + 1)); finish 1; }
+  else
+    echo "reconcile: ERROR bootstrap broker unusable"
     cat /tmp/bootstrap.log
     ERRORS=$((ERRORS + 1))
     finish 1
   fi
-  sleep 0.5
-done
+fi
 
 # --- default policy: nothing allowed unless a role says so -------------------------------
 for t in publishClientSend publishClientReceive subscribe; do c setDefaultACLAccess $t deny; done
