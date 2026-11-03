@@ -1,0 +1,21 @@
+# TLS for MQTT clients outside the cluster (mosquitto_ctrl, future TLS-capable devices).
+# Traefik terminates with its default wildcard store, so no new cert is issued (nothing new in
+# CT logs) and renewals need no Mosquitto reload. mqtt.<domain> already resolves to Traefik via
+# the internal wildcard record. Same pattern as the aws-tunnels DB routes.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRouteTCP
+metadata:
+  name: mosquitto-tls
+  namespace: smarthome
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: HostSNI(`mqtt.<secret:kv/data/shared/domains~domain>`)
+      middlewares:
+        - name: mosquitto-admin-allow
+      services:
+        - name: mosquitto-mqtt
+          port: 1880
+  tls:
+    passthrough: false

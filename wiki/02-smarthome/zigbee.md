@@ -35,9 +35,17 @@ over time and isn't worth freezing into this wiki page.
 
 ## Mosquitto — `workload/smarthome/mosquitto`
 
-The MQTT broker Zigbee2MQTT (and other MQTT-speaking devices) publish to. Runs with
-anonymous access disabled — credentials are assembled at pod startup from several Vault
-secrets concatenated into a password file, then hashed in place.
+The MQTT broker Zigbee2MQTT, Home Assistant, Shelly Gen1, EMS-ESP and the Moonraker printer talk to. Anonymous
+access is off. Auth and ACLs come from Mosquitto's **dynamic-security plugin**: an init container (`reconcile.sh`)
+reapplies the deny-by-default policy, one role per client (`r-<user>`) and the managed users (Vault `credential*` keys)
+on every start, while users created at runtime with `mosquitto_ctrl` survive restarts. `acl-learning=true` in
+`kustomization.yaml` currently gives every role full access (rollout phase, also the break-glass); usage is being
+captured with `scripts/mosquitto-acl-usage.sh` before the roles are trimmed.
+
+One plaintext listener (`1883`, exposed as `1880` on the LoadBalancer, `externalTrafficPolicy: Local` so the broker sees
+real client IPs). Clients that can do TLS use `mqtt.<internal-domain>:443`: an `IngressRouteTCP` makes Traefik terminate
+TLS with its wildcard cert (no dedicated certificate), limited to the admin subnet by a `MiddlewareTCP` allow-list.
+Zigbee2MQTT and Home Assistant run in-cluster and use the plaintext service directly.
 
 **Reachability note:** unlike matter-server, the border router, or the mDNS reflector,
 Mosquitto has **no dedicated IoT-VLAN MACVLAN leg** — it's exposed via a plain
@@ -45,3 +53,5 @@ LoadBalancer Service instead, relying on the network's own inter-VLAN routing fo
 IoT-side MQTT client that isn't already cluster-internal. If a new IoT-VLAN-only MQTT
 client can't reach it, that routing path — not the pod itself — is the first thing to
 check.
+
+Remaining steps (usage capture, ACL trim, 2.1 upgrade): [TODO — Mosquitto modernization](../06-todo/mosquitto-modernization.md).

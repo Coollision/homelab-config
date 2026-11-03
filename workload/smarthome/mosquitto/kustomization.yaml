@@ -15,43 +15,25 @@ patches:
         value:
         - name: mosquitto-init
           image: eclipse-mosquitto:2.0.22-openssl
-          command: ["/bin/sh", "-c"]
-          args:
-          - |
-            echo "$(cat /mosquitto/config/credential1)" >> /mosquitto/creds/credentials && \
-            echo "$(cat /mosquitto/config/credential2)" >> /mosquitto/creds/credentials && \
-            echo "$(cat /mosquitto/config/credential3)" >> /mosquitto/creds/credentials && \
-            echo "$(cat /mosquitto/config/credential4)" >> /mosquitto/creds/credentials && \
-            echo "$(cat /mosquitto/config/credential5)" >> /mosquitto/creds/credentials && \
-            echo "$(cat /mosquitto/config/credential6)" >> /mosquitto/creds/credentials && \
-            echo "$(cat /mosquitto/config/credential7)" >> /mosquitto/creds/credentials && \
-            chmod 0700 /mosquitto/creds/credentials && \
-            mosquitto_passwd -U /mosquitto/creds/credentials
+          command: ["/bin/sh", "/mosquitto/config/reconcile.sh"]
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 200m, memory: 64Mi}
           volumeMounts:
           - name: mosquitto-config
             mountPath: /mosquitto/config
-          - name: mosquitto-creds
-            mountPath: /mosquitto/creds
+          - name: mosquitto
+            mountPath: /mosquitto/data
       - op: add
         path: /spec/template/spec/containers/0/volumeMounts/0
         value:
           name: mosquitto-config
           mountPath: /mosquitto/config
-      - op: add
-        path: /spec/template/spec/containers/0/volumeMounts/1
-        value:
-          name: mosquitto-creds
-          mountPath: /mosquitto/creds
       - op: replace
         path: /spec/serviceName
         value: mosquitto-mqtt
       - op: add
         path: /spec/template/spec/volumes/0
-        value:
-          name: mosquitto-creds
-          emptyDir: {}
-      - op: add
-        path: /spec/template/spec/volumes/1
         value:
           name: mosquitto-config
           configMap:
@@ -72,23 +54,30 @@ patches:
       - op: add
         path: /spec/loadBalancerIP
         value: <secret:kv/data/workload/smarthome/mosquitto~ip>
+      # Local: the broker sees real client IPs (Cluster SNATs everything to a node's flannel
+      # address). MetalLB then announces the IP from the node that runs the pod.
+      - op: add
+        path: /spec/externalTrafficPolicy
+        value: Local
       - op: replace
         path: /spec/ports/0/port
         value: 1880
 
 # ConfigMap from local file
-generatorOptions:
-  disableNameSuffixHash: true
-
 configMapGenerator:
   - name: mosquitto-config
     namespace: smarthome
     files:
       - mosquitto.conf
+      - reconcile.sh
     literals:
+      # "true" = every role may read/write '#' (rollout phase: observe real usage first, then
+      # trim to the per-role topics in reconcile.sh). Also the break-glass. A change rolls the pod.
+      - acl-learning=true
+      # New Vault key, format "user:password"; only for mosquitto_ctrl, never used by clients.
+      - admin-credential=<secret:kv/data/workload/smarthome/mosquitto~admin-credential>
       - credential1=<secret:kv/data/workload/smarthome/mosquitto~credential-1>
       - credential2=<secret:kv/data/workload/smarthome/mosquitto~credential-2>
-      - credential3=<secret:kv/data/workload/smarthome/mosquitto~credential-3>
       - credential4=<secret:kv/data/workload/smarthome/mosquitto~credential-4>
       - credential5=<secret:kv/data/workload/smarthome/mosquitto~credential-5>
       - credential6=<secret:kv/data/workload/smarthome/mosquitto~credential-6>
