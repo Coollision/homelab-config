@@ -72,6 +72,15 @@ initContainers:
         for host in 192.168.5.40 192.168.5.42 192.168.5.43 192.168.5.190 192.168.5.61; do
           ip route replace "$host/32" dev net2 || echo "WARNING: no route for $host"
         done
+
+        # Aim the dhcp integration's hourly host sweep at VLAN 5. aiodiscover picks its
+        # local address by UDP-connect()ing to 10.255.255.255 (nothing is sent) and sweeps
+        # that address's subnet with PTR + ARP. Via the eth0 default route that is the pod
+        # subnet, so the sweep produced ~230 REFUSED PTRs per hour on the DNS cluster and
+        # found nothing. Over net2 it covers 192.168.5.0/24 with real MACs. The route must
+        # exist before HA starts: aiodiscover caches its network choice per process.
+        ip route replace 10.255.255.255/32 dev net2 || echo "WARNING: no dhcp sweep route"
+        ip route get 10.255.255.255 || true
     securityContext:
       runAsUser: 0
       runAsGroup: 0

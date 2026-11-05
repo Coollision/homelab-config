@@ -18,6 +18,11 @@ in-cluster matter-server Service and a manually-added IPv6 route (see
   VLAN 5, so Sonos's UPnP event listener binds a reachable source address instead of the
   pod's cluster IP — a workaround for the `sbr` chained-CNI-plugin routing table not
   being consulted for non-MACVLAN-sourced traffic.
+- It also adds a `/32` route for `10.255.255.255` on `net2`. HA's `dhcp` integration sweeps
+  hosts hourly (PTR + ARP) on the subnet of whichever address the kernel picks for that
+  probe target; by default that was the pod subnet, which flooded the DNS cluster with
+  REFUSED PTRs and found nothing. The route aims the sweep at VLAN 5. There is no VLAN 40
+  leg, so VLAN 40 cannot be swept (no ARP/DHCP visibility); that would need a new Multus leg.
 
 ## Database
 
