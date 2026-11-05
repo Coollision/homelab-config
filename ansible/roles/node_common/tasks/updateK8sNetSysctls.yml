@@ -1,0 +1,20 @@
+# Pod netns sysctls must not depend on which node a pod lands on.
+# The k3s server forces net.core.devconf_inherit_init_net=1 and
+# net.ipv6.conf.all.forwarding=1 at every start (agents do not), so pods on the server
+# inherited forwarding=1 and, because the kernel ignores RAs on a forwarding stack unless
+# accept_ra=2, never got SLAAC addresses on their macvlan NICs. Same values on every node
+# makes the stack uniform; macvlan pods opt back in to RAs via the shared-lib multus
+# `tuning` plugin (accept_ra=2). The host still takes no IPv6 on the VLAN sub-interfaces
+# (vlan_trunk_host_ipv6). inherit_init_net first: it must be set before pod netns appear.
+- name: Persist k8s network sysctls in /etc/sysctl.d
+  become: true
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    sysctl_file: /etc/sysctl.d/98-k8s-net.conf
+    sysctl_set: true
+    reload: true
+  loop:
+    - { key: net.core.devconf_inherit_init_net, value: "1" }
+    - { key: net.ipv6.conf.all.forwarding, value: "1" }

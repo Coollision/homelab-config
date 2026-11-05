@@ -62,7 +62,7 @@ commands below assume you've `cd ansible` first.
 
 | Role | Runs on | Does |
 |---|---|---|
-| `node_common` | all nodes | hostname, locale/timezone, aliases, `apt upgrade`, baseline packages (`nfs-common`, `open-iscsi`, `cryptsetup`, …), inotify limits, NFS kernel modules, includes `journald_config` |
+| `node_common` | all nodes | hostname, locale/timezone, aliases, `apt upgrade`, baseline packages (`nfs-common`, `open-iscsi`, `cryptsetup`, …), inotify limits, k8s network sysctls (`devconf_inherit_init_net=1` + IPv6 forwarding=1 on every node, tag `k8s_net`), NFS kernel modules, includes `journald_config` |
 | `rpi_common` | Pis only | Pi-specific tweaks, temp/voltage aliases via `vcgencmd`, disables swap, tunes UDP buffers (in `/etc/sysctl.d`, as is the inotify limit set by `node_common`: Debian 13 ignores `/etc/sysctl.conf`). The `cmdline.txt` `replace` flag really replaces existing keys now (it used to be add-only), so check a Pi with `--check --diff` before a real run |
 | `setup_ssh_key` | all nodes (own playbook) | adds `ssh_public_key` to `authorized_keys`; asserts the key is non-empty, replacing all other keys is opt-in (`-e setup_ssh_key_exclusive=true`), no sshd restart. (The old `python` and `sudoers` roles were removed; the preseed installs `python3` and `sudo` and grants the sudo rights) |
 | `journald_config` | all nodes | templates `journald.conf` with retention caps, vacuums logs |

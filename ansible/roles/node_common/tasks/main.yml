@@ -62,6 +62,13 @@
 - name: Configure inotify limits
   ansible.builtin.include_tasks: updateInotifyLimits.yml
 
+- name: Persist the k8s network sysctls (same on every node)
+  ansible.builtin.include_tasks:
+    file: updateK8sNetSysctls.yml
+    apply:
+      tags: [k8s_net]
+  tags: [k8s_net]
+
 - name: Network-online wait on ifupdown nodes
   ansible.builtin.include_tasks: networkOnline.yml
 
