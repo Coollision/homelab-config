@@ -337,8 +337,12 @@
     group: root
     mode: "0644"
     content: |
-      # Thread/Matter IPv6 configuration for Router Advertisement support
-      net.ipv6.conf.all.forwarding = 0
+      # IPv6 forwarding is ON on every node. The k3s server forces it to 1 at every start
+      # (and pods inherit it via devconf_inherit_init_net), so a 0 here only ever held on
+      # agents and made the stack differ per node. Pods that need RAs on a macvlan NIC set
+      # accept_ra=2 themselves (shared-lib multus `tuning` plugin); the host takes no IPv6
+      # on the VLAN sub-interfaces regardless (vlan_trunk_host_ipv6).
+      net.ipv6.conf.all.forwarding = 1
       {% if not ((vlan_trunk_enable_thread_ipv6 | bool) and (vlan_trunk_host_ipv6 | bool)) -%}
       # host-level Thread RA acceptance disabled (vlan_trunk_host_ipv6 / vlan_trunk_enable_thread_ipv6)
       {% elif _vlan_trunk_active_network_manager | default('') != 'ifupdown' -%}
