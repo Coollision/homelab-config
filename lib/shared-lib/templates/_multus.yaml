@@ -131,9 +131,20 @@ alias have to be re-pointed at the new address in the same change.
 {{- $_ := set $ipam "provide" $provide -}}
 {{- end -}}
 {{- $basePlugin := dict "type" (default "macvlan" $network.type) "master" $network.parentInterface "mode" (default "bridge" $network.mode) "ipam" $ipam -}}
-{{- $plugins := list $basePlugin -}}
+{{- /* Always chain a tuning plugin: k3s sets net.ipv6.conf.all.forwarding=1 on the server
+and (with devconf_inherit_init_net) pods inherit it; the kernel then ignores RAs unless
+accept_ra=2, so a macvlan pod on that node never gets its SLAAC (ULA/GUA) address.
+`acceptRa: false` on a network opts out. */ -}}
+{{- $tuning := dict "type" "tuning" -}}
+{{- if ne (toString $network.acceptRa) "false" -}}
+{{- $_ := set $tuning "sysctl" (dict "net.ipv6.conf.IFNAME.accept_ra" (toString (default 2 $network.acceptRa))) -}}
+{{- end -}}
 {{- if $network.mac -}}
-{{- $plugins = append $plugins (dict "type" "tuning" "capabilities" (dict "mac" true)) -}}
+{{- $_ := set $tuning "capabilities" (dict "mac" true) -}}
+{{- end -}}
+{{- $plugins := list $basePlugin -}}
+{{- if or $tuning.sysctl $tuning.capabilities -}}
+{{- $plugins = append $plugins $tuning -}}
 {{- end -}}
 {{- if $network.chainedPlugins -}}
 {{- $plugins = concat $plugins $network.chainedPlugins -}}
@@ -150,7 +161,7 @@ spec:
     {
       "cniVersion": {{ default "0.3.1" $network.cniVersion | quote }},
       "name": {{ $network.name | quote }},
-{{- if or $network.mac $network.chainedPlugins }}
+{{- if gt (len $plugins) 1 }}
       "plugins": {{ $plugins | toJson }}
 {{- else }}
       "type": {{ default "macvlan" $network.type | quote }},
