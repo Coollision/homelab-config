@@ -34,7 +34,6 @@ spec:
   strategy:
     type: Recreate
   {{- end }}
-  revisionHistoryLimit: 3
   selector:
     matchLabels:
       {{- include "helm.selectorLabels" . | nindent 6 }}
