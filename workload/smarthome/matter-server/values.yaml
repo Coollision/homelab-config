@@ -77,6 +77,15 @@ storage:
     protect: true
 
 probes:
+  # The websocket port only opens after node start-up work: measured ~100-130s on the Pi
+  # (worker-red), which outlasted the liveness window (30s + 5x15s) -> killed mid-boot.
+  # Liveness/readiness stay suspended until this succeeds; budget = 32 x 5s = 160s
+  # (~worst observed + 20%).
+  startup:
+    tcpSocket:
+      port: ws
+    periodSeconds: 5
+    failureThreshold: 32
   liveness:
     httpGet:
       path: /health
