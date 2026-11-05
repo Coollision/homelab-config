@@ -40,6 +40,11 @@ VLAN 5 leg to reach Sonos) for concrete users of this pattern, and
 [Known Issues](../05-operations/known-issues.md#multus-dhcphostname-is-a-dead-end) for why
 naming these stubs needs a UniFi alias, not the chart's `dhcpHostname` field.
 
+**IPv6 RA tuning is chained automatically.** k3s enables IPv6 forwarding on the node and pods
+inherit it, so the kernel ignores Router Advertisements unless `accept_ra=2`; without that a
+MACVLAN leg never gets its SLAAC address. `_multus.yaml` therefore always chains a `tuning`
+plugin that sets `accept_ra=2` on the leg. Set `acceptRa: false` on a network to opt out.
+
 **The `sbr` chained plugin is load-bearing, not optional.** Without it, a MACVLAN's DHCP
 lease installs a *competing default route*, hijacking the pod's egress and breaking access
 to cluster DNS/the internet. `sbr` confines that VLAN's routes to a separate source-keyed
