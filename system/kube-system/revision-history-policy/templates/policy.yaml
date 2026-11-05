@@ -1,0 +1,31 @@
+# Forces revisionHistoryLimit on every Deployment/StatefulSet at admission, regardless of what the
+# chart renders (upstream charts leave it unset, so the API server would default it to 10).
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicy
+metadata:
+  name: revision-history-limit
+spec:
+  failurePolicy: Ignore
+  reinvocationPolicy: Never
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["apps"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["deployments", "statefulsets"]
+  mutations:
+    - patchType: ApplyConfiguration
+      applyConfiguration:
+        expression: >-
+          Object{
+            spec: Object.spec{
+              revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+            }
+          }
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: revision-history-limit
+spec:
+  policyName: revision-history-limit

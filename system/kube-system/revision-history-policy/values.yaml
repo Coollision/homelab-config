@@ -1,0 +1,2 @@
+# Old ReplicaSets/ControllerRevisions kept per workload (rollback is done via git, not kubectl).
+revisionHistoryLimit: 1

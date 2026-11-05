@@ -43,6 +43,16 @@ spec:
           - RespectIgnoreDifferences=true
       revisionHistoryLimit: 2
       ignoreDifferences:
+        # revisionHistoryLimit is forced to 1 at admission by the revision-history-limit
+        # MutatingAdmissionPolicy, so charts that render their own value would show as drift.
+        - group: apps
+          kind: Deployment
+          jsonPointers:
+            - /spec/revisionHistoryLimit
+        - group: apps
+          kind: StatefulSet
+          jsonPointers:
+            - /spec/revisionHistoryLimit
         - group: admissionregistration.k8s.io
           kind: MutatingWebhookConfiguration
           jqPathExpressions:

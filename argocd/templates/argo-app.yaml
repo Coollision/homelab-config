@@ -26,6 +26,15 @@ spec:
       - ServerSideApply=true
       - RespectIgnoreDifferences=true
   ignoreDifferences:
+    # Forced to 1 at admission by the revision-history-limit MutatingAdmissionPolicy.
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/revisionHistoryLimit
+    - group: apps
+      kind: StatefulSet
+      jsonPointers:
+        - /spec/revisionHistoryLimit
     # Lets Sablier scale argocd-server to 0 without selfHeal reverting it.
     # This app's syncPolicy previously had no RespectIgnoreDifferences at all
     # (unlike the workloads/system ApplicationSets), so this entry alone would

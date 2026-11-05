@@ -107,3 +107,18 @@ docs/            Narrow runbooks for specific one-off procedures
 scripts/         Operational scripts (scale-to-zero ignore-gen, sablier status, etc.)
 ansible/         Node provisioning — see 00-setup/ansible.md
 ```
+
+## Workload revision history (old ReplicaSets)
+
+Every Deployment and StatefulSet in the cluster gets `spec.revisionHistoryLimit: 1`, enforced at
+admission by the `revision-history-limit` MutatingAdmissionPolicy
+(`system/kube-system/revision-history-policy`). Charts and `shared-lib` deliberately do **not** set
+the field: upstream charts leave it unset, which the API server defaults to 10 (dozens of dead
+ReplicaSets, extra etcd objects). Rollback is a `git revert`, not `kubectl rollout undo`.
+
+This is different from the ArgoCD *Application* `revisionHistoryLimit` in the table above. Without the
+policy the default silently returns to 10; change the number via the chart's `values.yaml`.
+
+Charts that render their own `revisionHistoryLimit` (e.g. argocd, monitoring, metallb) would otherwise
+show as permanently OutOfSync, so `set-system`, `set-workloads` and the self-managing argocd app
+carry an `ignoreDifferences` rule for `/spec/revisionHistoryLimit` on Deployments and StatefulSets.
