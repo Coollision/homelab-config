@@ -30,6 +30,10 @@ spec:
       effective_cache_size: "768MB"    # realistic for a 1Gi pod (was an over-optimistic 4GB)
       random_page_cost: "1.1"          # NVMe/Longhorn, not spinning disk
       effective_io_concurrency: "200"
+      # Default 0.2 means ~4M dead rows before autovacuum even starts on the 21M-row recorder
+      # `states` table, and each run re-reads all 9Gi through Longhorn. 0.05 = smaller, more frequent runs.
+      autovacuum_vacuum_scale_factor: "0.05"
+      autovacuum_analyze_scale_factor: "0.05"
   resources:
     requests:
       cpu: 250m

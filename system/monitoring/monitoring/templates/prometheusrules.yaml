@@ -162,7 +162,8 @@ spec:
 
         # snapshot-2h retains 24 and backups add a few, so ~25-27 is normal.
         # A runaway count means snapshot-delete/cleanup is failing (e.g. a
-        # replica stuck in a stale "rebuilding" state), which burns instance-manager CPU.
+        # replica stuck in a stale "rebuilding" state). Snapshots pile up silently: the
+        # volume still reports healthy.
         - alert: LonghornVolumeTooManySnapshots
           expr: >-
             count by (volume) (longhorn_snapshot_actual_size_bytes) > 40
@@ -185,7 +186,29 @@ spec:
             category: storage
           annotations:
             summary: "Longhorn {{`{{ $labels.pod }}`}} is using high CPU"
-            description: "{{`{{ $labels.pod }}`}} has averaged {{`{{ $value | humanize }}`}} cores for over an hour (baseline ~0.2). Look for snapshot-removal retry loops or a stuck replica rebuild in its logs."
+            description: "{{`{{ $labels.pod }}`}} has averaged {{`{{ $value | humanize }}`}} cores for over an hour (baseline ~0.2). Find the busiest engine (node disk reads, `top -H`) and what drives it; last time it was Postgres autovacuum re-scanning a table because a stale session pinned xmin (see wiki Known Issues)."
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # CloudNativePG alerts (metrics come from templates/cnpg-podmonitor.yaml)
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: postgres.alerts
+      interval: 1m
+      rules:
+        # A forgotten psql/COPY session pins the xmin horizon: vacuum can no longer
+        # remove dead rows and autovacuum re-scans big tables forever (it loaded a
+        # Longhorn instance-manager for a day). Normal recorder/app sessions are sub-second.
+        - alert: PostgresLongRunningTransaction
+          expr: >-
+            max by (namespace, pod, datname, usename, application_name, state) (
+              cnpg_backends_max_tx_duration_seconds{application_name!~"cnpg_metrics_exporter|pg_basebackup|barman.*"}
+            ) > 3600
+          for: 10m
+          labels:
+            severity: warning
+            category: database
+          annotations:
+            summary: "Postgres {{`{{ $labels.namespace }}`}}/{{`{{ $labels.pod }}`}}: transaction open for over 1h"
+            description: "A {{`{{ $labels.state }}`}} session (user {{`{{ $labels.usename }}`}}, app '{{`{{ $labels.application_name }}`}}', db {{`{{ $labels.datname }}`}}) has held a transaction for {{`{{ $value | humanizeDuration }}`}}. It blocks vacuum; find it with pg_stat_activity (backend_xmin) and pg_terminate_backend it if abandoned."
 
     # ─────────────────────────────────────────────────────────────────────────
     # NUT / UPS alerts (system/nut) — APC Back-UPS BX1600MI
