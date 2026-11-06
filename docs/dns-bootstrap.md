@@ -1,6 +1,6 @@
 # Technitium DNS — bootstrap & key settings
 
-**Version:** 15.4
+**Version:** 15.6 (cluster built on 15.4)
 **Topology:** 3-node cluster, all comms over **VLAN 30 MACVLAN IPs** — primary pod `<VIP-A>`,
 secondary pod `<VIP-B>`, tertiary (NAS Docker) `<NAS-IP>`. Cluster nodes advertise these
 MACVLAN IPs; **never ClusterIPs or node IPs**. This is the only model that lets the
@@ -16,7 +16,7 @@ The advertised address is set at init/join but is **no longer immutable** — v1
 `POST /api/admin/cluster/secondary/updatePrimary`. Advertise the **ULA** alongside the
 IPv4 MACVLAN IP and **never a delegated GUA** — see §2.0.
 
-**Cert model — DANE/TLSA (important):** cluster TLS uses each node's **self-signed** cert,
+**Cert model — DANE/TLSA (important; the cluster zone is DNSSEC-signed):** cluster TLS uses each node's **self-signed** cert,
 validated via **DANE**: each node publishes `_53443._tcp.technitium-<role>.<internal-zone> TLSA`
 records in the `<internal-zone>` zone. A node trusts a peer only if it can resolve that TLSA
 record, so **`<internal-zone>` must transfer first** or every heartbeat/config-sync fails with
@@ -185,7 +185,18 @@ Dynamic updates are only accepted by the cluster **primary**, so `dns_server_ip`
 POST /api/settings/set
   enableBlocking=true  blockingType=NxDomain
   blockListUrls=https://big.oisd.nl/
+  blockListUrls=https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/multi-onlydomains.txt
   blockListUpdateIntervalHours=24
+```
+
+Upstream forwarders use DoT. Write each as `<hostname>:853 (<ip>)` form so the certificate
+is validated by name without needing DNS to bootstrap (settings sync cluster-wide; the
+chart's `DNS_SERVER_FORWARDERS` env only seeds first boot):
+
+```http
+POST /api/settings/set
+  forwarders=<resolver-hostname-1> (<ip-1>), <resolver-hostname-2> (<ip-2>)
+  forwarderProtocol=Tls
 ```
 
 The list downloads asynchronously on first `settings/set` (`/api/blocklist/update/start`
@@ -382,9 +393,15 @@ No SNAT/masquerade is required either: clients and resolvers sit on different VL
 replies already transit the gateway and are un-NATted back to the address the client
 expected. Adding masquerade here would only hide the real client IP from the query log.
 
-**Deliberately excluded:** the resolver VLAN itself, and the **IPTV networks** — carrier IPTV
-commonly depends on the ISP's own resolver, and redirecting it is a well-known way to break
-live TV. Those VLANs keep their ISP-supplied DNS on purpose.
+**Deliberately excluded:** the resolver VLAN itself. The TV (IPTV) VLAN **is** redirected
+(verified 2026-11-05: rules hit, decoders get the cluster resolvers and live TV works) —
+earlier guidance to leave carrier IPTV on ISP DNS no longer applies here. **Not covered, on purpose:**
+site-to-site traffic; the Default network (management only: UniFi gear, no clients); and the
+guest network, which uses the gateway's public DNS so visitors never see internal names. A
+guest redirect would also be dead on arrival: the guest zone is blocked towards the Servers
+zone, so a redirected query is dropped. Queries addressed to the gateway itself never traverse
+the DNAT hook, which is why those networks cannot be "fixed" with more DNAT rules. See the
+[DNS page](../wiki/01-platform/dns.md#dns-gaps).
 
 ### 9.2 Layer 2 — block what cannot be redirected
 
