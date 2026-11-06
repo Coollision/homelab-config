@@ -315,7 +315,9 @@ nameserver in turn about what is still unresolved. The hourly timer starts when 
 starting, and a HA restart moves it. Confirmed with a packet capture on the node (the pod, 253
 distinct names plus an ARP sweep inside one second) and by reading the integration source.
 
-**Fix / options:** harmless, so leaving it is valid. To stop the refusals, give the DNS cluster an
+**Fix applied (2026-11-06):** the Home Assistant chart routes the library's probe address over the
+pod's VLAN 5 interface, so the hourly sweep now covers the LAN `/24` (which the DNS cluster answers
+properly) instead of the pod range. See the Home Assistant page. **Other options considered:** harmless, so leaving it is valid. To stop the refusals, give the DNS cluster an
 authoritative empty reverse zone for the pod range so the lookups return `NXDOMAIN` instead of
 `REFUSED` (aiodiscover treats a refusing nameserver as failed and retries). Changing HA itself
 (removing `dhcp` from the default config) also stops the sweep but affects DHCP device discovery
