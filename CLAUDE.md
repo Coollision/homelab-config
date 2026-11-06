@@ -54,6 +54,7 @@ like `<internal-domain>`, `<node-name>` (docs). Details live in `wiki/` — grep
 | `/wiki-sync` | reconcile `wiki/` with the working-tree diff |
 | agent `chart-reviewer` | independent read-only review of a chart diff against repo conventions |
 | agent `cluster-investigator` | read-only kubectl/argocd digging, returns a short conclusion |
+| agent `unifi-investigator` | read-only UniFi firewall/tunnel/reachability digging: API config checked against the gateway dataplane over SSH (counters, ipsets, routes, tcpdump) |
 
 Domain skills (zigbee, matter/thread, esphome) are local-only and trigger by description.
 
