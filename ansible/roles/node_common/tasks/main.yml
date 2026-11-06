@@ -47,7 +47,7 @@
     autoclean: true
     autoremove: true
     name:
-      - dnsutils
+      - bind9-dnsutils
       - tmux
       - jq
       - htop
