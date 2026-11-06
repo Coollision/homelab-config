@@ -45,6 +45,7 @@ The infrastructure layer every workload depends on — all under `system/`.
 | [Databases](01-platform/databases.md) | CloudNativePG, and the shared-Postgres pattern used everywhere |
 | [Observability](01-platform/observability.md) | kube-prometheus-stack, Loki/Alloy, SNMP, dashboards |
 | [Cluster housekeeping](01-platform/cluster-housekeeping.md) | Keel, kube-fledged, Reloader, Sablier scale-to-zero, NFD/descheduler |
+| [DNS](01-platform/dns.md) | Split-horizon design, Technitium cluster, Cloudflare view, enforcement, audit gaps |
 | [Certificates](01-platform/certificates.md) | cert-manager + the Cloudflare DNS-01 wildcard cert |
 | [Power — NUT](01-platform/power-nut.md) | UPS monitoring, PeaNUT dashboard, planned auto-shutdown |
 | [Routed IPTV](01-platform/iptv.md) | Proximus TV on its own UniFi VLAN/zone: WAN2 on the ISP box LAN, IGMP proxy, multicast→unicast over WiFi mesh + watchdog |

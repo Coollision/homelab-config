@@ -32,6 +32,7 @@ defaults:
     TZ: Europe/Brussels
     DNS_SERVER_ADMIN_PASSWORD: <secret:kv/data/system/dns/technitium~admin-pass>
     DNS_SERVER_ENABLE_BLOCKING: "true"
+    # Seed only: live forwarders are DoT (set via API, cluster-synced), see docs/dns-bootstrap.md §4.
     DNS_SERVER_FORWARDERS: "1.1.1.1, 9.9.9.9"
   # hostAliases: both pods need to resolve each other's cluster hostnames.
   # CoreDNS doesn't know the cluster zone, so we pin them via /etc/hosts.

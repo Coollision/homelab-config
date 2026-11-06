@@ -300,6 +300,29 @@ long list of non-obvious, hard-won rules:
   secondary copies of them frozen at an old snapshot indefinitely without any error
   surfacing — worth checking explicitly if a reverse-lookup zone seems stuck in the past.
 
+### An hourly burst of refused reverse lookups is Home Assistant scanning its own pod subnet {#ha-dhcp-discovery-ptr-burst}
+
+**Symptom:** the DNS cluster logs ~250 `REFUSED` PTR queries within one second, once an hour at the
+same second every hour, for addresses in a single node's pod range, nearly none of them live pods.
+They arrive from a *node* address, not from the pod, because CoreDNS forwards them and the
+overlay SNATs them on the way out. About 7 % of all queries on the primary.
+
+**Root cause:** Home Assistant's `dhcp` integration runs a network watcher every 60 minutes. It
+uses the `aiodiscover` library, which ARP-scans and then looks up a PTR record for **every host
+address of the pod's default-route interface** (the pod subnet, not the LAN), asking each
+nameserver in turn about what is still unresolved. The hourly timer starts when HA reports
+"started", so its minute and second are fixed by when the last slow integration finished
+starting, and a HA restart moves it. Confirmed with a packet capture on the node (the pod, 253
+distinct names plus an ARP sweep inside one second) and by reading the integration source.
+
+**Fix / options:** harmless, so leaving it is valid. To stop the refusals, give the DNS cluster an
+authoritative empty reverse zone for the pod range so the lookups return `NXDOMAIN` instead of
+`REFUSED` (aiodiscover treats a refusing nameserver as failed and retries). Changing HA itself
+(removing `dhcp` from the default config) also stops the sweep but affects DHCP device discovery
+and is not recommended. **How it was found:** an identical hour-after-hour timestamp means a
+timer, not an event; a small read-only packet capture on the node attributed the queries to the
+pod. Rule out restarts and evictions first, they do not produce an hourly rhythm.
+
 ### UniFi/network-controller API: two different APIs, and only one can write {#unifi-network-controller-api}
 
 If scripting against a UniFi-style network controller: its documented/modern API is

@@ -72,7 +72,7 @@ a tertiary Docker container on the NAS as a manual break-glass). The full non-ob
 config — MACVLAN-only communication, DANE/TLSA cert validation, catalog-zone notify
 inheritance, IPv6 recursion ACLs — is substantial enough to live entirely in
 [Known Issues → Technitium](../05-operations/known-issues.md#technitium-dns-cluster). The
-short version: **every DNS-cluster node talks over its VLAN 30 MACVLAN IP, never a
+short version (the overall split-horizon/Cloudflare picture is on the [DNS page](dns.md)): **every DNS-cluster node talks over its VLAN 30 MACVLAN IP, never a
 ClusterIP or node IP**, because the off-cluster NAS node can't route to Kubernetes
 ClusterIPs and the API won't let a primary's advertised IP change after init.
 
