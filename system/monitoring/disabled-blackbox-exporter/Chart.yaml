@@ -1,0 +1,12 @@
+apiVersion: v2
+name: blackbox-exporter
+description: Blackbox probes for the DNS resolvers (answering, recursion, ad-block enforcement)
+type: application
+version: 0.1.0
+maintainers:
+  - name: coollision
+    email: Coollision@users.noreply.github.com
+dependencies:
+  - name: prometheus-blackbox-exporter
+    version: 11.20.2
+    repository: https://prometheus-community.github.io/helm-charts

@@ -1,0 +1,158 @@
+# PARKED (dir is `disabled-`, so ArgoCD ignores it). Reason: the prober has to sit on a node that can never
+# host a Technitium pod, which today means pinning it to the single VM node, and then every planned
+# maintenance of that node raises alerts. Revisit with Service-based probes for the in-cluster pods (no pin)
+# and a direct probe only for the NAS. Rename to `blackbox-exporter` to enable.
+#
+# Probes the three Technitium resolvers on the VLAN 30 addresses clients really use.
+# Pod readiness and volume usage of the in-cluster pods are already covered by the kube defaults;
+# what nothing else sees is "does it ANSWER", and the NAS tertiary has no Kubernetes object at all.
+# Alert rules live in the same chart (prometheusRule below). See wiki/01-platform/dns.md.
+prometheus-blackbox-exporter:
+  # worker-silver is the only `type: vm` node and Technitium pods are forbidden from it (see
+  # system/dns/technitium). That matters: a pod on the SAME node as a Technitium pod cannot reach
+  # that pod's MACVLAN address (macvlan parent -> child is not routable), so a prober anywhere else
+  # would false-alarm whenever a resolver reschedules onto its node.
+  nodeSelector:
+    type: vm
+  resources:
+    requests:
+      cpu: 10m
+      memory: 24Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+
+  config:
+    modules:
+      # Authoritative path: a name that only exists in the internal zone.
+      dns_internal:
+        prober: dns
+        timeout: 3s
+        dns:
+          preferred_ip_protocol: ip4
+          query_name: ns.<secret:kv/data/shared/domains~domain>
+          query_type: A
+          valid_rcodes: [NOERROR]
+          validate_answer_rrs:
+            fail_if_not_matches_regexp: ['.+\sIN\sA\s.+']
+      # Recursive path (forwarders, DNSSEC). Cached most of the time, and serve-stale would mask a
+      # dead upstream, so this proves "the resolver answers", not "the upstream is healthy".
+      dns_recursive:
+        prober: dns
+        timeout: 3s
+        dns:
+          preferred_ip_protocol: ip4
+          query_name: cloudflare.com
+          query_type: A
+          valid_rcodes: [NOERROR]
+          validate_answer_rrs:
+            fail_if_not_matches_regexp: ['.+\sIN\sA\s.+']
+      # Ad-block is enforced: a host that sits on the block lists must come back NXDOMAIN. Catches a
+      # node that restarted with an empty list or lost blocking after a settings change.
+      dns_blocklist:
+        prober: dns
+        timeout: 3s
+        dns:
+          preferred_ip_protocol: ip4
+          query_name: googleads.g.doubleclick.net
+          query_type: A
+          valid_rcodes: [NXDOMAIN]
+
+  serviceMonitor:
+    enabled: true
+    defaults:
+      interval: 30s
+      scrapeTimeout: 10s
+      module: dns_internal
+    targets:
+      - name: dns-primary-internal
+        url: <secret:kv/data/system/dns/technitium~lb-ip-primary>:53
+        module: dns_internal
+        labels: {dns_node: primary}
+      - name: dns-primary-recursive
+        url: <secret:kv/data/system/dns/technitium~lb-ip-primary>:53
+        module: dns_recursive
+        labels: {dns_node: primary}
+      - name: dns-primary-blocklist
+        url: <secret:kv/data/system/dns/technitium~lb-ip-primary>:53
+        module: dns_blocklist
+        labels: {dns_node: primary}
+      - name: dns-secondary-internal
+        url: <secret:kv/data/system/dns/technitium~lb-ip-secondary>:53
+        module: dns_internal
+        labels: {dns_node: secondary}
+      - name: dns-secondary-recursive
+        url: <secret:kv/data/system/dns/technitium~lb-ip-secondary>:53
+        module: dns_recursive
+        labels: {dns_node: secondary}
+      - name: dns-secondary-blocklist
+        url: <secret:kv/data/system/dns/technitium~lb-ip-secondary>:53
+        module: dns_blocklist
+        labels: {dns_node: secondary}
+      - name: dns-tertiary-internal
+        url: <secret:kv/data/shared/network~gobelijn-ip>:53
+        module: dns_internal
+        labels: {dns_node: tertiary}
+      - name: dns-tertiary-recursive
+        url: <secret:kv/data/shared/network~gobelijn-ip>:53
+        module: dns_recursive
+        labels: {dns_node: tertiary}
+      - name: dns-tertiary-blocklist
+        url: <secret:kv/data/shared/network~gobelijn-ip>:53
+        module: dns_blocklist
+        labels: {dns_node: tertiary}
+
+  # Severity convention (see wiki/01-platform/observability.md): critical = Slack now, warning = quieter.
+  # `target` = <dns-node>-<check>, set by the chart's relabelling; match on it, not on the raw address.
+  prometheusRule:
+    enabled: true
+    rules:
+      - alert: DnsResolverNotAnswering
+        # One resolver silent is a warning (clients fail over to the other two); `for` rides out a pod reschedule.
+        expr: probe_success{target=~"dns-.*-(internal|recursive)"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          category: dns
+        annotations:
+          summary: "DNS resolver {{ $labels.target }} is not answering"
+          description: "The {{ $labels.target }} probe has failed for 5 minutes. Clients still have the other resolvers; check the pod / NAS container and see wiki/01-platform/dns.md."
+      - alert: DnsAllResolversDown
+        # Authoritative check failing on every node = nobody resolves internal names at all.
+        expr: max(probe_success{target=~"dns-.*-internal"}) == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: dns
+        annotations:
+          summary: "No DNS resolver answers internal names"
+          description: "All three resolvers fail the internal-name probe. Everything that resolves by name is affected."
+      - alert: DnsBlockingNotEnforced
+        # NXDOMAIN expected for a block-listed host. Failing = blocking is off or the lists are empty on that node.
+        expr: probe_success{target=~"dns-.*-blocklist"} == 0
+        for: 15m
+        labels:
+          severity: warning
+          category: dns
+        annotations:
+          summary: "Ad-blocking is not enforced on {{ $labels.target }}"
+          description: "A known blocklisted host did not return NXDOMAIN. Check Settings -> Blocking and the block list update status on that node."
+      - alert: DnsResolverSlow
+        expr: probe_duration_seconds{target=~"dns-.*-internal"} > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          category: dns
+        annotations:
+          summary: "DNS resolver {{ $labels.target }} answers slowly"
+          description: "Authoritative answers take over 500 ms for 10 minutes; the zone data is local, so suspect CPU/memory pressure or network trouble."
+      - alert: DnsProbesMissing
+        # The prober itself is gone (its node is down), so every alert above would stay silent.
+        expr: absent(probe_success{target=~"dns-.*-internal"})
+        for: 15m
+        labels:
+          severity: warning
+          category: dns
+        annotations:
+          summary: "DNS probes are not reporting"
+          description: "No DNS probe results for 15 minutes. The prober runs on the VM node; check it, otherwise DNS outages go unnoticed."
