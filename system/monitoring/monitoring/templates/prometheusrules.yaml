@@ -160,6 +160,33 @@ spec:
             summary: "Longhorn volume {{`{{ $labels.volume }}`}} is faulted"
             description: "Longhorn reports volume {{`{{ $labels.volume }}`}} as faulted for more than 5 minutes. No healthy replica is currently available for this volume."
 
+        # snapshot-2h retains 24 and backups add a few, so ~25-27 is normal.
+        # A runaway count means snapshot-delete/cleanup is failing (e.g. a
+        # replica stuck in a stale "rebuilding" state), which burns instance-manager CPU.
+        - alert: LonghornVolumeTooManySnapshots
+          expr: >-
+            count by (volume) (longhorn_snapshot_actual_size_bytes) > 40
+          for: 1h
+          labels:
+            severity: warning
+            category: storage
+          annotations:
+            summary: "Longhorn volume {{`{{ $labels.volume }}`}} has too many snapshots"
+            description: "Volume {{`{{ $labels.volume }}`}} has {{`{{ $value }}`}} snapshots (normal is ~25). Snapshot cleanup is probably failing; check instance-manager logs for 'Failed to delete snapshot ... is rebuilding'."
+
+        - alert: LonghornInstanceManagerHighCPU
+          expr: >-
+            sum by (pod) (
+              rate(container_cpu_usage_seconds_total{namespace="storage", pod=~"instance-manager.*", container!=""}[5m])
+            ) > 0.8
+          for: 1h
+          labels:
+            severity: warning
+            category: storage
+          annotations:
+            summary: "Longhorn {{`{{ $labels.pod }}`}} is using high CPU"
+            description: "{{`{{ $labels.pod }}`}} has averaged {{`{{ $value | humanize }}`}} cores for over an hour (baseline ~0.2). Look for snapshot-removal retry loops or a stuck replica rebuild in its logs."
+
     # ─────────────────────────────────────────────────────────────────────────
     # NUT / UPS alerts (system/nut) — APC Back-UPS BX1600MI
     #
