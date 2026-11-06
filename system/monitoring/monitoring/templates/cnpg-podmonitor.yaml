@@ -1,0 +1,24 @@
+# Scrapes every CloudNativePG instance (port 9187) so the postgres.alerts rules have data.
+# A PodMonitor rather than pod annotations: annotating the Cluster would roll the databases.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ include "k3s-monitoring.fullname" . }}-cnpg
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "k3s-monitoring.labels" . | nindent 4 }}
+spec:
+  namespaceSelector:
+    any: true
+  selector:
+    matchExpressions:
+      - key: cnpg.io/cluster
+        operator: Exists
+  podMetricsEndpoints:
+    - port: metrics
+      interval: 60s
+      # `instance` defaults to the pod IP, which changes on every restart/reschedule and
+      # splits each metric into two series (two lines per pod in the dashboard). Pin it to the pod name.
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: instance

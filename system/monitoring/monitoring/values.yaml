@@ -267,6 +267,7 @@ promstack:
                 storage: 20Gi
       ruleSelectorNilUsesHelmValues: false
       serviceMonitorSelectorNilUsesHelmValues: false
+      podMonitorSelectorNilUsesHelmValues: false
       serviceMonitorSelector:
         matchLabels: null
       additionalScrapeConfigs:

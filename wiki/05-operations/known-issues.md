@@ -106,10 +106,11 @@ for these resources.
 
 ### Snapshot cleanup stuck on a stale "rebuilding" replica {#longhorn-stuck-snapshot-cleanup}
 
-**Symptom:** one node's `instance-manager` pod sits at 1-1.6 cores (baseline ~0.2), CPU spikes
-around the 04:00 snapshot-cleanup job, and a volume holds far more snapshots than the ~25 that
-snapshot-2h (24 kept) plus backups should leave. The Longhorn UI shows nothing wrong: the
-volume is `healthy` and every replica is `RW`.
+**Symptom:** a volume holds far more snapshots than the ~25 that snapshot-2h (24 kept) plus
+backups should leave, and the instance-manager log is full of `Failed to delete snapshot`
+warnings. The Longhorn UI shows nothing wrong: the volume is `healthy` and every replica is `RW`.
+This is **not** the cause of high instance-manager CPU: the loop ran for days while that pod sat at
+its ~0.2-core baseline, and clearing it did not lower a later ~1-core load.
 
 **Root cause:** one replica process kept an internal "rebuilding" flag after a rebuild that Longhorn
 itself considered finished. Every snapshot removal on that volume was then rejected with
@@ -411,6 +412,36 @@ dead man's switch — see [Routed IPTV → the watchdog](../01-platform/iptv.md#
 ---
 
 ## Databases
+
+### A forgotten psql session blocks vacuum and pins a Longhorn instance-manager {#stuck-psql-session-vacuum}
+
+**Symptom:** the Longhorn `instance-manager` on the node hosting the Home Assistant database sits at
+~1 core (baseline ~0.2) with no log output, node iowait/system/softirq are high, and one iSCSI device
+reads tens of MB/s. `LonghornInstanceManagerHighCPU` fires.
+
+**Root cause:** an ad-hoc `psql ... COPY ... TO STDOUT` (started through `kubectl exec`) lost its
+client and stayed `active / ClientWrite` for days. Its open snapshot stopped vacuum from removing any
+row deleted after it started, so after the nightly recorder purge (millions of deleted `states` rows)
+autovacuum rescanned the whole 9 GB table every minute without reclaiming anything (298 runs, 5 M
+dead tuples). Those reads go through the Longhorn engine, which is where the CPU showed up.
+
+**Diagnose:**
+
+```bash
+# long-running sessions pinning the xmin horizon
+kubectl -n smarthome exec <pg-pod> -c postgres -- psql -U postgres -c \
+  "select pid, application_name, state, wait_event, now()-xact_start as age, age(backend_xmin) from pg_stat_activity where backend_xmin is not null order by age(backend_xmin) desc"
+# dead tuples / vacuum churn on the recorder tables
+kubectl -n smarthome exec <pg-pod> -c postgres -- psql -U postgres -d homeassistant -c \
+  "select relname, n_live_tup, n_dead_tup, autovacuum_count from pg_stat_user_tables order by n_dead_tup desc limit 5"
+```
+
+**Fix:** `select pg_terminate_backend(<pid>)` for the stale session, then a plain
+`VACUUM (VERBOSE) public.states` (not `FULL`: it does not block reads/writes). That removed ~5 M dead
+rows and the instance-manager dropped back to ~0.2 cores within minutes. Prevention: run ad-hoc exports
+with `statement_timeout`/`timeout` or write to a file inside the pod instead of streaming to a client that can disappear.
+The `PostgresLongRunningTransaction` alert (>1h) now flags such a session, and the HA cluster's
+autovacuum scale factors are 0.05 (default 0.2) so vacuum runs earlier and in smaller passes.
 
 ### The ArgoCD repo-server OOM — see [above](#argocd-repo-server-oom)
 

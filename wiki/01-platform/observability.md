@@ -128,9 +128,11 @@ and is used by both Alertmanager and Grafana provisioning.
 - *Certificates*: cert-manager not ready 30 min, expiry <14 d (renewal normally happens at 30 d, so
   this means it is stuck), <3 d critical.
 - *Longhorn* (`longhorn.alerts`): volume degraded 15 min, faulted 5 min, **>40 snapshots on a volume
-  for 1h** and **instance-manager >0.8 cores for 1h**. The last two catch a stuck snapshot cleanup that
+  for 1h** and **instance-manager >0.8 cores for 1h**. The snapshot-count alert catches a stuck snapshot cleanup that
   robustness alerts miss, see
   [Known Issues → stuck snapshot cleanup](../05-operations/known-issues.md#longhorn-stuck-snapshot-cleanup).
+- *Postgres* (`postgres.alerts`, CNPG metrics via `templates/cnpg-podmonitor.yaml`): a transaction open
+  for >1h on any CNPG cluster. Dashboard: "CloudNativePG".
 - *UPS* (`nut.alerts`): unchanged.
 - *Logs*: failed NAS sign-ins (>4 in 10 min), error surge (>400 error lines/15 min **and** ≥5× the same
   window yesterday), volume surge (>40 k lines/15 min **and** ≥4× yesterday). Relative thresholds

@@ -5,7 +5,8 @@
 ## The operator: CloudNativePG
 
 `system/databases/cloudnative-pg` installs just the **CloudNativePG operator** — a small,
-lean deployment (operator only; monitoring/dashboards explicitly left disabled for now).
+lean deployment (operator only; its own `PodMonitor` is enabled so operator metrics feed the
+operator panels of the CloudNativePG dashboard, the bundled Grafana dashboard stays disabled).
 Every actual Postgres instance is a separate `Cluster` custom resource defined by the
 *consuming* workload, not centrally here. There are currently two (`workload/smarthome/smarthome-db-cnpg`, `workload/arr-stack/service-db-cnpg`):
 
@@ -30,6 +31,17 @@ Each cluster is defined by plain manifests (no Helm chart), consistently structu
   `claimRef` for deterministic binding, carrying its own snapshot/backup recurring-job
   labels.
 - `secrets.yaml` — the Vault-backed role-credential Secrets.
+
+**Monitoring is automatic.** One `PodMonitor` in the monitoring chart
+(`templates/cnpg-podmonitor.yaml`) scrapes every pod carrying the `cnpg.io/cluster` label on its
+metrics port, in any namespace, so a new cluster needs no extra manifest. The "CloudNativePG"
+Grafana dashboard (`grafana-dashboards/cnpg.json`, the upstream one) shows per-cluster health,
+connections, transactions, replication, WAL and backups. `PostgresLongRunningTransaction` alerts on
+sessions holding a transaction for over an hour (it blocks vacuum, see
+[Known Issues](../05-operations/known-issues.md#stuck-psql-session-vacuum)). The Home Assistant
+cluster also lowers `autovacuum_vacuum_scale_factor` / `autovacuum_analyze_scale_factor` to 0.05
+in `cluster.yaml`, because the recorder's 21 M-row `states` table makes the default 20 % threshold
+far too lax.
 
 **Why this shape, not a Helm chart:** roles and databases are genuinely declarative data
 (a list of who exists and what they own), and CNPG's own CRDs already express that

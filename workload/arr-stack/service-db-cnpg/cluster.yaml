@@ -22,7 +22,7 @@ spec:
   resources:
     requests:
       cpu: 100m
-      memory: 256Mi
+      memory: 384Mi             # steady use is ~330Mi; 256Mi showed as 123% in the CNPG dashboard
     limits:
       memory: 512Mi
 
