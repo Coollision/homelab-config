@@ -104,6 +104,49 @@ roughly 4 seconds.
 `values.yaml`, commit, and let ArgoCD apply it. There is no supported live-patch path
 for these resources.
 
+### Snapshot cleanup stuck on a stale "rebuilding" replica {#longhorn-stuck-snapshot-cleanup}
+
+**Symptom:** one node's `instance-manager` pod sits at 1-1.6 cores (baseline ~0.2), CPU spikes
+around the 04:00 snapshot-cleanup job, and a volume holds far more snapshots than the ~25 that
+snapshot-2h (24 kept) plus backups should leave. The Longhorn UI shows nothing wrong: the
+volume is `healthy` and every replica is `RW`.
+
+**Root cause:** one replica process kept an internal "rebuilding" flag after a rebuild that Longhorn
+itself considered finished. Every snapshot removal on that volume was then rejected with
+`cannot remove a snapshot because tcp://<pod-ip>:<port> is rebuilding` and retried in a loop
+(thousands of times per day), while new snapshots kept piling up. Nothing in the CRs reflects
+the flag, so robustness-based alerts stay silent.
+
+**Likely trigger:** replicas killed mid-rebuild/purge by node and instance-manager restarts. The
+first rejected removal was on the day of the k3s `KillMode` incident (see
+[Node-stack gotchas](#node-stack-gotchas)), when every k3s restart killed all containers on the
+node and the volume was rebuilt several times in a few hours. The exact step that left the flag
+set is not proven. `KillMode=process` is now enforced by the ansible k3s units (live on the
+nodes), so a plain k3s restart no longer takes Longhorn down; restarts that still do (reboots,
+drains, instance-manager upgrades) can in principle cause this again, which is why the alerts exist.
+
+**Diagnose:**
+
+```bash
+# which pod IP:port is blamed? (look at instance-manager logs on the loaded node)
+kubectl -n storage logs <instance-manager-pod> --since=30m | grep "Failed to delete snapshot"
+# map the port back to a replica
+kubectl -n storage get replicas.longhorn.io -o json \
+  | jq -r '.items[] | select(.status.port==<port>) | [.metadata.name,.spec.volumeName,.spec.nodeID]|@tsv'
+# snapshots per volume
+kubectl -n storage get snapshots.longhorn.io -o json | jq -r '.items[].spec.volume' | sort | uniq -c | sort -rn | head
+```
+
+**Fix:** delete that one replica CR (`kubectl -n storage delete replicas.longhorn.io <name>`; needs
+another healthy replica, check first). Longhorn rebuilds it clean and cleanup catches up on its
+own. To purge immediately instead of waiting for 04:00, POST `snapshotPurge` to the volume via the
+Longhorn API from inside a `longhorn-manager` pod
+(`/v1/volumes/<vol>?action=snapshotPurge`). Right after a rebuild you will see a few
+`Failed to get change time and checksum ... .checksum: no such file` warnings; they are harmless.
+
+**Alerts:** `LonghornVolumeTooManySnapshots` (>40 snapshots for 1h) and
+`LonghornInstanceManagerHighCPU` (>0.8 cores for 1h) in `templates/prometheusrules.yaml`.
+
 ### Resizing a Longhorn PVC {#resizing-a-longhorn-pvc}
 
 **You cannot shrink a Longhorn PVC in place** — Kubernetes/Longhorn only support growing

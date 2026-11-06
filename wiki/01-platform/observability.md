@@ -127,7 +127,11 @@ and is used by both Alertmanager and Grafana provisioning.
   Grafana temperature rules that flapped ~90 times a week.
 - *Certificates*: cert-manager not ready 30 min, expiry <14 d (renewal normally happens at 30 d, so
   this means it is stuck), <3 d critical.
-- *Longhorn*, *UPS*: unchanged (`longhorn.alerts`, `nut.alerts`).
+- *Longhorn* (`longhorn.alerts`): volume degraded 15 min, faulted 5 min, **>40 snapshots on a volume
+  for 1h** and **instance-manager >0.8 cores for 1h**. The last two catch a stuck snapshot cleanup that
+  robustness alerts miss, see
+  [Known Issues → stuck snapshot cleanup](../05-operations/known-issues.md#longhorn-stuck-snapshot-cleanup).
+- *UPS* (`nut.alerts`): unchanged.
 - *Logs*: failed NAS sign-ins (>4 in 10 min), error surge (>400 error lines/15 min **and** ≥5× the same
   window yesterday), volume surge (>40 k lines/15 min **and** ≥4× yesterday). Relative thresholds
   because several healthy workloads log ~100 errors per 15 min permanently.

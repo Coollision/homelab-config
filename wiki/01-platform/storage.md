@@ -66,6 +66,10 @@ notification was not ported, so there is no "PV reclaimed" alert.
 
 ## Practical notes
 
+- **Snapshot counts should hover around 25 per volume.** A runaway count or an instance-manager pinned
+  above ~0.8 cores means snapshot cleanup is failing; both are alerted on. See
+  [Known Issues → stuck snapshot cleanup](../05-operations/known-issues.md#longhorn-stuck-snapshot-cleanup).
+
 - **The Music share has two PV/PVC pairs on the same NFS path**: a read-only one in `smarthome` for Music
   Assistant and a read-write one in `arr-stack` (`arr-stack-music`, in `shared/_storage.yaml`) for the intake, which
   files new albums into it.
