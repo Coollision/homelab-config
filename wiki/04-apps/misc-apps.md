@@ -64,5 +64,4 @@ leftover), so fix that before enabling it.
 
 ## Disabled apps — `workload/apps`
 
-`disabled-printflow`, `disabled-printstash`, `disabled-spoolman` and `disabled-wishlist` are
-parked (excluded from deployment by the `disabled-*` convention).
+`disabled-wishlist` is parked (excluded from deployment by the `disabled-*` convention).
