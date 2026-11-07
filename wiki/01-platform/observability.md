@@ -62,6 +62,8 @@ haven't actually been rendering, and
 [Known Issues → the Grafana v2 export format](../05-operations/known-issues.md#grafana-v2-dashboard-export-format)
 for a gotcha if you ever export a new one from Grafana 13's UI.
 
+The vendored `cnpg.json` diverges from upstream on purpose: its "Memory Utilisation" panel uses container RSS instead of the working set, because page cache on the large Home Assistant DB pushed the stock ratio past 100% of the request.
+
 ## Synology NAS metrics — `system/monitoring/home-metrics`
 
 Plain manifests (no Helm chart): one `snmp-exporter` Deployment scraping **every NAS** over

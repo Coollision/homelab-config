@@ -37,7 +37,7 @@ spec:
   resources:
     requests:
       cpu: 250m
-      memory: 512Mi
+      memory: 768Mi             # request ~ real use (anon+shared_buffers ~0.3Gi + hot cache); keeps dashboard/scheduler honest
     limits:
       memory: 1Gi               # stock shared_buffers -> lean; 1Gi is the proven floor
 
