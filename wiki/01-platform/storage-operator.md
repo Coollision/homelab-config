@@ -130,7 +130,7 @@ aren't visible from VLAN 5 can be added as records (the list is read once at sta
   each record with `wsdName` is also announced as a Windows "Computer" (UDP multicast 3702 plus a
   metadata endpoint on TCP 5357 of the pod's VLAN 5 address). It is a proxy like the Bonjour
   records: Explorer opens `\\<wsdName>`, so the name must resolve **in DNS**: the LAN network hands out
-  the DHCP domain (UniFi, network "Intern") and the `declerck.dev` zone needs an exact record per name
+  the DHCP domain (UniFi, network "Intern") and the `<internal-domain>` zone needs an exact record per name
   (`storage` A to the SMB LoadBalancer, `gobelijn` CNAME to the zone apex, which is the NAS). The zone also
   has a wildcard to the ingress, so a missing exact record silently sends Windows to the wrong host.
   Clients need a Private network profile to show discovered devices.
@@ -165,8 +165,8 @@ Defaults are **shell parity**: every Released PV, any reclaim policy, any Storag
 | `pvReclaimer.patchMode` | `clear` (drop whole `claimRef`) or `keep-claim` (drop only `uid`/`resourceVersion`) |
 
 **Cutover is done.** It runs live (`dryRun` off) and the legacy shell app
-`system/storage/pv-reclaimer` has been removed. Next hardening step: `retainOnly: true`. The
-shell app's unwired webhook was not ported.
+`system/storage/pv-reclaimer` has been removed. `pvReclaimer.retainOnly: true` is set in the
+app values, so only `Retain` PVs are reclaimed. The shell app's unwired webhook was not ported.
 
 ## Metrics, events, probes {#storage-operator-observability}
 
@@ -209,8 +209,8 @@ kubectl -n storage rollout restart deploy/smb-operator
 
 - **Delete-policy race.** With parity defaults the reclaimer also clears `claimRef` on Released
   PVs with `reclaimPolicy: Delete` and PVs already being deleted. That races the PV controller /
-  CSI deleter (leaked volume, or a new PVC binding a PV whose volume is gone). Set
-  `retainOnly: true` right after cutover. Longhorn's default class is `Retain`, so this mostly
+  CSI deleter (leaked volume, or a new PVC binding a PV whose volume is gone). `retainOnly: true`
+  avoids this and is set in `system/storage/longhorn-smb-operator/values.yaml`. Longhorn's default class is `Retain`, so this mostly
   matters for other classes.
 - **Dry-run events repeat.** The PV stays Released, so `WouldReclaim` repeats; compare names.
 - **Restart re-applies the Deployment** (generation bump, no pod roll) as described above.
