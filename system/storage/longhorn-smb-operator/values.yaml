@@ -5,6 +5,8 @@ storage-operator:
     enabled: true
 
   # Replaces the old shell `pv-reclaimer` app. Defaults are parity with it (every Released PV,
-  # any policy, whole claimRef). Next hardening step: retainOnly: true.
+  # any policy, whole claimRef). retainOnly limits it to Retain-policy PVs so it never races the
+  # CSI deleter on Delete-policy volumes (see wiki storage-operator gotchas).
   pvReclaimer:
     enabled: true
+    retainOnly: true
