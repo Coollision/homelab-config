@@ -66,25 +66,25 @@ config:
   # Default drops 5000 -> 1000. Kept at 5000 (entry count is cheap).
   N8N_COMPRESSION_NODE_MAX_ZIP_ENTRIES: "5000"
 
-  # Deliberately NOT the current 2 GiB default: this pod is capped at 640Mi, so a
+  # Deliberately NOT the current 2 GiB default: this pod is capped at 1Gi, so a
   # decompression anywhere near 2 GiB would OOM-kill it long before the limit applied.
   # 256 MiB (the upcoming default) is a guard that can actually fire.
   N8N_COMPRESSION_NODE_MAX_DECOMPRESSED_SIZE_BYTES: "268435456"
 
-  # Without this, V8 sizes the old-space heap off total system RAM, not the 640Mi
+  # Without this, V8 sizes the old-space heap off total system RAM, not the 1Gi
   # cgroup limit, so it grows until the kernel OOM-kills the container outright
   # (SIGABRT, exitCode 134 - no graceful GC/error, just a hard crash-restart loop).
-  # Capping old-space at 384 MiB leaves headroom under the 640Mi limit for
+  # Capping old-space at 640 MiB leaves headroom under the 1Gi limit for
   # non-heap memory (native buffers, task broker, worker threads, RSS overhead).
-  NODE_OPTIONS: "--max-old-space-size=384"
+  NODE_OPTIONS: "--max-old-space-size=640"
 
 resources:
   requests:
-    cpu: 20m
-    memory: 448Mi
-  limits:
-    cpu: 400m
+    cpu: 100m
     memory: 640Mi
+  limits:
+    cpu: 1500m
+    memory: 1Gi
 
 ingress_internal_secure:
   host: n8n.<secret:kv/data/shared/domains~domain>
