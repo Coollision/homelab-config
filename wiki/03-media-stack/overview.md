@@ -40,8 +40,11 @@ User ──▶ Jellyseerr (request UI)
 Everything in this chain that isn't infrastructure (API keys between Prowlarr and
 Radarr/Sonarr, indexer settings, download-client wiring) is configured through each app's
 own web UI at runtime and lives in that app's own database — it is **not** expressed in
-this repo's Helm values, deliberately. Grep for `api_key`/`apikey` in this repo and
-you'll find almost nothing — that's expected, not a gap.
+this repo's Helm values, deliberately. The one exception is each app's **own** API key
+(Sonarr/Radarr/Lidarr/Prowlarr): `arr-lib` pins `ApiKey` in `config.xml` from Vault
+(`kv/workload/arr-stack/<app>~api-key`, via the `services-db` Secret) at pod start, so Homepage
+widgets and Prefetcharr can read the same value. Bazarr, Jellyseerr and Tautulli keep theirs in
+their own config; the Vault copy is only for Homepage and must be updated by hand if regenerated.
 
 ## The apps
 

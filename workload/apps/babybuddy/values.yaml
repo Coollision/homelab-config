@@ -89,6 +89,10 @@ ingress_internal_secure:
 ingress_external_secure:
   host: babybuddy.<secret:kv/data/shared/domains~domain>
   port: http
+homepage:
+  group: Tools
+  icon: babybuddy
+  description: Baby tracker
 
 storage:
   - mountPath: /config

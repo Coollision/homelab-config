@@ -77,6 +77,7 @@ Everything else — `workload/apps/`, `workload/databases/`, `workload/secrets/`
 | Page | Covers |
 |---|---|
 | [Misc apps](04-apps/misc-apps.md) | BabyBuddy, CloudBeaver, Vaultwarden, WordPress, the wedding geocache site |
+| [Homepage](04-apps/homepage.md) | Landing-page dashboard, auto-discovered from IngressRoute annotations |
 | [AWS proxies](04-apps/aws-proxies.md) | aws-tunnels — SSM-based tunnels into AWS |
 
 ### 05 · Operations
@@ -97,6 +98,7 @@ Planned work that is not built yet. Pages move to their normal section once done
 | [Registry mirror](06-todo/registry-mirror.md) | Broaden the NAS docker.io mirror to ghcr/quay/k8s registries; is kube-fledged still needed? |
 | [Zot mirror plan](06-todo/zot-registry-mirror.md) | Detailed plan: one Zot pull-through cache on the NAS for all upstreams, phases, risks, rollout |
 | [k3s tuning](06-todo/k3s-tuning.md) | Faster image pulls, graceful node shutdown, system-upgrade-controller + the KillMode question |
+| [Technitium secondary headless](06-todo/technitium-secondary-headless.md) | Does the secondary need its web UI, and would dropping it save anything? |
 
 ### 07 · Rejected
 Ideas that were looked at and deliberately not built, with the reasoning.

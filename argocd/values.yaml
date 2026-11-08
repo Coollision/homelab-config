@@ -267,6 +267,12 @@ argo-cd:
 
   controller:
     revisionHistoryLimit: 3
+    # argocd-server is scale-to-zero, so dashboards (Homepage) read app health/sync from the always-on controller
+    # via Prometheus (argocd_app_info) instead of the server API. Prometheus selects all ServiceMonitors.
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: true
     affinity:
       nodeAffinity:
         preferredDuringSchedulingIgnoredDuringExecution:

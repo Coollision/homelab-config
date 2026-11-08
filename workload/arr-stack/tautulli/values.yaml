@@ -20,6 +20,15 @@ config:
 ingress_internal:
   host: tautulli.<secret:kv/data/shared/domains~local>
   port: web
+
+homepage:
+  group: Media
+  icon: tautulli
+  description: Plex stats
+  widget:
+    type: tautulli
+    url: http://tautulli-service.arr-stack.svc.cluster.local:8181
+    key: "{{HOMEPAGE_VAR_TAUTULLI_KEY}}"
 storage:
   - type: longhorn
     mountPath: /config

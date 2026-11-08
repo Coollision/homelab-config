@@ -177,3 +177,34 @@ affinity:
 {{- end }}
 {{- end }}
 
+
+{{/*
+Homepage (gethomepage.dev) discovery annotations for a Traefik IngressRoute. Call with
+(dict "root" . "scheme" "https" "host" <host>). Auto-enabled for every app that has an ingress; opt out
+with `homepage.hidden: true`. Optional `homepage:` values: name, group (default: namespace), icon,
+description, href, widget (map -> gethomepage.dev/widget.<key>).
+Homepage never derives the URL from Host(), so href is always rendered. pod-selector is ALWAYS rendered:
+Homepage cannot disable status per service and without it falls back to the route name (matches no pod).
+For scale-to-zero apps this shows "not found" while asleep, via the k8s API only, so nothing wakes. Keys never go here (public repo): widget
+values reference env vars as {{HOMEPAGE_VAR_X}} which Homepage resolves from its own Secret.
+*/}}
+{{- define "shared-lib.homepageAnnotations" -}}
+{{- $root := .root -}}
+{{- $hp := default dict $root.Values.homepage -}}
+{{- if not $hp.hidden }}
+gethomepage.dev/enabled: "true"
+gethomepage.dev/name: {{ $hp.name | default (include "helm.fullname" $root) | quote }}
+gethomepage.dev/group: {{ $hp.group | default $root.Release.Namespace | quote }}
+gethomepage.dev/href: {{ $hp.href | default (printf "%s://%s" .scheme .host) | quote }}
+{{- with $hp.icon }}
+gethomepage.dev/icon: {{ . | quote }}
+{{- end }}
+{{- with $hp.description }}
+gethomepage.dev/description: {{ . | quote }}
+{{- end }}
+gethomepage.dev/pod-selector: {{ printf "app.kubernetes.io/name=%s" (include "helm.name" $root) | quote }}
+{{- range $k, $v := $hp.widget }}
+gethomepage.dev/widget.{{ $k }}: {{ $v | quote }}
+{{- end }}
+{{- end }}
+{{- end }}
