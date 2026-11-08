@@ -127,6 +127,10 @@ and is used by both Alertmanager and Grafana provisioning.
   RAID degraded/crashed, disk failure, disk temperature (>50 °C 30 min warn / >60 °C critical),
   system temperature >70 °C, volume <10 % / <5 % free. The long `for:` windows replaced hand-made
   Grafana temperature rules that flapped ~90 times a week.
+- *Node temperature* (`node-temperature.alerts`, node-exporter hwmon): CPU >80 °C 15 min warn / >90 °C 5 min
+  critical, NVMe >63 °C 15 min warn. Set ~5 °C above the worst 7-day peak because the rack is fan-cooled, so a
+  hit means an airflow problem. The x86 minis' ACPI `acpitz` zone is a constant -273.3 °C firmware placeholder;
+  it is dropped at scrape time (node-exporter `metricRelabelings`), and the alerts also filter `> 0`.
 - *Certificates*: cert-manager not ready 30 min, expiry <14 d (renewal normally happens at 30 d, so
   this means it is stuck), <3 d critical.
 - *Longhorn* (`longhorn.alerts`): volume degraded 15 min, faulted 5 min, **>40 snapshots on a volume

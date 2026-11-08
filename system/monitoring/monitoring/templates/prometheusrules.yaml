@@ -257,6 +257,49 @@ spec:
             description: "No successful scrape of the nut-exporter target for 15 minutes — the UPS pod, its node, or the ServiceMonitor may be down. This is a real gap, not the known short driver stalls (which don't take the exporter itself down)."
 
     # ─────────────────────────────────────────────────────────────────────────
+    # Node temperature (node-exporter hwmon). Thresholds sit ~5 °C above the worst 7-day
+    # peak (Nov 2026: CPU 75 °C, NVMe 58 °C) on purpose: the rack is fan-controlled, so a
+    # reading above that means a fan/airflow problem, not load. Hardware limits are far
+    # higher (CPU 105 °C, NVMe 90 °C). `> 0` drops the bogus -273 °C placeholder sensors
+    # (master-green thermal_zone0) without naming the chip.
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: node-temperature.alerts
+      interval: 1m
+      rules:
+        - alert: NodeCpuTemperatureHigh
+          expr: >-
+            max by (instance) (node_hwmon_temp_celsius{chip=~"platform_coretemp.*|thermal_thermal_zone0"} > 0) > 80
+          for: 15m
+          labels:
+            severity: warning
+            category: hardware
+          annotations:
+            summary: "Node {{`{{ $labels.instance }}`}} CPU is hot ({{`{{ $value | humanize }}`}} °C)"
+            description: "CPU temperature on {{`{{ $labels.instance }}`}} has been above 80 °C for 15 minutes. Normal peak is ~75 °C in the fan-cooled rack: check rack fans/airflow."
+
+        - alert: NodeCpuTemperatureCritical
+          expr: >-
+            max by (instance) (node_hwmon_temp_celsius{chip=~"platform_coretemp.*|thermal_thermal_zone0"} > 0) > 90
+          for: 5m
+          labels:
+            severity: critical
+            category: hardware
+          annotations:
+            summary: "Node {{`{{ $labels.instance }}`}} CPU is overheating ({{`{{ $value | humanize }}`}} °C)"
+            description: "CPU temperature on {{`{{ $labels.instance }}`}} has been above 90 °C for 5 minutes (throttling starts near 100 °C). Check rack cooling now."
+
+        - alert: NodeNvmeTemperatureHigh
+          expr: >-
+            max by (instance) (node_hwmon_temp_celsius{chip=~"nvme.*"} > 0) > 63
+          for: 15m
+          labels:
+            severity: warning
+            category: hardware
+          annotations:
+            summary: "Node {{`{{ $labels.instance }}`}} NVMe is hot ({{`{{ $value | humanize }}`}} °C)"
+            description: "NVMe temperature on {{`{{ $labels.instance }}`}} has been above 63 °C for 15 minutes (normal peak ~58 °C). Check rack airflow."
+
+    # ─────────────────────────────────────────────────────────────────────────
     # Synology NAS alerts (system/monitoring/home-metrics, SNMP exporter, job="snmp-exporter")
     #
     # One rule set covers every NAS the exporter scrapes; the `instance` label carries the
