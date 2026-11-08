@@ -7,7 +7,7 @@ namespaceOverride: ""
 
 image:
   repository: ghcr.io/coollision/storage-operator
-  tag: v0.3.2
+  tag: v0.3.3
   pullPolicy: IfNotPresent
 
 replicaCount: 1
