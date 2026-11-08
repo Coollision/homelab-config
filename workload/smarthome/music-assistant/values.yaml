@@ -81,6 +81,11 @@ ingress_internal_secure:
   host: music.<secret:kv/data/shared/domains~domain>
   port: web
 
+homepage:
+  group: Media
+  icon: music-assistant
+  description: Multi-room music
+
 storage:
   # Database, settings, provider credentials (Spotify), cache. Playlists, favourites and play counts live
   # only here, so it is protected.

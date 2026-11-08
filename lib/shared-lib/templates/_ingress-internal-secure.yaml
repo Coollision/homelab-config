@@ -16,9 +16,15 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "helm.labels" . | nindent 4 }}
-  {{- if .Values.syncWave }}
+  {{- $hp := include "shared-lib.homepageAnnotations" (dict "root" . "scheme" "https" "host" .Values.ingress_internal_secure.host) }}
+  {{- if or .Values.syncWave $hp }}
   annotations:
+    {{- if .Values.syncWave }}
     argocd.argoproj.io/sync-wave: {{ .Values.syncWave | default 0 | quote }}
+    {{- end }}
+    {{- with $hp }}
+    {{- . | nindent 4 }}
+    {{- end }}
   {{- end }}
 spec:
   entryPoints: 

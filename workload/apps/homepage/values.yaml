@@ -1,0 +1,382 @@
+# Homepage dashboard. Stateless: config is a ConfigMap in git (no PVC). Apps appear automatically from the
+# `gethomepage.dev/*` annotations shared-lib renders on every IngressRoute (see `homepage:` in an app's
+# values to tweak/hide); things without an IngressRoute live in services.yaml below. wiki/04-apps/homepage.md
+fullnameOverride: homepage
+
+# shared-lib has no ServiceAccount of its own; rbac.yaml creates `homepage` and the pod must use it.
+serviceAccountName: homepage
+automountServiceAccountToken: true
+
+deployment:
+  image:
+    repository: ghcr.io/gethomepage/homepage
+    tag: v2.7.0
+  ports:
+    web: 3000
+
+config:
+  TZ: Europe/Brussels
+  # Required since v1: requests with an unlisted Host header are rejected (probes too, see below).
+  HOMEPAGE_ALLOWED_HOSTS: homepage.<secret:kv/data/shared/domains~domain>,localhost:3000
+  # Config dir is partly read-only (ConfigMap subPaths); logging to a file there would fail.
+  LOG_TARGETS: stdout
+  HOMEPAGE_VAR_SONARR_KEY: {secretKeyRef: {name: homepage-keys, key: sonarr}}
+  HOMEPAGE_VAR_RADARR_KEY: {secretKeyRef: {name: homepage-keys, key: radarr}}
+  HOMEPAGE_VAR_LIDARR_KEY: {secretKeyRef: {name: homepage-keys, key: lidarr}}
+  HOMEPAGE_VAR_PROWLARR_KEY: {secretKeyRef: {name: homepage-keys, key: prowlarr}}
+  HOMEPAGE_VAR_BAZARR_KEY: {secretKeyRef: {name: homepage-keys, key: bazarr}}
+  HOMEPAGE_VAR_JELLYSEERR_KEY: {secretKeyRef: {name: homepage-keys, key: jellyseerr}}
+  HOMEPAGE_VAR_TAUTULLI_KEY: {secretKeyRef: {name: homepage-keys, key: tautulli}}
+  HOMEPAGE_VAR_SLSKD_KEY: {secretKeyRef: {name: homepage-keys, key: slskd}}
+  HOMEPAGE_VAR_TECHNITIUM_KEY: {secretKeyRef: {name: homepage-keys, key: technitium}}
+  HOMEPAGE_VAR_UNIFI_KEY: {secretKeyRef: {name: homepage-keys, key: unifi}}
+  HOMEPAGE_VAR_GOBELIJN_IP: {secretKeyRef: {name: homepage-keys, key: gobelijn_ip}}
+
+secrets:
+  # Widget API keys, read by Homepage as {{HOMEPAGE_VAR_*}} (annotations stay key-free, repo is public).
+  - name: homepage-keys
+    secret_kv:
+      sonarr: <secret:kv/data/workload/arr-stack/sonarr~api-key>
+      radarr: <secret:kv/data/workload/arr-stack/radarr~api-key>
+      lidarr: <secret:kv/data/workload/arr-stack/lidarr~api-key>
+      prowlarr: <secret:kv/data/workload/arr-stack/prowlarr~api-key>
+      bazarr: <secret:kv/data/workload/arr-stack/bazarr~api-key>
+      jellyseerr: <secret:kv/data/workload/arr-stack/jellyseerr~api-key>
+      tautulli: <secret:kv/data/workload/arr-stack/tautulli~api-key>
+      slskd: <secret:kv/data/workload/arr-stack/slskd~api-key>
+      technitium: <secret:kv/data/workload/apps/homepage~technitium-token>
+      unifi: <secret:kv/data/workload/apps/homepage~unifi-key>
+      gobelijn_ip: <secret:kv/data/shared/network~gobelijn-ip>
+
+probes:
+  readiness:
+    httpGet:
+      path: /api/healthcheck
+      port: 3000
+      httpHeaders:
+        - name: Host
+          value: localhost:3000
+    periodSeconds: 10
+  liveness:
+    httpGet:
+      path: /api/healthcheck
+      port: 3000
+      httpHeaders:
+        - name: Host
+          value: localhost:3000
+    periodSeconds: 30
+    failureThreshold: 3
+
+resources:
+  requests:
+    cpu: 20m
+    memory: 128Mi
+  limits:
+    memory: 384Mi
+
+# Internal only: the page lists every service in the lab and Homepage's own login is OFF (LAN-only is the
+# access control). If this is ever exposed externally, first enable Homepage v2 auth (HOMEPAGE_AUTH_ENABLED +
+# password or OIDC) and add an ingress_external_secure block; do not expose it as is.
+ingress_internal_secure:
+  host: homepage.<secret:kv/data/shared/domains~domain>
+  port: web
+
+homepage:
+  name: Homepage
+  group: Infra
+  icon: homepage
+
+# One subPath mount per file: a whole-directory ConfigMap mount is read-only and the nested logs dir would break.
+storage:
+  - {mountPath: /app/config/settings.yaml, subPath: settings.yaml, type: configMap, configMapName: homepage-config, nameSuffix: settings, readOnly: true}
+  - {mountPath: /app/config/services.yaml, subPath: services.yaml, type: configMap, configMapName: homepage-config, nameSuffix: services, readOnly: true}
+  - {mountPath: /app/config/widgets.yaml, subPath: widgets.yaml, type: configMap, configMapName: homepage-config, nameSuffix: widgets, readOnly: true}
+  - {mountPath: /app/config/kubernetes.yaml, subPath: kubernetes.yaml, type: configMap, configMapName: homepage-config, nameSuffix: kubernetes, readOnly: true}
+  - {mountPath: /app/config/bookmarks.yaml, subPath: bookmarks.yaml, type: configMap, configMapName: homepage-config, nameSuffix: bookmarks, readOnly: true}
+  - {mountPath: /app/config/logs, type: emptyDir, nameSuffix: logs}
+
+configMaps:
+  - name: homepage-config
+    data:
+      kubernetes.yaml: |
+        mode: cluster
+        # IngressRoute discovery only; plain Ingress/Gateway are unused here.
+        traefik: true
+        ingress: false
+        gateway: false
+      settings.yaml: |
+        title: Homelab
+        theme: dark
+        color: slate
+        headerStyle: clean
+        statusStyle: dot
+        hideVersion: true
+        useEqualHeights: true
+        # group names come from `homepage.group` (default: the namespace)
+        layout:
+          Monitoring:
+            style: row
+            columns: 4
+          Media:
+            style: row
+            columns: 4
+          Smart Home:
+            style: row
+            columns: 4
+          Infra:
+            style: row
+            columns: 4
+          NAS:
+            style: row
+            columns: 4
+          Tools:
+            style: row
+            columns: 4
+          Databases:
+            style: row
+            columns: 4
+      widgets.yaml: |
+        - kubernetes:
+            cluster:
+              show: true
+              cpu: true
+              memory: true
+              showLabel: true
+              label: cluster
+            nodes:
+              show: true
+              cpu: true
+              memory: true
+              showLabel: true
+        - datetime:
+            text_size: xl
+            format:
+              timeStyle: short
+              dateStyle: short
+      bookmarks.yaml: |
+        - Dashboards:
+            - CloudNativePG:
+                - icon: postgresql
+                  href: http://grafana.<secret:kv/data/shared/domains~local>/d/cloudnative-pg
+            - k3s overview:
+                - icon: kubernetes
+                  href: http://grafana.<secret:kv/data/shared/domains~local>/d/82pBZCmRkasd
+            - Longhorn:
+                - icon: longhorn
+                  href: http://grafana.<secret:kv/data/shared/domains~local>/d/ozk-lh-mon
+            - Mosquitto:
+                - icon: mosquitto
+                  href: http://grafana.<secret:kv/data/shared/domains~local>/d/mosquitto-security
+            - Sablier:
+                - icon: mdi-sleep
+                  href: http://grafana.<secret:kv/data/shared/domains~local>/d/sablier-scale-to-zero
+            - Speedtest:
+                - icon: speedtest-tracker
+                  href: http://grafana.<secret:kv/data/shared/domains~local>/d/speedtestDB
+            - Synology SNMP:
+                - icon: synology
+                  href: http://grafana.<secret:kv/data/shared/domains~local>/d/qfGRDGZgz
+            - Traefik:
+                - icon: traefik
+                  href: http://grafana.<secret:kv/data/shared/domains~local>/d/cdqg5ztcso5xcb
+            - UPS:
+                - icon: mdi-battery-charging
+                  href: http://grafana.<secret:kv/data/shared/domains~local>/d/e0029e2a-6284-43a4-8a6f-483208b16d47
+      # Things with no (shared-lib) IngressRoute: hand-written routes and cluster-internal URLs.
+      # Widget URLs use in-cluster Services (bypasses Sablier). Scale-to-zero apps get NO widget/status.
+      services.yaml: |
+        - Monitoring:
+            - Cluster health:
+                icon: mdi-heart-pulse
+                widget:
+                  type: prometheusmetric
+                  url: http://monitoring-promstack-prometheus.monitoring.svc.cluster.local:9090
+                  metrics:
+                    - label: Firing alerts
+                      query: count(ALERTS{alertstate="firing",alertname!~"Watchdog|InfoInhibitor"}) or vector(0)
+                      format: {type: number, options: {maximumFractionDigits: 0}}
+                    - label: Targets down
+                      query: count(up == 0) or vector(0)
+                      format: {type: number, options: {maximumFractionDigits: 0}}
+                    - label: Nodes up
+                      query: count(up{job="kubelet",metrics_path="/metrics"}==1)
+                      format: {type: number, options: {maximumFractionDigits: 0}}
+            - Cluster load:
+                icon: mdi-chart-line
+                widget:
+                  type: prometheusmetric
+                  url: http://monitoring-promstack-prometheus.monitoring.svc.cluster.local:9090
+                  metrics:
+                    - label: CPU
+                      query: avg(100 - (avg by (instance) (irate(node_cpu_seconds_total{job="node-exporter",mode="idle"}[5m])) * 100))
+                      format: {type: number, options: {maximumFractionDigits: 0}, suffix: "%"}
+                    - label: Memory
+                      query: 100*(1-sum(node_memory_MemAvailable_bytes{job="node-exporter"})/sum(node_memory_MemTotal_bytes{job="node-exporter"}))
+                      format: {type: number, options: {maximumFractionDigits: 0}, suffix: "%"}
+                    - label: Disk
+                      query: 100*(1-sum(node_filesystem_free_bytes{device=~"/dev/.*"})/sum(node_filesystem_size_bytes{device=~"/dev/.*"}))
+                      format: {type: number, options: {maximumFractionDigits: 0}, suffix: "%"}
+            - UPS:
+                icon: mdi-battery-charging
+                widget:
+                  type: prometheusmetric
+                  url: http://monitoring-promstack-prometheus.monitoring.svc.cluster.local:9090
+                  metrics:
+                    - label: Battery
+                      query: network_ups_tools_battery_charge{instance="apc-bx1600mi"}
+                      format: {type: number, options: {maximumFractionDigits: 0}, suffix: "%"}
+                    - label: Runtime
+                      query: network_ups_tools_battery_runtime{instance="apc-bx1600mi"}/60
+                      format: {type: number, options: {maximumFractionDigits: 0}, suffix: " min"}
+                    - label: Load
+                      query: network_ups_tools_ups_load{instance="apc-bx1600mi"}
+                      format: {type: number, options: {maximumFractionDigits: 0}, suffix: "%"}
+                    - label: On mains (1=yes)
+                      query: network_ups_tools_ups_status{instance="apc-bx1600mi",flag="OL"}
+                      format: {type: number, options: {maximumFractionDigits: 0}}
+            - Longhorn volumes:
+                icon: longhorn
+                widget:
+                  type: prometheusmetric
+                  url: http://monitoring-promstack-prometheus.monitoring.svc.cluster.local:9090
+                  metrics:
+                    - label: Total
+                      query: count(longhorn_volume_capacity_bytes) or vector(0)
+                      format: {type: number, options: {maximumFractionDigits: 0}}
+                    - label: Healthy
+                      query: count(longhorn_volume_robustness{state="healthy"}==1) or vector(0)
+                      format: {type: number, options: {maximumFractionDigits: 0}}
+                    - label: Degraded
+                      query: count(longhorn_volume_robustness{state="degraded"}==1) or vector(0)
+                      format: {type: number, options: {maximumFractionDigits: 0}}
+                    - label: Faulted
+                      query: count(longhorn_volume_robustness{state="faulted"}==1) or vector(0)
+                      format: {type: number, options: {maximumFractionDigits: 0}}
+            - Postgres (CNPG):
+                icon: postgresql
+                widget:
+                  type: prometheusmetric
+                  url: http://monitoring-promstack-prometheus.monitoring.svc.cluster.local:9090
+                  metrics:
+                    - label: TPS
+                      query: sum(rate(cnpg_pg_stat_database_xact_commit[5m]))+sum(rate(cnpg_pg_stat_database_xact_rollback[5m]))
+                      format: {type: number, options: {maximumFractionDigits: 1}}
+                    - label: Repl. lag
+                      query: max(cnpg_pg_replication_lag)
+                      format: {type: number, options: {maximumFractionDigits: 1}, suffix: " s"}
+                    - label: Clusters up
+                      query: count(cnpg_collector_up==1)
+                      format: {type: number, options: {maximumFractionDigits: 0}}
+            - Mosquitto:
+                icon: mosquitto
+                widget:
+                  type: prometheusmetric
+                  url: http://monitoring-promstack-prometheus.monitoring.svc.cluster.local:9090
+                  metrics:
+                    - label: Clients
+                      query: broker_clients_connected
+                      format: {type: number, options: {maximumFractionDigits: 0}}
+                    - label: Publishes/min
+                      query: broker_load_publish_received_1min
+                      format: {type: number, options: {maximumFractionDigits: 0}}
+            - Scale-to-zero:
+                icon: mdi-sleep
+                widget:
+                  type: prometheusmetric
+                  url: http://monitoring-promstack-prometheus.monitoring.svc.cluster.local:9090
+                  metrics:
+                    - label: Awake
+                      query: sum(sablier_group_locked)
+                      format: {type: number, options: {maximumFractionDigits: 0}}
+                    - label: Groups
+                      query: count(sablier_group_locked)
+                      format: {type: number, options: {maximumFractionDigits: 0}}
+            - NAS (SNMP):
+                icon: synology
+                widget:
+                  type: prometheusmetric
+                  url: http://monitoring-promstack-prometheus.monitoring.svc.cluster.local:9090
+                  metrics:
+                    - label: System (1=OK)
+                      query: min(synology_systemStatus)
+                      format: {type: number, options: {maximumFractionDigits: 0}}
+                    - label: Disks (1=OK)
+                      query: min(synology_diskStatus)
+                      format: {type: number, options: {maximumFractionDigits: 0}}
+            - ArgoCD apps:
+                icon: argo-cd
+                widget:
+                  type: prometheusmetric
+                  url: http://monitoring-promstack-prometheus.monitoring.svc.cluster.local:9090
+                  metrics:
+                    - label: Apps
+                      query: count(argocd_app_info)
+                      format: {type: number, options: {maximumFractionDigits: 0}}
+                    - label: Synced
+                      query: count(argocd_app_info{sync_status="Synced"})
+                      format: {type: number, options: {maximumFractionDigits: 0}}
+                    - label: Out of sync
+                      query: count(argocd_app_info{sync_status="OutOfSync"}) or vector(0)
+                      format: {type: number, options: {maximumFractionDigits: 0}}
+                    - label: Unhealthy
+                      query: count(argocd_app_info{health_status!="Healthy"}) or vector(0)
+                      format: {type: number, options: {maximumFractionDigits: 0}}
+            - Grafana:
+                icon: grafana
+                href: http://grafana.<secret:kv/data/shared/domains~local>
+                description: Dashboards
+            - Prometheus:
+                icon: prometheus
+                href: http://prometheus.<secret:kv/data/shared/domains~local>
+                description: Metrics
+            - Alertmanager:
+                icon: alertmanager
+                href: http://alertmanager.<secret:kv/data/shared/domains~local>
+                description: Alerts
+        - Infra:
+            - UniFi:
+                icon: unifi
+                href: https://unifi.<secret:kv/data/shared/domains~domain>
+                description: Network (via unifi-proxy.yaml)
+                widget:
+                  type: unifi
+                  url: https://unifi.<secret:kv/data/shared/domains~domain>
+                  key: "{{HOMEPAGE_VAR_UNIFI_KEY}}"
+            - Vault:
+                icon: vault
+                href: http://vault.<secret:kv/data/shared/domains~local>
+            - Traefik:
+                icon: traefik
+                href: http://traefik.<secret:kv/data/shared/domains~local>/dashboard/
+            - Longhorn:
+                icon: longhorn
+                href: https://longhorn.<secret:kv/data/shared/domains~domain>
+                description: Storage (scale-to-zero)
+            - ArgoCD:
+                icon: argo-cd
+                href: https://argocd.<secret:kv/data/shared/domains~domain>
+                description: GitOps (scale-to-zero)
+        # Gobelijn (the Synology) runs these in Docker, outside the cluster. The address is an env var from the Secret
+        # so it never lands in git or the ConfigMap; checks are plain HTTP from the Homepage pod (same VLAN).
+        - NAS:
+            - Gobelijn:
+                icon: synology
+                href: http://{{HOMEPAGE_VAR_GOBELIJN_IP}}:5000
+                siteMonitor: http://{{HOMEPAGE_VAR_GOBELIJN_IP}}:5000
+                description: Synology DSM
+            - Netboot.xyz:
+                icon: netbootxyz
+                href: http://{{HOMEPAGE_VAR_GOBELIJN_IP}}:3000
+                siteMonitor: http://{{HOMEPAGE_VAR_GOBELIJN_IP}}:3000
+                description: PXE boot menu (assets on :8080)
+            - Registry:
+                icon: distribution
+                href: http://{{HOMEPAGE_VAR_GOBELIJN_IP}}:7777/v2/_catalog
+                siteMonitor: http://{{HOMEPAGE_VAR_GOBELIJN_IP}}:7777/v2/
+                description: docker.io pull-through mirror (API only)
+            - Plex:
+                icon: plex
+                href: http://{{HOMEPAGE_VAR_GOBELIJN_IP}}:32400/web
+                # /identity answers without a token; no widget on purpose (a Plex token is account-wide, Tautulli has the stats)
+                siteMonitor: http://{{HOMEPAGE_VAR_GOBELIJN_IP}}:32400/identity
+                description: DSM package on the NAS

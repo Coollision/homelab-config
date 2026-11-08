@@ -67,6 +67,15 @@ ingress_external_secure:
   host: jellyseerr.<secret:kv/data/shared/domains~domain>
   port: ingress
 
+homepage:
+  group: Media
+  icon: jellyseerr
+  description: Requests
+  widget:
+    type: jellyseerr
+    url: http://jellyseerr-service.arr-stack.svc.cluster.local:5055
+    key: "{{HOMEPAGE_VAR_JELLYSEERR_KEY}}"
+
 storage:
   - mountPath: /app/config
     size: 1Gi

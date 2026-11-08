@@ -17,6 +17,7 @@ arrXmlPostgres:
   requireExistingConfig: false
   userKey: prowlarr_user
   passwordKey: prowlarr_password
+  apiKeyKey: prowlarr_api_key
   mainDbKey: prowlarr_database
   logDbKey: prowlarr_database_logs
   authenticationMethod: External
@@ -39,6 +40,15 @@ ingress_internal:
 ingress_internal_secure:
   host: prowlarr.<secret:kv/data/shared/domains~domain>
   port: web
+
+homepage:
+  group: Media
+  icon: prowlarr
+  description: Indexers
+  widget:
+    type: prowlarr
+    url: http://prowlarr-service.arr-stack.svc.cluster.local:9696
+    key: "{{HOMEPAGE_VAR_PROWLARR_KEY}}"
 
 storage:
   - type: longhorn

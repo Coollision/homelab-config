@@ -75,6 +75,10 @@ storage:
 ingress_internal_secure:
   host: vscode.<secret:kv/data/shared/domains~domain>
   port: web
+homepage:
+  group: Tools
+  icon: vscode
+  description: Edit smarthome configs
 
 probes:
   readiness:

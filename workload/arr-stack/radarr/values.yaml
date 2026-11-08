@@ -17,6 +17,7 @@ arrXmlPostgres:
   requireExistingConfig: false
   userKey: radarr_user
   passwordKey: radarr_password
+  apiKeyKey: radarr_api_key
   mainDbKey: radarr_database
   logDbKey: radarr_database_logs
   authenticationMethod: External
@@ -54,6 +55,15 @@ ingress_internal:
 ingress_internal_secure:
   host: radarr.<secret:kv/data/shared/domains~domain>
   port: web
+
+homepage:
+  group: Media
+  icon: radarr
+  description: Movies
+  widget:
+    type: radarr
+    url: http://radarr-service.arr-stack.svc.cluster.local:7878
+    key: "{{HOMEPAGE_VAR_RADARR_KEY}}"
 
 storage:
   - type: longhorn

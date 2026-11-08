@@ -17,6 +17,7 @@ arrXmlPostgres:
   requireExistingConfig: false
   userKey: sonarr_user
   passwordKey: sonarr_password
+  apiKeyKey: sonarr_api_key
   mainDbKey: sonarr_database
   logDbKey: sonarr_database_logs
   authenticationMethod: External
@@ -54,6 +55,15 @@ ingress_internal:
 ingress_internal_secure:
   host: sonarr.<secret:kv/data/shared/domains~domain>
   port: web
+
+homepage:
+  group: Media
+  icon: sonarr
+  description: TV series
+  widget:
+    type: sonarr
+    url: http://sonarr-service.arr-stack.svc.cluster.local:8989
+    key: "{{HOMEPAGE_VAR_SONARR_KEY}}"
 
 storage:
   - type: longhorn

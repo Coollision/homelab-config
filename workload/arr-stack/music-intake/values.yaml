@@ -56,6 +56,11 @@ ingress_internal_secure:
   host: intake.<secret:kv/data/shared/domains~domain>
   port: http
 
+homepage:
+  group: Media
+  icon: mdi-music-box
+  description: Music intake
+
 storage:
   - type: longhorn
     mountPath: /data

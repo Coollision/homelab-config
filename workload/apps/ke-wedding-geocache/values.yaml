@@ -102,6 +102,10 @@ ingress_internal_secure:
 ingress_external_secure:
   host: ke-wedding-geocache.<secret:kv/data/shared/domains~domain>
   port: http
+homepage:
+  group: Tools
+  icon: mdi-map-marker
+  description: Wedding geocache
 
 storage:
   - mountPath: /data

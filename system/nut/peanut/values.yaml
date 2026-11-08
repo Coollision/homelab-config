@@ -21,6 +21,10 @@ config:
 ingress_internal_secure:
   host: ups.<secret:kv/data/shared/domains~domain>
   port: web
+homepage:
+  group: Infra
+  icon: mdi-battery-charging
+  description: UPS status
 
 resources:
   requests:

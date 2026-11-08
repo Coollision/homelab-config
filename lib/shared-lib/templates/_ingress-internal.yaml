@@ -10,6 +10,12 @@ metadata:
     {{ if .Values.syncWave }}
     argocd.argoproj.io/sync-wave: {{ .Values.syncWave | default 0 | quote }}
     {{- end }}
+    {{- /* plain-HTTP route is only advertised to Homepage when the app has no secure internal route */}}
+    {{- if not .Values.ingress_internal_secure }}
+    {{- with (include "shared-lib.homepageAnnotations" (dict "root" . "scheme" "http" "host" .Values.ingress_internal.host)) }}
+    {{- . | nindent 4 }}
+    {{- end }}
+    {{- end }}
 spec:
   entryPoints: 
     - web
