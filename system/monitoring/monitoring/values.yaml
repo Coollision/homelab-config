@@ -488,6 +488,15 @@ promstack:
           - sourceLabels: [__name__]
             regex: "node_(nf_conntrack_.*|netstat_.*|sockstat_.*|ipvs_.*|softnet_.*|arp_.*|network_carrie.*|entropy_available_bits|timex_.*)"
             action: drop
+          # ACPI `acpitz` on the x86 minis is a firmware placeholder (constant -273.3 °C, 27.8 °C):
+          # the real CPU/NVMe temps come from the coretemp/nvme chips. The Pi's
+          # thermal_thermal_zone0 is its real CPU sensor, hence the instance match.
+          - sourceLabels: [__name__, chip, instance]
+            regex: "node_hwmon_.*;thermal_thermal_zone0;(master-green|worker-blue)"
+            action: drop
+          - sourceLabels: [__name__, type]
+            regex: "node_thermal_zone_temp;acpitz"
+            action: drop
   
   # ── kubelet / cAdvisor filtering ────────────────────────────────────────────
   # Keep a single kubelet block. The plain kubelet endpoint (/metrics) gets a
