@@ -476,3 +476,14 @@ jobs:
           echo "=== Regenerating scale-to-zero ignoreDifferences from scaleToZero.enabled flags ==="
           scripts/gen-scale-to-zero-ignores.sh
           echo "✅ applications/set-workloads.yaml and applications/set-system.yaml are up to date"
+
+  mosquitto-clients-lint:
+    name: Lint Mosquitto clients.conf
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Lint
+        run: scripts/mosquitto-clients-lint.sh

@@ -3,11 +3,12 @@
 #
 # Declarative (this file + Vault, reapplied every pod start):
 #   - the default ACL policy (deny all)
-#   - the ACLs of the roles r-<user> below (added when missing, removed only via `retire`)
-#   - the "managed" users: credential1..N from Vault ("user:password"), password rotated, role attached
+#   - the roles r-<user> and their ACLs, exactly as listed in clients.conf (grants dropped from
+#     the file are revoked; see the format at the top of clients.conf)
+#   - the managed users of clients.conf: passwords come from Vault placeholders, rotated every start
 # Imperative (survives restarts, never touched here):
 #   - any user/group created at runtime with mosquitto_ctrl, including their role assignments
-#     (roles are never deleted, so a runtime user bound to r-shelly keeps it)
+#     (roles are only deleted via a `retired-user` line, so a runtime user bound to r-shelly keeps it)
 #
 # Mechanics: a throwaway broker on 127.0.0.1:18830 loads the same state file, we drive it
 # with mosquitto_ctrl, then stop it. The plugin saves the file after every change.
@@ -54,7 +55,7 @@ CONF
 # mosquitto_ctrl nags on stderr about the (localhost-only) plaintext connection; strip it so
 # the output only contains real results/errors.
 ctrl() {
-  mosquitto_ctrl -h 127.0.0.1 -p $PORT -u "$ADMIN_USER" -P "$ADMIN_PASS" dynsec "$@" 2>&1 |
+  mosquitto_ctrl -h 127.0.0.1 -p $PORT -u "$ADMIN_USER" -P "$ADMIN_PASS" dynsec "$@" 2>&1 </dev/null |
     grep -v -e "without encryption" -e "visible on the network"
 }
 
@@ -116,72 +117,90 @@ fi
 for t in publishClientSend publishClientReceive subscribe; do c setDefaultACLAccess $t deny; done
 c setDefaultACLAccess unsubscribe allow
 
-# --- roles -------------------------------------------------------------------------------
-role() { # role <user> [ro]: "ro" roles only ever get read access, also in learning mode
-  CUR="r-$1"
-  echo "$1" >> /tmp/roles
-  c createRole "$CUR"
+# --- clients.conf: roles, ACLs and users ------------------------------------------------
+# One role r-<user> per client. The wanted ACL set per role comes from clients.conf (parsed by
+# clients.awk, the same code the CI lint runs); anything else on the live role is removed, so
+# dropping a line from clients.conf revokes it. Not touched: the $CONTROL denies below, roles that
+# are not in clients.conf, and users/groups created at runtime with mosquitto_ctrl.
+US="$(printf '\037')"
+ACL_RW="publishClientSend publishClientReceive subscribePattern unsubscribePattern"
+ACL_RO="publishClientReceive subscribePattern unsubscribePattern"
+
+if ! awk -f "$CFG/clients.awk" "$CFG/clients.conf" > /tmp/clients.tsv 2> /tmp/clients.err; then
+  echo "reconcile: ERROR clients.conf is invalid, keeping the last applied state:"
+  cat /tmp/clients.err
+  ERRORS=$((ERRORS + 1))
+  finish 1
+fi
+
+# want <user> <acltype> <topic>: record one wanted grant
+want() { printf '%s%s%s\n' "$2" "$US" "$3" >> "/tmp/want-$1"; }
+
+while IFS="$US" read -r kind a b c; do
+  case "$kind" in
+    U)
+      echo "$a" >> /tmp/roles
+      : > "/tmp/want-$a"
+      # learning mode = break-glass: every role may read/write '#' (readonly roles: read only)
+      if [ "$LEARNING" = "true" ]; then
+        if [ "$c" = readonly ]; then for t in $ACL_RO; do want "$a" "$t" '#'; done
+        else for t in $ACL_RW; do want "$a" "$t" '#'; done; fi
+      fi ;;
+    A)
+      case "$b" in
+        rw) for t in $ACL_RW; do want "$a" "$t" "$c"; done ;;
+        ro) for t in $ACL_RO; do want "$a" "$t" "$c"; done ;;
+        send) want "$a" publishClientSend "$c" ;;
+      esac ;;
+  esac
+done < /tmp/clients.tsv
+
+# Revoke first, then grant, so a failed run never leaves more access than the file allows.
+while IFS="$US" read -r kind user _; do
+  [ "$kind" = U ] || continue
+  role="r-$user"
+  c createRole "$role"
+  # live allow-grants as "<type>US<topic>"; the lines look like "<type> : allow : <topic> (priority: N)"
+  ctrl getRole "$role" | awk -v US="$US" '
+    { sub(/^ACLs:[ \t]*/, ""); sub(/^[ \t]+/, "") }
+    / : allow : / {
+      i = index($0, " : allow : "); t = substr($0, 1, i - 1)
+      topic = substr($0, i + 11); sub(/ \(priority: [0-9]+\)$/, "", topic)
+      gsub(/[ \t]+$/, "", t); print t US topic
+    }' | sort > "/tmp/live-$user"
+  sort -u "/tmp/want-$user" > "/tmp/want-$user.s"
+  comm -23 "/tmp/live-$user" "/tmp/want-$user.s" > "/tmp/revoke-$user"
+  while IFS="$US" read -r t topic; do
+    echo "reconcile: revoke $user $t $topic"
+    r removeRoleACL "$role" "$t" "$topic"
+  done < "/tmp/revoke-$user"
   # '#' would otherwise cover the admin channel: only the admin role may touch $CONTROL.
-  for t in publishClientSend publishClientReceive subscribePattern; do c addRoleACL "$CUR" $t '$CONTROL/#' deny 10; done
-  if [ "$LEARNING" = "true" ]; then
-    if [ "${2:-}" = ro ]; then ro '#'; rwsend '#'; else rw '#'; fi
-  elif [ "${2:-}" = ro ]; then
-    r removeRoleACL "$CUR" publishClientSend '#'
-  else
-    for t in publishClientSend publishClientReceive subscribePattern unsubscribePattern; do r removeRoleACL "$CUR" $t '#'; done
-  fi
-}
-rwsend() { c addRoleACL "$CUR" publishClientSend "$1" allow; }
-rw() { for t in publishClientSend publishClientReceive subscribePattern unsubscribePattern; do c addRoleACL "$CUR" $t "$1" allow; done; }
-ro() { for t in publishClientReceive subscribePattern unsubscribePattern; do c addRoleACL "$CUR" $t "$1" allow; done; }
-retire() { r removeRoleACL "r-$1" "$2" "$3"; } # retire <user> <acltype> <topic>: ACLs dropped from git must be listed here
+  for t in publishClientSend publishClientReceive subscribePattern; do c addRoleACL "$role" $t '$CONTROL/#' deny 10; done
+  comm -13 "/tmp/live-$user" "/tmp/want-$user.s" > "/tmp/grant-$user"
+  while IFS="$US" read -r t topic; do
+    c addRoleACL "$role" "$t" "$topic" allow
+  done < "/tmp/grant-$user"
+done < /tmp/clients.tsv
 
-role zigbee2mqtt
-rw 'zigbee2mqtt/#'
-rw 'homeassistant/#' # discovery configs + homeassistant/status birth message
-
-role homeAssistant
-rw 'homeassistant/#'
-rw 'zigbee2mqtt/#'
-rw 'shellies/#'
-rw 'ems-esp/#'
-rw 'printers/#' # automation publishing printer power readings (found by the prod topic capture)
-
-# One shared account for all Gen1 Shellies. With per-device users (mosquitto_ctrl createClient
-# + addClientRole <user> r-shelly) this can later become per-device topics.
-role shelly
-rw 'shellies/#'
-
-role emsChip
-rw 'ems-esp/#'
-rw 'homeassistant/#'
-
-role moonraker
-rw 'K1C-F1CE/#'
-ro 'printers/#' # provisional: assumed consumer of HA's printers/<name>/power, confirm in the usage capture
-
-role debug ro
-ro '#'
-ro '$SYS/#'
-
-# --- managed users -----------------------------------------------------------------------
-for f in "$CFG"/credential*; do
-  line="$(cat "$f")"
-  user="${line%%:*}"
-  pass="${line#*:}"
-  [ -n "$user" ] || continue
+# Users: create or rotate the password, bind the role.
+while IFS="$US" read -r kind user pass _; do
+  [ "$kind" = U ] || continue
   out="$(ctrl createClient "$user" -p "$pass")"
   case "$out" in
     *"already"*) c setClientPassword "$user" "$pass" ;;
     "") ;;
     *) echo "reconcile: ERROR createClient $user -> $out"; ERRORS=$((ERRORS + 1)) ;;
   esac
-  if grep -qx "$user" /tmp/roles; then
-    # 2.0.22 answers "Internal error" (not "already ...") when the binding exists, so look first.
-    ctrl getClient "$user" | grep -q "r-$user" || c addClientRole "$user" "r-$user"
-  else
-    echo "reconcile: WARNING user '$user' has no role in reconcile.sh -> denied everything"
-  fi
-done
+  # 2.0.22 answers "Internal error" (not "already ...") when the binding exists, so look first.
+  ctrl getClient "$user" | grep -q "r-$user" || c addClientRole "$user" "r-$user"
+done < /tmp/clients.tsv
+
+# Explicit removals only (a `retired-user` line), never by absence.
+while IFS="$US" read -r kind user _; do
+  [ "$kind" = X ] || continue
+  echo "reconcile: retiring user $user"
+  r deleteClient "$user"
+  r deleteRole "r-$user"
+done < /tmp/clients.tsv
 
 finish 1

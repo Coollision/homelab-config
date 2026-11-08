@@ -257,6 +257,71 @@ spec:
             description: "No successful scrape of the nut-exporter target for 15 minutes — the UPS pod, its node, or the ServiceMonitor may be down. This is a real gap, not the known short driver stalls (which don't take the exporter itself down)."
 
     # ─────────────────────────────────────────────────────────────────────────
+    # Mosquitto broker health (mosquitto-exporter, $SYS topics). Thresholds from the first live
+    # readings (2026-11-08): ~10 clients connected (Zigbee2MQTT, Home Assistant, 5 Shellies, EMS-ESP,
+    # 1-2 printers, the exporter itself), ~100 publishes/min, 0 dropped, ~2 connections/min.
+    # Security events (rejected logins) are log-based: see grafana-alerts/log-alerts.yaml.
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: mosquitto.alerts
+      interval: 1m
+      rules:
+        # The exporter exits when it cannot reach the broker, so a dead broker also shows up here.
+        - alert: MosquittoMetricsMissing
+          expr: >-
+            absent(up{job="mosquitto-exporter-service"} == 1)
+          for: 5m
+          labels:
+            severity: critical
+            category: smarthome
+          annotations:
+            summary: "Mosquitto broker or its exporter is down"
+            description: "No successful scrape of mosquitto-exporter for 5 minutes. Either the broker is down (Zigbee2MQTT, Home Assistant and the Shellies lose their MQTT link) or only the exporter is. Check the mosquitto and mosquitto-exporter pods in the smarthome namespace."
+
+        - alert: MosquittoClientsDropped
+          expr: >-
+            broker_clients_connected < 8
+          for: 10m
+          labels:
+            severity: warning
+            category: smarthome
+          annotations:
+            summary: "Fewer MQTT clients connected than usual"
+            description: "{{`{{ $value }}`}} clients connected for 10 minutes (normal is about 10). Likely Zigbee2MQTT, Home Assistant or a group of Shellies lost the broker. See the Mosquitto dashboard (connects per user)."
+
+        - alert: MosquittoNoPublishes
+          expr: >-
+            broker_load_publish_received_5min < 1
+          for: 10m
+          labels:
+            severity: warning
+            category: smarthome
+          annotations:
+            summary: "Mosquitto receives no messages"
+            description: "The broker has received less than one publish per minute for 10 minutes (normal is about 100). Clients may be connected but silent, for example after an ACL change that denies publishes."
+
+        - alert: MosquittoMessagesDropped
+          expr: >-
+            increase(broker_publish_messages_dropped[10m]) > 0
+          for: 5m
+          labels:
+            severity: warning
+            category: smarthome
+          annotations:
+            summary: "Mosquitto is dropping messages"
+            description: "{{`{{ $value }}`}} publish messages dropped in 10 minutes: a slow client's queue overflowed. Check which client is stuck."
+
+        - alert: MosquittoConnectionChurn
+          expr: >-
+            broker_load_connections_5min > 20
+          for: 10m
+          labels:
+            severity: warning
+            category: smarthome
+          annotations:
+            summary: "MQTT clients are reconnecting constantly"
+            description: "More than 20 new connections per minute for 10 minutes (normal is about 2). A client is in a reconnect loop, or the network between the IoT VLAN and the broker is unstable."
+
+    # ─────────────────────────────────────────────────────────────────────────
     # Node temperature (node-exporter hwmon). Thresholds sit ~5 °C above the worst 7-day
     # peak (Nov 2026: CPU 75 °C, NVMe 58 °C) on purpose: the rack is fan-controlled, so a
     # reading above that means a fan/airflow problem, not load. Hardware limits are far

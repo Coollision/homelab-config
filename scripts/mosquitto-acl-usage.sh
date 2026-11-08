@@ -6,11 +6,11 @@
 # "Received PUBLISH/SUBSCRIBE" lines, and kubectl access to the cluster. Topic names only:
 # the broker never logs payloads.
 #
-# Usage: scripts/mosquitto-acl-usage.sh [--since 24h]
+# Usage: scripts/mosquitto-acl-usage.sh [--since 24h]   (units s/m/h/d)
 #
 # For every username it prints what was published and subscribed (device ids normalised) and
 # marks anything NOT covered by the rw/ro lines of that user's role in
-# workload/smarthome/mosquitto/reconcile.sh. While acl-learning=true nothing is denied, so the
+# workload/smarthome/mosquitto/clients.conf. While acl-learning=true nothing is denied, so the
 # "NOT COVERED" rows are exactly what would break when learning is switched off.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
@@ -26,19 +26,20 @@ SINCE="$SINCE" exec python3 -I - <<'PY'
 import collections, json, os, re, subprocess, sys, time, urllib.parse, urllib.request
 
 since = os.environ["SINCE"]
-unit = {"m": 60, "h": 3600, "d": 86400}[since[-1]]
+unit = {"s": 1, "m": 60, "h": 3600, "d": 86400}[since[-1]]
 end = time.time_ns()
 start = end - int(since[:-1]) * unit * 10**9
 
-# --- roles from reconcile.sh ---------------------------------------------------------
-roles, cur = {}, None
-for line in open("workload/smarthome/mosquitto/reconcile.sh"):
-    m = re.match(r"role (\S+)", line)
-    if m:
-        cur = m.group(1); roles[cur] = []; continue
-    m = re.match(r"(rw|ro) '([^']+)'", line)
-    if m and cur:
-        roles[cur].append((m.group(1), m.group(2)))
+# --- roles from clients.conf (parsed by the same clients.awk the broker's init uses) ------
+roles = {}
+parsed = subprocess.run(["awk", "-v", "lint=1", "-f", "workload/smarthome/mosquitto/clients.awk",
+                         "workload/smarthome/mosquitto/clients.conf"], capture_output=True, text=True, check=True).stdout
+for rec in parsed.splitlines():
+    kind, *f = rec.split("\x1f")
+    if kind == "U":
+        roles[f[0]] = []
+    elif kind == "A":
+        roles[f[0]].append((f[1], f[2]))
 
 def covers(role_filter, f):
     r, t = role_filter.split("/"), f.split("/")
@@ -56,7 +57,8 @@ def covers(role_filter, f):
     return len(r) == len(t)
 
 def covered(user, topic, write):
-    return any(covers(f, topic) and (kind == "rw" or not write) for kind, f in roles.get(user, []))
+    allowed = ("rw", "send") if write else ("rw", "ro")
+    return any(covers(f, topic) and kind in allowed for kind, f in roles.get(user, []))
 
 # --- pull logs from Loki ---------------------------------------------------------------
 query = ('{namespace="smarthome",pod="mosquitto-0",container="mosquito"} '

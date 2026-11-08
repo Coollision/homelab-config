@@ -55,6 +55,92 @@ groups:
         annotations:
           summary: 'NAS {{ $labels.hostname }}: repeated failed sign-ins'
           description: '{{ $values.B }} failed DSM sign-ins on {{ $labels.hostname }} in the last 10 minutes (threshold: more than 4). Possible brute-force attempt or a client with a stale password.'
+      - uid: mqtt-unauthorised-clients
+        title: MQTT unauthorised connection
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: P8E80F9AEF21F6940
+            relativeTimeRange: {from: 600, to: 0}
+            model:
+              datasource: {type: loki, uid: P8E80F9AEF21F6940}
+              editorMode: code
+              expr: 'sum(count_over_time({namespace="smarthome", pod="mosquitto-0"} |= `not authorised` [10m]))'
+              queryType: instant
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              datasource: {type: __expr__, uid: __expr__}
+              type: reduce
+              expression: A
+              reducer: last
+              settings: {mode: dropNN}
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              datasource: {type: __expr__, uid: __expr__}
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: {type: gt, params: [0]}
+              refId: C
+        noDataState: OK
+        execErrState: KeepLast
+        for: 0s
+        isPaused: false
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: 'Mosquitto rejected a client login'
+          description: '{{ $values.B }} MQTT connection(s) were refused as "not authorised" in the last 10 minutes. The baseline is zero: an unknown device, a wrong or rotated password, or a scan of the broker. Check the source IP in the Mosquitto log.'
+      - uid: mqtt-publish-denied
+        title: MQTT publish denied
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: P8E80F9AEF21F6940
+            relativeTimeRange: {from: 600, to: 0}
+            model:
+              datasource: {type: loki, uid: P8E80F9AEF21F6940}
+              editorMode: code
+              expr: 'sum(count_over_time({namespace="smarthome", pod="mosquitto-0"} |= `Denied PUBLISH` [10m]))'
+              queryType: instant
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              datasource: {type: __expr__, uid: __expr__}
+              type: reduce
+              expression: A
+              reducer: last
+              settings: {mode: dropNN}
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              datasource: {type: __expr__, uid: __expr__}
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: {type: gt, params: [0]}
+              refId: C
+        noDataState: OK
+        execErrState: KeepLast
+        for: 0s
+        isPaused: false
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: 'Mosquitto denied an MQTT publish'
+          description: '{{ $values.B }} publish(es) were denied by the ACLs in the last 10 minutes. The baseline is zero: a legitimate client is missing a grant in clients.conf (an entity goes silent), or an authenticated client tries a topic outside its role. Find the topic and client id in the Mosquitto dashboard (security log lines); denied subscribes are never logged by the broker.'
       - uid: log-error-surge
         title: Log error surge
         condition: E

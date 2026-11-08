@@ -70,15 +70,14 @@ configMapGenerator:
     files:
       - mosquitto.conf
       - reconcile.sh
+      # clients.conf = who may log in and what they may touch (the one file to edit for a new client);
+      # clients.awk is its parser, shared with scripts/mosquitto-clients-lint.sh.
+      - clients.conf
+      - clients.awk
     literals:
-      # "true" = every role may read/write '#' (rollout phase: observe real usage first, then
-      # trim to the per-role topics in reconcile.sh). Also the break-glass. A change rolls the pod.
-      - acl-learning=true
-      # New Vault key, format "user:password"; only for mosquitto_ctrl, never used by clients.
+      # "true" = every role may read/write '#' (break-glass: flip it to get everything working again
+      # while debugging a denied topic; roles are otherwise exactly the grants in clients.conf).
+      # A change rolls the pod.
+      - acl-learning=false
+      # Format "user:password"; only for mosquitto_ctrl, never used by clients.
       - admin-credential=<secret:kv/data/workload/smarthome/mosquitto~admin-credential>
-      - credential1=<secret:kv/data/workload/smarthome/mosquitto~credential-1>
-      - credential2=<secret:kv/data/workload/smarthome/mosquitto~credential-2>
-      - credential4=<secret:kv/data/workload/smarthome/mosquitto~credential-4>
-      - credential5=<secret:kv/data/workload/smarthome/mosquitto~credential-5>
-      - credential6=<secret:kv/data/workload/smarthome/mosquitto~credential-6>
-      - credential7=<secret:kv/data/workload/smarthome/mosquitto~credential-7>
