@@ -1,0 +1,11 @@
+apiVersion: v2
+name: mosquitto-exporter
+description: Prometheus exporter for the smarthome Mosquitto broker
+type: application
+version: 0.1.0
+appVersion: "0.8.0"
+
+dependencies:
+  - name: shared-lib
+    version: 0.1.0
+    repository: file://../../../lib/shared-lib

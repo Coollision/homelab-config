@@ -36,11 +36,31 @@ over time and isn't worth freezing into this wiki page.
 ## Mosquitto — `workload/smarthome/mosquitto`
 
 The MQTT broker Zigbee2MQTT, Home Assistant, Shelly Gen1, EMS-ESP and the Moonraker printer talk to. Anonymous
-access is off. Auth and ACLs come from Mosquitto's **dynamic-security plugin**: an init container (`reconcile.sh`)
-reapplies the deny-by-default policy, one role per client (`r-<user>`) and the managed users (Vault `credential*` keys)
-on every start, while users created at runtime with `mosquitto_ctrl` survive restarts. `acl-learning=true` in
-`kustomization.yaml` currently gives every role full access (rollout phase, also the break-glass); usage is being
-captured with `scripts/mosquitto-acl-usage.sh` before the roles are trimmed.
+access is off. Auth and ACLs come from Mosquitto's **dynamic-security plugin**. Who may log in and which topics they may touch
+is one data file, `workload/smarthome/mosquitto/clients.conf`: an init container (`reconcile.sh`) reapplies the deny-by-default
+policy, one role per client (`r-<user>`) with exactly the listed grants, and the users with their Vault passwords on every
+start. Grants removed from the file are revoked on the broker; users created at runtime with `mosquitto_ctrl` survive restarts.
+ACLs are **enforced** (`acl-learning=false` in `kustomization.yaml`; setting it to `true` gives every role full access and is the
+break-glass). The roles were trimmed to a captured usage report (`scripts/mosquitto-acl-usage.sh`, which reads `clients.conf`).
+A denied publish is logged (`log_type debug`) and raises the alert `MQTT publish denied`; denied subscribes are not logged by
+Mosquitto at all, so a missing read grant shows up as a silent entity: check `clients.conf` first.
+
+**Adding an MQTT client** (two edits, no code):
+
+1. `vault kv patch -mount=kv workload/smarthome/mosquitto <name>-password=<value>` (no spaces in the value).
+2. Add a block to `clients.conf`:
+
+   ```
+   user <name> <secret:kv/data/workload/smarthome/mosquitto~<name>-password> [readonly]
+     rw   <topic>      # read + write
+     ro   <topic>      # read only
+     send <topic>      # publish only
+   ```
+
+   `scripts/mosquitto-clients-lint.sh` (pre-commit + CI) checks the format: known keywords, a Vault placeholder instead of a
+   literal password, no bare `#` for writing clients, nothing under `$CONTROL`, at least one grant per user. Retiring a user
+   means adding a `retired-user <name>` line (removing a block alone does not delete the user). If the file is invalid or a
+   placeholder is unresolved, the init keeps the last applied state and logs an ERROR instead of changing anything.
 
 One plaintext listener (`1883`, exposed as `1880` on the LoadBalancer, `externalTrafficPolicy: Local` so the broker sees
 real client IPs). Clients that can do TLS use `mqtt.<internal-domain>:443`: an `IngressRouteTCP` makes Traefik terminate
@@ -53,5 +73,11 @@ LoadBalancer Service instead, relying on the network's own inter-VLAN routing fo
 IoT-side MQTT client that isn't already cluster-internal. If a new IoT-VLAN-only MQTT
 client can't reach it, that routing path — not the pod itself — is the first thing to
 check.
+
+**Monitoring:** the Grafana dashboard `Mosquitto` (logs: rejected logins, connects per user and subnet) and the alert
+`MQTT unauthorised connection` (any refused login) are log-based. Broker health comes from `mosquitto-exporter`
+(`workload/smarthome/mosquitto-exporter`, `sapcc/mosquitto-exporter`): it logs in as the `exporter` user, whose role may
+only read `$SYS/#`, and a `ServiceMonitor` scrapes it. Its login lives in Vault (`workload/smarthome/mosquitto-exporter`
+`user`/`password`; the broker's `clients.conf` points at the same key) and reaches the pod through a Secret, not env values.
 
 Remaining steps (usage capture, ACL trim, 2.1 upgrade): [TODO — Mosquitto modernization](../06-todo/mosquitto-modernization.md).

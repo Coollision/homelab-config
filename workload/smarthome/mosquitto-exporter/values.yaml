@@ -1,0 +1,51 @@
+fullnameOverride: mosquitto-exporter
+
+# Scrapes the broker's $SYS topics over MQTT and serves them as Prometheus metrics. Plain MQTT, not TLS:
+# the broker listens on 1883 only. Its Service is renamed mosquitto-mqtt and remapped to port 1880 by the
+# kustomize patch in workload/smarthome/mosquitto/kustomization.yaml, so 1880 is the name to connect to.
+deployment:
+  image:
+    repository: sapcc/mosquitto-exporter
+    # pinned: 0.8.0 is the newest release on Docker Hub (2021); Renovate owns bumps (see renovate.json)
+    tag: "0.8.0"
+  ports:
+    metrics: 9234
+
+config:
+  TZ: Europe/Brussels
+  BIND_ADDRESS: ":9234"
+  BROKER_ENDPOINT: "tcp://mosquitto-mqtt:1880"
+  # Broker login from the Secret in templates/secret.yaml, so it never shows up in the Deployment spec.
+  MQTT_USER:
+    secretKeyRef: {name: mosquitto-exporter, key: user}
+  MQTT_PASS:
+    secretKeyRef: {name: mosquitto-exporter, key: password}
+
+# The only published image (0.8.0, 2021) is amd64-only: on the Pi it dies with "exec format error".
+affinity:
+  node:
+    required:
+      - matchExpressions:
+          - key: kubernetes.io/arch
+            operator: In
+            values: [amd64]
+
+# Tiny Go binary, no state. The limits are generous for a scratch image.
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    cpu: 100m
+    memory: 64Mi
+
+# Scratch image: no shell, no writes needed. Numeric UID because the image sets no USER.
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65534
+  runAsGroup: 65534

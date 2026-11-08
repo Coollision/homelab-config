@@ -17,7 +17,7 @@ authentication/ACLs, TLS, and visibility of who connects.
 ## Target design
 
 - **Auth and ACLs: dynamic-security plugin.** Default-deny, one role per client (`r-<user>`), topic prefixes in git. An
-  init container (`reconcile.sh`) reapplies roles and the managed users (Vault `credential*` keys, passwords rotate with
+  init container (`reconcile.sh`, data in `clients.conf`) reapplies roles and the managed users (Vault `<name>-password` keys, passwords rotate with
   Vault) on every start. Users/roles created at runtime with `mosquitto_ctrl` survive restarts, including their role
   bindings (roles are never deleted).
 - **TLS: terminated by Traefik, no certificate in Mosquitto.** An `IngressRouteTCP` matches `HostSNI(mqtt.<internal-domain>)`
@@ -69,8 +69,7 @@ One variable at a time, one commit per phase, observe at least 24 h before the n
 
 - [x] Vault: create `kv/workload/smarthome/mosquitto` key `admin-credential` (`user:password`). Without it the init fails. **Done 2026-11-03** (`kv patch`; a second key `admin-source-range` holds the TLS-route allow-list).
 - [x] Node-RED credential is no longer referenced; the unused Vault key `credential-3` is left in place (any `kv delete` needs explicit approval).
-- [ ] Confirm the Moonraker printer's MQTT base topic and who consumes `printers/<printer>/power` (assumed: the
-      Moonraker login, read-only).
+- [x] Confirm the Moonraker printer's MQTT base topic and who consumes `printers/<printer>/power`. Confirmed 2026-11-08 by the 6-day capture: the Moonraker login reads it (read-only), the K1C also reads its own Zigbee2MQTT plug, and a second printer publishes under its own base topic. Both are in the `moonraker` role.
 - [x] Confirm the Longhorn volume `mosquitto` is covered by snapshot/backup jobs; take a manual snapshot before phases 2 and 5. Hourly snapshots and a nightly backup exist; a snapshot from 90 minutes before phase 2 was `readyToUse`.
 - [ ] Alerting before touching auth: broker-up probe plus a Zigbee2MQTT `bridge/state` / Home Assistant availability alert.
 
@@ -80,7 +79,7 @@ One variable at a time, one commit per phase, observe at least 24 h before the n
 - Expected: the L2 announcer moves to the pod's node and every LAN connection (Shellies, EMS-ESP, printer) resets once;
   they reconnect within seconds to about a minute (keepalive 60), worst case minutes for a device that ignores gratuitous ARP.
 - [x] Verify real source IPs in the broker log; Home Assistant Shelly/EMS entities recover. Verified 2026-11-03: the announcer moved to the pod's node, 9 clients were back within seconds, Shellies and EMS-ESP now show their IoT-VLAN addresses.
-- [ ] Collect source IP/VLAN per user for a day or two: input for phase 7.
+- [x] Collect source IP/VLAN per user: input for phase 7. Done 2026-11-08 (6 days of connect lines): Shelly, EMS-ESP and Moonraker connect from the IoT VLAN, the debug client from the admin VLAN, Home Assistant, Zigbee2MQTT and the admin logins from inside the cluster. The plaintext port only needs the IoT VLAN plus the admin VLAN.
 - Rollback: revert the commit.
 
 ### Phase 2: dynamic security, everybody has full access
@@ -96,8 +95,9 @@ One variable at a time, one commit per phase, observe at least 24 h before the n
 - [x] Raise broker `log_type` (debug/subscribe) for 24–72 h covering a full day, automations, a Zigbee2MQTT restart and a On since 2026-11-03 (the pod rolled in 29 s). Report: `scripts/mosquitto-acl-usage.sh --since 24h` (reads Loki, flags topics the roles do not cover).
       Home Assistant restart; ship to Loki; aggregate per username: published topics, subscribed filters, will and retained topics.
 - Early finding (15 min of data): Home Assistant's MQTT integration subscribes to the discovery topics of many native integrations (e.g. `tasmota/discovery/#`, `esphome/discover/#`, `dsmr/#`). The final `homeAssistant` role needs read-only access to the ones the full report shows, otherwise HA logs denied subscriptions after phase 4.
-- [ ] Replace the guessed roles in `reconcile.sh` with the observed table; investigate anything unexplained before granting it.
-- [ ] Turn the extra logging off again.
+- Capture result 2026-11-08 (6 days, 1.6M log lines): the zigbee2mqtt, emsChip, shelly and debug roles match observed use. `moonraker` was missing its second base topic and the plug read (fixed). `homeAssistant` still needs read-only access to the discovery filters it subscribes to on every connect: `drop_connect/discovery/#`, `dsmr/#`, `esphome/discover/#`, `fully/deviceInfo/+`, `inels/status/#`, `pglab/discovery/#`, `cloudapp/QBUSMQTTGW/#`, `tasmota/discovery/#`, `/greencell/broadcast`, `prism/hello`.
+- [x] Replace the guessed roles with the observed table. Done 2026-11-08, now data in `clients.conf` (see [Zigbee/MQTT](../02-smarthome/zigbee.md)); migration rehearsed in the production image: grants revoked by diff, runtime users untouched, special-character passwords log in.
+- [x] Extra logging: `log_type all` replaced by default levels + `debug` + `subscribe` (needed for denial alerts, see above). Revisit if Loki volume becomes a problem.
 
 ### Phase 3: TLS route
 
@@ -107,7 +107,8 @@ One variable at a time, one commit per phase, observe at least 24 h before the n
 
 ### Phase 4: enforce the ACLs
 
-- [ ] Set `acl-learning=false` (the pod rolls). Watch for denied publishes (silent on MQTT 3.1.1) and entity availability for 24–48 h.
+- [x] Follow-up tooling: Grafana dashboard `Mosquitto` (`system/monitoring/monitoring/grafana-dashboards/mosquitto.json`: rejected logins, connects per user and subnet, disconnect reasons, security log lines; the topic-capture row empties once `log_type all` is removed) and the alert `MQTT unauthorised connection` (`grafana-alerts/log-alerts.yaml`, fires on any `not authorised`).
+- [x] Set `acl-learning=false` (the pod rolls). Enforced 2026-11-08 after a final usage check against `clients.conf` (found and fixed one real gap: HA subscribes to `/greencell/broadcast/device`). Denial visibility: a denied publish is logged only at `log_type debug` (kept on) and alerts via `MQTT publish denied`; denied subscribes are never logged by Mosquitto at any level, so a read-side gap shows up as a silent entity. Break-glass: set `acl-learning=true` in `kustomization.yaml`. Watch for denied publishes (silent on MQTT 3.1.1) and entity availability for 24–48 h.
 - Rollback: set it back to `true`.
 
 ### Phase 5: Mosquitto 2.1.x (needs 2.1.3, see below)
@@ -127,7 +128,23 @@ One variable at a time, one commit per phase, observe at least 24 h before the n
 - [ ] Scope access to the LoadBalancer's plaintext port in UniFi to the VLANs/devices seen in phase 1.
 - [ ] Optional: per-device Shelly users (`mosquitto_ctrl createClient` + `addClientRole`), EMS-ESP to TLS on 443.
 - [ ] Credentials: move from the ConfigMap into a Secret mounted only in the init container.
+- [ ] Vault cleanup (needs an explicit OK, never delete unasked): the old `credential-1..8` keys in `workload/smarthome/mosquitto` are unused since the `clients.conf` switch (values were copied to `<name>-password`); keep them until the new setup has run for a while as the rollback path.
 - Plaintext cannot be retired completely (Shelly Gen1, Moonraker); the end state is firewall-scoped plaintext plus TLS for the rest.
+
+## Metrics exporter (optional follow-up) {#metrics-exporter}
+
+The dashboard and the `MQTT unauthorised connection` alert are log-based. Broker health (clients connected, message
+rate, dropped messages, uptime) has no metric source: Mosquitto has no Prometheus endpoint, only the `$SYS/#` topics.
+
+Scope:
+
+- [x] Exporter: `sapcc/mosquitto-exporter` 0.8.0 (last release 2021, repo still maintained; Apache-2.0, 148 stars). Chosen because the alternatives are smaller and no more active; Renovate tracks the tag.
+- [x] `$SYS`-only `exporter` role + user, Vault keys written 2026-11-08 (password never in git).
+- [x] Small app + `ServiceMonitor` scaffolded (credentials via Secret).
+- [x] Verified live 2026-11-08 (`broker_clients_connected` ~10, ~100 publishes/min, 0 dropped). Alerts in `prometheusrules.yaml` group `mosquitto.alerts` (metrics missing, clients dropped, no publishes, dropped messages, connection churn); thresholds come from the first readings, so revisit after a week of data. The image is amd64-only (pinned off the Pi).
+- [x] Panels added to the `Mosquitto` dashboard.
+- [ ] Revisit the alert thresholds after a week of data (they come from the first readings).
+- Not covered by metrics, stays on logs: per-user activity, rejected logins, ACL denials (`$SYS` has none of them).
 
 ## Waiting for 2.1.3 {#waiting-for-213}
 

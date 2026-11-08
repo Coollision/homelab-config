@@ -17,3 +17,9 @@ repos:
         language: script
         files: ^(workload|system)/.*/values\.yaml$|^applications/set-(workloads|system)\.yaml$
         pass_filenames: false
+      - id: mosquitto-clients-lint
+        name: Lint Mosquitto clients.conf
+        entry: scripts/mosquitto-clients-lint.sh
+        language: script
+        files: ^workload/smarthome/mosquitto/clients\.(conf|awk)$
+        pass_filenames: false
