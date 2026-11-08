@@ -43,18 +43,13 @@ like `<internal-domain>`, `<node-name>` (docs). Details live in `wiki/` — grep
 
 ## Skills & agents (project-level, `.claude/`)
 
-| Invoke | Use for |
-|---|---|
-| `/grill-me <topic>` | interview me one question at a time (with a recommended answer) before a design/migration |
-| `/new-app <ns>/<name>` | scaffold a shared-lib app, validate render, add wiki stub |
-| `/validate [dir...]` | run `scripts/validate-charts.sh` and summarise failures only |
-| `/gitops-debug <app>` | ArgoCD out-of-sync / degraded / stale-render triage |
-| `/promote-test-app <name>` | move an app from `tests/` to `system/` or `workload/` without downtime |
-| `/renovate-batch-verify` | check open Renovate bump branches for breaking changes + render, batch the safe ones on one branch |
-| `/wiki-sync` | reconcile `wiki/` with the working-tree diff |
-| agent `chart-reviewer` | independent read-only review of a chart diff against repo conventions |
-| agent `cluster-investigator` | read-only kubectl/argocd digging, returns a short conclusion |
-| agent `unifi-investigator` | read-only UniFi firewall/tunnel/reachability digging: API config checked against the gateway dataplane over SSH (counters, ipsets, routes, tcpdump) |
+Skills `/validate`, `/gitops-debug`, `/wiki-sync` and agents `chart-reviewer`, `cluster-sweep`, `cluster-investigator`,
+`unifi-investigator` self-describe in their listings. Not listed elsewhere:
+
+- `/grill-me <topic>`: interview me one question at a time (with a recommended answer) before a design/migration
+- `/new-app <ns>/<name>`: scaffold a shared-lib app, validate render, add wiki stub
+- `/promote-test-app <name>`: move an app from `tests/` to `system/` or `workload/` without downtime
+- `/renovate-batch-verify`: check open Renovate bump branches for breaking changes + render, batch the safe ones
 
 Domain skills (zigbee, matter/thread, esphome) are local-only and trigger by description.
 
@@ -65,6 +60,7 @@ Domain skills (zigbee, matter/thread, esphome) are local-only and trigger by des
   - `haiku-worker` / `Explore` (Haiku): scoped + named files/commands + checkable result + no judgement (sweeps, stated edits, log pulls, renames). Delegate these by default.
   - Sonnet (`cluster-investigator`, `unifi-investigator`, `chart-reviewer`, `general-purpose` with `model: sonnet`): investigation and analysis.
   - Main model: design, ambiguous work, Vault, destructive or ArgoCD-behaviour changes.
+  - **Two-phase investigations** (subagents can't spawn subagents, so main orchestrates): broad/noisy problem → `cluster-sweep` (Haiku) for evidence, or `haiku-worker` with a named command list for UniFi dumps, then pass that output in the brief to `cluster-investigator` / `unifi-investigator` (Sonnet) to conclude. Narrow, well-understood problem → go straight to the investigator.
   - If Haiku replies `NEEDS ESCALATION` or fails once, redo on Sonnet; don't retry on Haiku.
 - Keep this file short: put path-specific guidance in `.claude/rules/`, procedures in skills, facts in `wiki/`.
 
