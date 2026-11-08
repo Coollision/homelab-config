@@ -40,3 +40,17 @@ Pair it with a Longhorn-health gate, otherwise it automates the risky "quick res
 - [ ] Add a gate: do not upgrade the next node until all Longhorn volumes are healthy (pre-check Job or a `prepare`
       step in the Plan).
 - [ ] Renovate/ArgoCD interaction: how the `Plan` CRs and the k3s version pin are kept in Git.
+
+## 4. Follow up: `NodeMemoryMajorPagesFaults` on the smallest worker
+
+Alert fired 2026-11-08 ~22:30-22:55 CET (~1100 major faults/s, threshold `> 500` over 5m). Investigated: the node was fine
+(swap off, `MemAvailable` 31-38 %), but **a single container was thrashing inside its own limit**: `flaresolverr`
+(headless Chromium) sat at ~99 % of its 512Mi limit, so the kernel kept evicting its file pages and it kept re-reading
+them (~220 MB/s). It is the only container cluster-wide above 50 faults/s in 7 days. The alert was right, just worded
+as a node problem. Raising the alert threshold was rejected: it would hide this and, with swap off, would likely never fire.
+
+- [x] Raised flaresolverr memory (limit 512Mi to 1Gi, request 352Mi to 512Mi).
+- [ ] Optional: disable the stock rule and add `ContainerMemoryThrashing` (container pgmajfault rate vs. % of memory limit)
+      plus a node rule that also requires `MemAvailable < 10 %`; needs a live backtest first.
+- [ ] Re-check around 2026-11-22 that the alert stays quiet.
+- [ ] Side finding: `node_exporter` returns two series for the same node (two pods scraped); check for a duplicate/stale endpoint.
