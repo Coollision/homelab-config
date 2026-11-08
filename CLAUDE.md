@@ -61,7 +61,11 @@ Domain skills (zigbee, matter/thread, esphome) are local-only and trigger by des
 ## Token hygiene
 
 - Prefer `Grep`/targeted `Read` (offset/limit) over reading whole values files; `kubectl ... -o jsonpath`/`--no-headers`/`| head` over full YAML dumps; `kubectl logs --tail=100`.
-- Use `model: sonnet` agents for exploration and CLI-heavy digging; max 2 agents concurrently.
+- **Delegation tiers** (max 2 agents concurrently):
+  - `haiku-worker` / `Explore` (Haiku): scoped + named files/commands + checkable result + no judgement (sweeps, stated edits, log pulls, renames). Delegate these by default.
+  - Sonnet (`cluster-investigator`, `unifi-investigator`, `chart-reviewer`, `general-purpose` with `model: sonnet`): investigation and analysis.
+  - Main model: design, ambiguous work, Vault, destructive or ArgoCD-behaviour changes.
+  - If Haiku replies `NEEDS ESCALATION` or fails once, redo on Sonnet; don't retry on Haiku.
 - Keep this file short: put path-specific guidance in `.claude/rules/`, procedures in skills, facts in `wiki/`.
 
 ## Compact instructions
