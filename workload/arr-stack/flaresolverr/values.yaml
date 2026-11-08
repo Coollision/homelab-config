@@ -11,12 +11,13 @@ config:
   PGID: 1000
 
 resources:
+  # Chromium sat at ~99% of 512Mi (2026-11-08): kernel evicted its file pages, ~1100 major faults/s, NodeMemoryMajorPagesFaults.
   requests:
     cpu: 10m
-    memory: 352Mi
+    memory: 512Mi
   limits:
     cpu: 500m
-    memory: 512Mi
+    memory: 1Gi
 
 podSecurityContext:
   fsGroup: 1000
