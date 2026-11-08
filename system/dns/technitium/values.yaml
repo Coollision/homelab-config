@@ -160,6 +160,18 @@ primary:
     host: dns-a.<secret:kv/data/shared/domains~domain>
     port: cluster
     serversTransport: technitium-primary-https
+  homepage:
+    name: Technitium A
+    group: Infra
+    icon: technitium
+    description: Primary DNS server
+    # Read-only `homepage` user on the primary (token in Vault, see wiki/04-apps/homepage.md). Goes through Traefik
+    # because the backend serves a self-signed cert that Homepage cannot verify.
+    widget:
+      type: technitium
+      url: https://dns-a.<secret:kv/data/shared/domains~domain>
+      key: "{{HOMEPAGE_VAR_TECHNITIUM_KEY}}"
+      range: LastDay
 
 # ── SECONDARY ────────────────────────────────────────────────────────────────
 # Cluster secondary: syncs from primary, answers queries independently.
@@ -196,3 +208,6 @@ secondary:
     host: dns-b.<secret:kv/data/shared/domains~domain>
     port: cluster
     serversTransport: technitium-secondary-https
+  # Hidden: one DNS card is enough on the dashboard; the primary's widget carries the stats.
+  homepage:
+    hidden: true

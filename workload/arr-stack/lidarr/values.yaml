@@ -24,6 +24,7 @@ arrXmlPostgres:
   requireExistingConfig: false
   userKey: lidarr_user
   passwordKey: lidarr_password
+  apiKeyKey: lidarr_api_key
   mainDbKey: lidarr_database
   logDbKey: lidarr_database_logs
   authenticationMethod: External
@@ -62,6 +63,15 @@ ingress_internal:
 ingress_internal_secure:
   host: lidarr.<secret:kv/data/shared/domains~domain>
   port: web
+
+homepage:
+  group: Media
+  icon: lidarr
+  description: Music library
+  widget:
+    type: lidarr
+    url: http://lidarr-service.arr-stack.svc.cluster.local:8686
+    key: "{{HOMEPAGE_VAR_LIDARR_KEY}}"
 
 storage:
   - type: longhorn

@@ -67,6 +67,15 @@ ingress_internal_secure:
   host: slskd.<secret:kv/data/shared/domains~domain>
   port: web
 
+homepage:
+  group: Media
+  icon: slskd
+  description: Soulseek
+  widget:
+    type: slskd
+    url: http://slskd-service.arr-stack.svc.cluster.local:5030
+    key: "{{HOMEPAGE_VAR_SLSKD_KEY}}"
+
 storage:
   - type: longhorn
     mountPath: /app

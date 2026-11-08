@@ -19,6 +19,11 @@ resources:
 ingress_internal:
   host: jackett.<secret:kv/data/shared/domains~local>
   port: web
+
+homepage:
+  group: Media
+  icon: jackett
+  description: Indexer proxy
 storage:
   - mountPath: /config
     size: 1Gi

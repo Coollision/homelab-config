@@ -62,6 +62,9 @@ storage:
 ingress_internal_secure:
   host: ha-mcp.<secret:kv/data/shared/domains~domain>
   port: web
+# MCP endpoint, not a UI
+homepage:
+  hidden: true
 
 # The MCP endpoint rejects bare requests (anything without the secret path), so HTTP GET
 # probes would fail health checks. A TCP check on the listening port is the correct signal.

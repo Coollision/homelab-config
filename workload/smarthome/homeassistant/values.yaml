@@ -97,6 +97,11 @@ ingress_internal_secure:
 ingress_external_secure:
   host: homeassistant.<secret:kv/data/shared/domains~domain>
   port: web
+
+homepage:
+  group: Smart Home
+  icon: home-assistant
+  description: Home automation
 storage:
   - mountPath: /config
     size: 2Gi

@@ -101,6 +101,11 @@
       {{- if .Values.arrXmlPostgres.authenticationMethod }}
       upsert AuthenticationMethod "{{ .Values.arrXmlPostgres.authenticationMethod }}"
       {{- end }}
+      {{- if .Values.arrXmlPostgres.apiKeyKey }}
+      # pin the ApiKey from Vault so it is declarative (Homepage widgets / prefetcharr read the same value);
+      # empty = secret key not synced yet, keep whatever the app generated
+      if [ -n "${API_KEY:-}" ]; then upsert ApiKey "$API_KEY"; fi
+      {{- end }}
   env:
     - name: POSTGRES_USER
       valueFrom:
@@ -132,6 +137,14 @@
         configMapKeyRef:
           name: {{ .Values.arrXmlPostgres.configMapName | default "service-db" }}
           key: {{ required "arrXmlPostgres.logDbKey is required" .Values.arrXmlPostgres.logDbKey }}
+    {{- if .Values.arrXmlPostgres.apiKeyKey }}
+    - name: API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: {{ .Values.arrXmlPostgres.secretName | default "services-db" }}
+          key: {{ .Values.arrXmlPostgres.apiKeyKey }}
+          optional: true
+    {{- end }}
   volumeMounts:
     - name: {{ printf "%s-%s" (include "helm.fullname" .) (.Values.arrXmlPostgres.configStorageNameSuffix | default "config") | trunc 63 | trimSuffix "-" }}
       mountPath: {{ .Values.arrXmlPostgres.configMountPath | default "/config" }}

@@ -52,6 +52,15 @@ ingress_internal_secure:
   host: bazarr.<secret:kv/data/shared/domains~domain>
   port: web
 
+homepage:
+  group: Media
+  icon: bazarr
+  description: Subtitles
+  widget:
+    type: bazarr
+    url: http://bazarr-service.arr-stack.svc.cluster.local:6767
+    key: "{{HOMEPAGE_VAR_BAZARR_KEY}}"
+
 storage:
   - type: longhorn
     mountPath: /config

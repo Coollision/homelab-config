@@ -89,6 +89,10 @@ resources:
 ingress_internal_secure:
   host: n8n.<secret:kv/data/shared/domains~domain>
   port: web
+homepage:
+  group: Tools
+  icon: n8n
+  description: Workflow automation
 
 storage:
   - mountPath: /home/node/.n8n

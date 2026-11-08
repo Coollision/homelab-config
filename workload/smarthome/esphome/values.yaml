@@ -29,6 +29,11 @@ ingress_internal_secure:
   host: esphome.<secret:kv/data/shared/domains~domain>
   port: web
 
+homepage:
+  group: Smart Home
+  icon: esphome
+  description: ESP firmware
+
 # MACVLAN leg on VLAN 40 (IoT) so the dashboard's mDNS browser is L2-adjacent to
 # the ESPHome devices (192.168.40.0/24) and receives their _esphomelib._tcp
 # announcements directly. Default route stays on eth0 (ingress/cluster); the

@@ -1,0 +1,11 @@
+apiVersion: v2
+name: homepage
+description: Homepage dashboard (gethomepage.dev)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies:
+  - name: shared-lib
+    version: 0.1.0
+    repository: file://../../../lib/shared-lib

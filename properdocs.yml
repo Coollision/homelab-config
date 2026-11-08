@@ -39,6 +39,7 @@ nav:
   - Apps:
       - 04-apps/aws-proxies.md
       - 04-apps/misc-apps.md
+      - 04-apps/homepage.md
   - Operations:
       - 05-operations/known-issues.md
       - 05-operations/kubectl-cheatsheet.md
@@ -53,6 +54,7 @@ nav:
       - 06-todo/zot-registry-mirror.md
       - 06-todo/whisper-upgrade.md
       - 06-todo/mosquitto-modernization.md
+      - 06-todo/technitium-secondary-headless.md
   - Rejected:
       - 07-rejected/README.md
       - 07-rejected/spegel-embedded-registry.md

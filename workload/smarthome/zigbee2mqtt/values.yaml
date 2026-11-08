@@ -15,6 +15,11 @@ ingress_internal_secure:
 ingress_internal:
   host: zigbee2mqtt.<secret:kv/data/shared/domains~local>
   port: web
+
+homepage:
+  group: Smart Home
+  icon: zigbee2mqtt
+  description: Zigbee mesh
 storage:
   - mountPath: /data
     type: longhorn

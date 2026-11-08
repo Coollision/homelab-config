@@ -15,6 +15,9 @@ ingress_internal_secure:
   host: echo.<secret:kv/data/shared/domains~domain>
   path: /
   port: http
+# Scratch app
+homepage:
+  hidden: true
 
 scaleToZero:
   enabled: true

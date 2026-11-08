@@ -21,6 +21,10 @@ ingress_internal:
 ingress_internal_secure:
   host: cloudbeaver.<secret:kv/data/shared/domains~domain>
   port: ingress
+homepage:
+  group: Databases
+  icon: cloudbeaver
+  description: DB browser
 storage:
   - mountPath: /opt/cloudbeaver/workspace
     size: 512Mi
