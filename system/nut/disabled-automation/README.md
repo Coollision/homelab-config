@@ -1,5 +1,9 @@
 # NUT shutdown automation — design (NOT built yet)
 
+> **Superseded:** the reviewed, current design lives in
+> [`wiki/06-todo/ups-graceful-shutdown.md`](../../../wiki/06-todo/ups-graceful-shutdown.md). The sketch below is kept
+> only as the original idea.
+
 Goal: during a power outage, **shed load progressively** so the core homelab stays up as long as the
 UPS lasts, and everything shuts down cleanly before the battery dies.
 

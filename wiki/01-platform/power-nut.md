@@ -29,6 +29,9 @@ or a Home Assistant automation) but none are wired up — the NUT server's admin
 already has the permissions this would need ("forward-compatible" provisioning), but
 nothing acts on them yet.
 
+The reviewed, current design (staged shedding, label tiers, UPS cycle, recovery) lives in
+[TODO: UPS graceful shutdown](../06-todo/ups-graceful-shutdown.md); it supersedes the sketch above.
+
 ## Why NUT is replacing the old SNMP-based UPS metrics
 
 [Observability's home-metrics exporter](observability.md#snmp--ups-metrics--systemmonitoringhome-metrics)

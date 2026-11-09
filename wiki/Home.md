@@ -98,7 +98,9 @@ Planned work that is not built yet. Pages move to their normal section once done
 | [Registry mirror](06-todo/registry-mirror.md) | Broaden the NAS docker.io mirror to ghcr/quay/k8s registries; is kube-fledged still needed? |
 | [Zot mirror plan](06-todo/zot-registry-mirror.md) | Detailed plan: one Zot pull-through cache on the NAS for all upstreams, phases, risks, rollout |
 | [k3s tuning](06-todo/k3s-tuning.md) | Faster image pulls, graceful node shutdown, system-upgrade-controller + the KillMode question |
-| [Technitium secondary headless](06-todo/technitium-secondary-headless.md) | Does the secondary need its web UI, and would dropping it save anything? |
+| [UPS graceful shutdown](06-todo/ups-graceful-shutdown.md) | Reviewed design: staged load shedding, label tiers, data-safe shutdown, UPS cycle + auto-recovery |
+| [Bazarr subtitle gaps](06-todo/bazarr-subtitle-gaps.md) | Missing Dutch subtitles: investigate Lingarr, provider cleanup, optional Whisper |
+| [Future ideas](06-todo/future-ideas.md) | Vetted backlog: UniFi Poller, ntfy, Paperless, BLE presence; hardware-gated LLM + heating |
 
 ### 07 · Rejected
 Ideas that were looked at and deliberately not built, with the reasoning.
@@ -106,6 +108,7 @@ Ideas that were looked at and deliberately not built, with the reasoning.
 | Page | Covers |
 |---|---|
 | [Spegel embedded registry](07-rejected/spegel-embedded-registry.md) | Why k3s' peer-to-peer image mirror lost to a local NAS mirror |
+| [Single sign-on](07-rejected/sso.md) | Why full SSO isn't worth it, and why an external-only auth gate is parked |
 
 ## The one-paragraph mental model
 
