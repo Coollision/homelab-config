@@ -13,7 +13,7 @@ deployment:
   image:
     repository: ghcr.io/coollision/storage-operator
     # v0.3.0 added WS-Discovery (wsdName); v0.3.2 sends its replies from the VLAN 5 address (v0.3.1 crashed on Linux); renovate owns the tag from here
-    tag: v0.3.2
+    tag: v0.3.3
   command: ["/manager"]
   args:
     - announce
