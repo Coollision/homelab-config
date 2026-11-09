@@ -86,18 +86,11 @@ descheduler:
             args:
               nodeFit: true
               minPodAge: "30m"  # don't re-evict freshly rescheduled pods
-              # Replaces deprecated evictLocalStoragePods. Longhorn RWO volumes are never
-              # evicted by balancing: the reattach costs more than any rebalance gains.
+              # Replaces deprecated evictLocalStoragePods. Longhorn volumes follow the pod,
+              # so PVC pods stay evictable; placement is the scheduler's/affinity's job.
               podProtections:
                 defaultDisabled:
                   - PodsWithLocalStorage
-                extraEnabled:
-                  - PodsWithPVC
-                config:
-                  PodsWithPVC:
-                    protectedStorageClasses:
-                      - name: longhorn
-                      - name: longhorn-static
               nodeSelector: "type=mini"
               labelSelector:
                 matchExpressions:
@@ -159,18 +152,11 @@ descheduler:
             args:
               nodeFit: true
               minPodAge: "30m"  # don't re-evict freshly rescheduled pods
-              # Replaces deprecated evictLocalStoragePods. Longhorn RWO volumes are never
-              # evicted by balancing: the reattach costs more than any rebalance gains.
+              # Replaces deprecated evictLocalStoragePods. Longhorn volumes follow the pod,
+              # so PVC pods stay evictable; placement is the scheduler's/affinity's job.
               podProtections:
                 defaultDisabled:
                   - PodsWithLocalStorage
-                extraEnabled:
-                  - PodsWithPVC
-                config:
-                  PodsWithPVC:
-                    protectedStorageClasses:
-                      - name: longhorn
-                      - name: longhorn-static
               nodeSelector: "type=vm"
               labelSelector:
                 matchExpressions:
