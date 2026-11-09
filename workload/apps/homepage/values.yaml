@@ -188,6 +188,7 @@ configMaps:
         - Monitoring:
             - Cluster health:
                 icon: mdi-heart-pulse
+                href: http://alertmanager.<secret:kv/data/shared/domains~local>
                 widget:
                   type: prometheusmetric
                   url: http://monitoring-promstack-prometheus.monitoring.svc.cluster.local:9090
@@ -203,6 +204,7 @@ configMaps:
                       format: {type: number, options: {maximumFractionDigits: 0}}
             - Cluster load:
                 icon: mdi-chart-line
+                href: http://grafana.<secret:kv/data/shared/domains~local>/d/82pBZCmRkasd
                 widget:
                   type: prometheusmetric
                   url: http://monitoring-promstack-prometheus.monitoring.svc.cluster.local:9090
@@ -218,6 +220,7 @@ configMaps:
                       format: {type: number, options: {maximumFractionDigits: 0}, suffix: "%"}
             - UPS:
                 icon: mdi-battery-charging
+                href: http://grafana.<secret:kv/data/shared/domains~local>/d/e0029e2a-6284-43a4-8a6f-483208b16d47
                 widget:
                   type: prometheusmetric
                   url: http://monitoring-promstack-prometheus.monitoring.svc.cluster.local:9090
@@ -236,6 +239,7 @@ configMaps:
                       format: {type: number, options: {maximumFractionDigits: 0}}
             - Longhorn volumes:
                 icon: longhorn
+                href: https://longhorn.<secret:kv/data/shared/domains~domain>
                 widget:
                   type: prometheusmetric
                   url: http://monitoring-promstack-prometheus.monitoring.svc.cluster.local:9090
@@ -254,6 +258,7 @@ configMaps:
                       format: {type: number, options: {maximumFractionDigits: 0}}
             - Postgres (CNPG):
                 icon: postgresql
+                href: http://grafana.<secret:kv/data/shared/domains~local>/d/cloudnative-pg
                 widget:
                   type: prometheusmetric
                   url: http://monitoring-promstack-prometheus.monitoring.svc.cluster.local:9090
@@ -269,6 +274,7 @@ configMaps:
                       format: {type: number, options: {maximumFractionDigits: 0}}
             - Mosquitto:
                 icon: mosquitto
+                href: http://grafana.<secret:kv/data/shared/domains~local>/d/mosquitto-security
                 widget:
                   type: prometheusmetric
                   url: http://monitoring-promstack-prometheus.monitoring.svc.cluster.local:9090
@@ -281,6 +287,7 @@ configMaps:
                       format: {type: number, options: {maximumFractionDigits: 0}}
             - Scale-to-zero:
                 icon: mdi-sleep
+                href: http://grafana.<secret:kv/data/shared/domains~local>/d/sablier-scale-to-zero
                 widget:
                   type: prometheusmetric
                   url: http://monitoring-promstack-prometheus.monitoring.svc.cluster.local:9090
@@ -293,6 +300,7 @@ configMaps:
                       format: {type: number, options: {maximumFractionDigits: 0}}
             - NAS (SNMP):
                 icon: synology
+                href: http://grafana.<secret:kv/data/shared/domains~local>/d/qfGRDGZgz
                 widget:
                   type: prometheusmetric
                   url: http://monitoring-promstack-prometheus.monitoring.svc.cluster.local:9090
@@ -305,6 +313,7 @@ configMaps:
                       format: {type: number, options: {maximumFractionDigits: 0}}
             - ArgoCD apps:
                 icon: argo-cd
+                href: https://argocd.<secret:kv/data/shared/domains~domain>
                 widget:
                   type: prometheusmetric
                   url: http://monitoring-promstack-prometheus.monitoring.svc.cluster.local:9090
