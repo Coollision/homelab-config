@@ -21,10 +21,10 @@ config:
 ingress_internal_secure:
   host: ups.<secret:kv/data/shared/domains~domain>
   port: web
+# Hidden: the hand-written UPS card in the Homepage chart carries the link and the live UPS numbers (this app is
+# scale-to-zero, so a discovered card would only add a second, status-only card).
 homepage:
-  group: Infra
-  icon: mdi-battery-charging
-  description: UPS status
+  hidden: true
 
 resources:
   requests:

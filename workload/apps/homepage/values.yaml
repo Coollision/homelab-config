@@ -218,44 +218,6 @@ configMaps:
                     - label: Disk
                       query: 100*(1-sum(node_filesystem_free_bytes{device=~"/dev/.*"})/sum(node_filesystem_size_bytes{device=~"/dev/.*"}))
                       format: {type: number, options: {maximumFractionDigits: 0}, suffix: "%"}
-            - UPS:
-                icon: mdi-battery-charging
-                href: http://grafana.<secret:kv/data/shared/domains~local>/d/e0029e2a-6284-43a4-8a6f-483208b16d47
-                widget:
-                  type: prometheusmetric
-                  url: http://monitoring-promstack-prometheus.monitoring.svc.cluster.local:9090
-                  metrics:
-                    - label: Battery
-                      query: network_ups_tools_battery_charge{instance="apc-bx1600mi"}
-                      format: {type: number, options: {maximumFractionDigits: 0}, suffix: "%"}
-                    - label: Runtime
-                      query: network_ups_tools_battery_runtime{instance="apc-bx1600mi"}/60
-                      format: {type: number, options: {maximumFractionDigits: 0}, suffix: " min"}
-                    - label: Load
-                      query: network_ups_tools_ups_load{instance="apc-bx1600mi"}
-                      format: {type: number, options: {maximumFractionDigits: 0}, suffix: "%"}
-                    - label: On mains (1=yes)
-                      query: network_ups_tools_ups_status{instance="apc-bx1600mi",flag="OL"}
-                      format: {type: number, options: {maximumFractionDigits: 0}}
-            - Longhorn volumes:
-                icon: longhorn
-                href: https://longhorn.<secret:kv/data/shared/domains~domain>
-                widget:
-                  type: prometheusmetric
-                  url: http://monitoring-promstack-prometheus.monitoring.svc.cluster.local:9090
-                  metrics:
-                    - label: Total
-                      query: count(longhorn_volume_capacity_bytes) or vector(0)
-                      format: {type: number, options: {maximumFractionDigits: 0}}
-                    - label: Healthy
-                      query: count(longhorn_volume_robustness{state="healthy"}==1) or vector(0)
-                      format: {type: number, options: {maximumFractionDigits: 0}}
-                    - label: Degraded
-                      query: count(longhorn_volume_robustness{state="degraded"}==1) or vector(0)
-                      format: {type: number, options: {maximumFractionDigits: 0}}
-                    - label: Faulted
-                      query: count(longhorn_volume_robustness{state="faulted"}==1) or vector(0)
-                      format: {type: number, options: {maximumFractionDigits: 0}}
             - Postgres (CNPG):
                 icon: postgresql
                 href: http://grafana.<secret:kv/data/shared/domains~local>/d/cloudnative-pg
@@ -342,6 +304,42 @@ configMaps:
                 icon: longhorn
                 href: https://longhorn.<secret:kv/data/shared/domains~domain>
                 description: Storage (scale-to-zero)
+                widget:
+                  type: prometheusmetric
+                  url: http://monitoring-promstack-prometheus.monitoring.svc.cluster.local:9090
+                  metrics:
+                    - label: Total
+                      query: count(longhorn_volume_capacity_bytes) or vector(0)
+                      format: {type: number, options: {maximumFractionDigits: 0}}
+                    - label: Healthy
+                      query: count(longhorn_volume_robustness{state="healthy"}==1) or vector(0)
+                      format: {type: number, options: {maximumFractionDigits: 0}}
+                    - label: Degraded
+                      query: count(longhorn_volume_robustness{state="degraded"}==1) or vector(0)
+                      format: {type: number, options: {maximumFractionDigits: 0}}
+                    - label: Faulted
+                      query: count(longhorn_volume_robustness{state="faulted"}==1) or vector(0)
+                      format: {type: number, options: {maximumFractionDigits: 0}}
+            - UPS:
+                icon: mdi-battery-charging
+                href: https://ups.<secret:kv/data/shared/domains~domain>
+                description: PeaNUT (scale-to-zero)
+                widget:
+                  type: prometheusmetric
+                  url: http://monitoring-promstack-prometheus.monitoring.svc.cluster.local:9090
+                  metrics:
+                    - label: Battery
+                      query: network_ups_tools_battery_charge{instance="apc-bx1600mi"}
+                      format: {type: number, options: {maximumFractionDigits: 0}, suffix: "%"}
+                    - label: Runtime
+                      query: network_ups_tools_battery_runtime{instance="apc-bx1600mi"}/60
+                      format: {type: number, options: {maximumFractionDigits: 0}, suffix: " min"}
+                    - label: Load
+                      query: network_ups_tools_ups_load{instance="apc-bx1600mi"}
+                      format: {type: number, options: {maximumFractionDigits: 0}, suffix: "%"}
+                    - label: On mains (1=yes)
+                      query: network_ups_tools_ups_status{instance="apc-bx1600mi",flag="OL"}
+                      format: {type: number, options: {maximumFractionDigits: 0}}
             - ArgoCD:
                 icon: argo-cd
                 href: https://argocd.<secret:kv/data/shared/domains~domain>
