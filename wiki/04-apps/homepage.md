@@ -41,8 +41,8 @@ The repo is public, so annotations and `services.yaml` never carry keys. A widge
 (`kv/workload/arr-stack/<app>~api-key`). Widgets are set per app in its `homepage.widget` block (type, in-cluster
 `url`, `key`) and exist for the arr apps, Jellyseerr, Tautulli and slskd. Metric tiles use the native
 `prometheusmetric` widget against Prometheus: the tiles in `services.yaml` (cluster health/load, UPS, Longhorn,
-CNPG, Mosquitto, Sablier, NAS, ArgoCD apps) reuse the queries from the starred Grafana dashboards, and the
-`Dashboards` bookmarks link to those dashboards. The ArgoCD tile reads `argocd_app_info` from the application
+CNPG, Mosquitto, Sablier, NAS; every tile links to its dashboard or UI) reuse the queries from the starred Grafana dashboards, and the
+`Dashboards` bookmarks link to those dashboards. The ArgoCD card (link and counts in one card, Infra group) reads `argocd_app_info` from the application
 controller (ServiceMonitor in `argocd/values.yaml`), so it works while argocd-server is asleep. Technitium uses a dedicated read-only user (`homepage`, own API token in `kv/workload/apps/homepage~technitium-token`).
 Technitium's implicit `Everyone` group (every user is in it) was stripped of View on every section except Dashboard
 (2026-11-09), so the token can read dashboard stats and nothing else: Zones, Logs, DhcpServer, Settings and
