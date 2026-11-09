@@ -57,13 +57,21 @@ the descheduler's placement logic:
   actually has that USB device plugged in, via required `nodeAffinity`.
 - **Descheduler** runs three profiles (`mini-nodes`, `vm-nodes`, `hw-enforcement`) —
   the last one actively evicts any pod violating a required node affinity, which is the
-  enforcement mechanism behind the USB-device pinning above. Storage pods
-  (`evictableNamespaces.exclude: [storage]`) are explicitly protected from eviction.
+  enforcement mechanism behind the USB-device pinning above. Only `mini-nodes` runs
+  `LowNodeUtilization` (the profiles' evictor `nodeSelector` does not scope which nodes
+  get classified, so a second balancer just doubled evictions). Pods on Longhorn PVCs are
+  protected from eviction (`PodsWithPVC`), pods younger than 30m are skipped, and the
+  `storage` namespace is excluded from balancing.
 
 **Non-obvious tuning:** the descheduler balances on **actual metrics-server CPU/memory
 usage**, not pod *requests* — a deliberate fix after the default requests-based algorithm
 caused endless, futile eviction churn of 0-request BestEffort pods while a control-plane
 node sat at 94% CPU by *requested* (not actual) load.
+
+Balancing also ignores **pod count**: the 40-pod-cap Raspberry Pi node sat at 83-85% pods
+with ~40% CPU/memory, so it was a permanent eviction source (~220 evictions/day, 98% from
+that node, pods rescheduled straight back onto it). CPU target is 90% so short nightly
+spikes don't trigger evictions. Found via Loki (`{app="descheduler"}`, log level v3).
 
 ## Sablier — scale-to-zero for idle apps
 

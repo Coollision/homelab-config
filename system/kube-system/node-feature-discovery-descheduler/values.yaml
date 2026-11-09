@@ -84,8 +84,20 @@ descheduler:
         pluginConfig:
           - name: "DefaultEvictor"
             args:
-              evictLocalStoragePods: true
               nodeFit: true
+              minPodAge: "30m"  # don't re-evict freshly rescheduled pods
+              # Replaces deprecated evictLocalStoragePods. Longhorn RWO volumes are never
+              # evicted by balancing: the reattach costs more than any rebalance gains.
+              podProtections:
+                defaultDisabled:
+                  - PodsWithLocalStorage
+                extraEnabled:
+                  - PodsWithPVC
+                config:
+                  PodsWithPVC:
+                    protectedStorageClasses:
+                      - name: longhorn
+                      - name: longhorn-static
               nodeSelector: "type=mini"
               labelSelector:
                 matchExpressions:
@@ -117,19 +129,18 @@ descheduler:
               evictableNamespaces:
                 exclude:
                   - storage
-              # All three dimensions on ACTUAL usage (metrics-server). A node is an
+              # CPU + memory only, on ACTUAL usage (metrics-server). A node is an
               # eviction TARGET (underutilized) only if below ALL `thresholds`, and a
-              # SOURCE (overutilized) if above ANY `targetThresholds`. Tuned so the
-              # steady state (master-green ~68% cpu / 80% mem / 60% pods) is
-              # "appropriately utilized" -> no churn; eviction only on genuine overload.
+              # SOURCE (overutilized) if above ANY `targetThresholds`. No `pods` key on
+              # purpose: the rpi node (40-pod cap) sat at 83-85% pods with ~40% cpu/mem,
+              # so it was a permanent "source" and ~220 evictions/day ping-ponged pods
+              # back onto it (the scheduler enforces the hard pod cap itself).
               thresholds:
                 cpu: 50
                 memory: 70
-                pods: 55
               targetThresholds:
-                cpu: 80
+                cpu: 90  # ignore short spikes (nightly jobs ~03:00)
                 memory: 85
-                pods: 80
         plugins:
           balance:
             enabled:
@@ -146,8 +157,20 @@ descheduler:
         pluginConfig:
           - name: "DefaultEvictor"
             args:
-              evictLocalStoragePods: true
               nodeFit: true
+              minPodAge: "30m"  # don't re-evict freshly rescheduled pods
+              # Replaces deprecated evictLocalStoragePods. Longhorn RWO volumes are never
+              # evicted by balancing: the reattach costs more than any rebalance gains.
+              podProtections:
+                defaultDisabled:
+                  - PodsWithLocalStorage
+                extraEnabled:
+                  - PodsWithPVC
+                config:
+                  PodsWithPVC:
+                    protectedStorageClasses:
+                      - name: longhorn
+                      - name: longhorn-static
               nodeSelector: "type=vm"
               labelSelector:
                 matchExpressions:
@@ -167,33 +190,11 @@ descheduler:
           - name: "RemovePodsViolatingInterPodAntiAffinity"
           - name: "RemovePodsViolatingTopologySpreadConstraint"
           - name: "RemovePodsViolatingNodeTaints"
-          - name: "LowNodeUtilization"
-            args:
-              metricsUtilization:
-                source: KubernetesMetrics  # classify nodes by real CPU usage, not requests
-              # Was 1 -- required 2+ idle nodes to act, disabling balancing whenever
-              # exactly 1 node was idle (normal during maintenance). 0 = plugin default.
-              numberOfNodes: 0
-              evictionLimits:
-                node: 2
-              evictableNamespaces:
-                exclude:
-                  - storage
-              # All three dimensions on actual usage (see mini-nodes profile).
-              thresholds:
-                cpu: 50
-                memory: 70
-                pods: 50
-              targetThresholds:
-                cpu: 80
-                memory: 85
-                pods: 80
         plugins:
           balance:
             enabled:
               - "RemoveDuplicates"
               - "RemovePodsViolatingTopologySpreadConstraint"
-              - "LowNodeUtilization"
           deschedule:
             enabled:
               - "RemovePodsHavingTooManyRestarts"
