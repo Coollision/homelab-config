@@ -24,7 +24,7 @@ radio playing across all devices, legacy library scanned (116 albums, 31 album a
       saved albums (the album-artist list grew by ~60 entries and one album); not a tag problem.
 - [ ] Home Assistant integration connects (ClusterIP service on 8095); phone playback works.
 - [ ] Turn off Music Assistant's cloud remote access unless wanted.
-- [ ] Check the Music Assistant version still matches the research it was built on (the stable line was 2.10.x).
+- [x] Music Assistant version still matches the research (2.10.9 on 2026-11-09).
 - [ ] Optional: Picard on the ~40 single-artist albums for MusicBrainz IDs.
 
 ## Intake (music-intake)

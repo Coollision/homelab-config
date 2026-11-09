@@ -2,8 +2,9 @@
 
 [← Back to Home](../Home.md) · Related: [Zigbee and Mosquitto](../02-smarthome/zigbee.md) · [Networking](../01-platform/networking.md)
 
-> **Status (2026-11-03):** phases 0–3 are **live in production**, phase 2b (usage capture) is running and phase 4
-> waits for 24–72 h of data. Everything was rehearsed first on the `tests` branch (reference app, kept disabled at
+> **Status (2026-11-09):** phases 0–4 are **live in production** (ACL enforcement since 2026-11-08, after the 6-day
+> usage capture). Still open: the pre-auth alerting item in phase 0, the alert-threshold revisit, and phases 5–7.
+> Everything was rehearsed first on the `tests` branch (reference app, kept disabled at
 > `tests/mosquitto-test/disabled-mosquitto-test`). Phases 5–6 wait for Mosquitto 2.1.3 (see [below](#waiting-for-213)).
 > Delete this page once the migration is done.
 
@@ -71,7 +72,8 @@ One variable at a time, one commit per phase, observe at least 24 h before the n
 - [x] Node-RED credential is no longer referenced; the unused Vault key `credential-3` is left in place (any `kv delete` needs explicit approval).
 - [x] Confirm the Moonraker printer's MQTT base topic and who consumes `printers/<printer>/power`. Confirmed 2026-11-08 by the 6-day capture: the Moonraker login reads it (read-only), the K1C also reads its own Zigbee2MQTT plug, and a second printer publishes under its own base topic. Both are in the `moonraker` role.
 - [x] Confirm the Longhorn volume `mosquitto` is covered by snapshot/backup jobs; take a manual snapshot before phases 2 and 5. Hourly snapshots and a nightly backup exist; a snapshot from 90 minutes before phase 2 was `readyToUse`.
-- [ ] Alerting before touching auth: broker-up probe plus a Zigbee2MQTT `bridge/state` / Home Assistant availability alert.
+- [x] Broker-up probe. Covered (checked 2026-11-09) by `MosquittoMetricsMissing` plus the client-count, no-publish, drop and churn alerts in `prometheusrules.yaml` (`mosquitto.alerts`). The pod-level kube-prometheus defaults (`KubePodCrashLooping`, `KubePodNotReady`, `KubeStatefulSetReplicasMismatch`) are enabled and cover a crashed or unready Zigbee2MQTT or Home Assistant pod.
+- [x] Application-level availability alert (Zigbee2MQTT bridge offline while the pod is Ready): not built, moved to [Future ideas](future-ideas.md). Checked 2026-11-09: no Home Assistant automation uses the bridge connection entity, and ~174 entities were `unavailable`, so an unavailable-count alert needs a clean baseline first.
 
 ### Phase 1: `externalTrafficPolicy: Local` (own commit, quiet hour)
 

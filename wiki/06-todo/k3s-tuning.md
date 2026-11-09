@@ -52,5 +52,5 @@ as a node problem. Raising the alert threshold was rejected: it would hide this 
 - [x] Raised flaresolverr memory (limit 512Mi to 1Gi, request 352Mi to 512Mi).
 - [ ] Optional: disable the stock rule and add `ContainerMemoryThrashing` (container pgmajfault rate vs. % of memory limit)
       plus a node rule that also requires `MemAvailable < 10 %`; needs a live backtest first.
-- [ ] Re-check around 2026-11-22 that the alert stays quiet.
-- [ ] Side finding: `node_exporter` returns two series for the same node (two pods scraped); check for a duplicate/stale endpoint.
+- [ ] Re-check around 2026-11-22 that the alert stays quiet (2026-11-09: no alerts firing, flaresolverr ~340Mi of 1Gi, only the old pod thrashed).
+- [x] Side finding: `node_exporter` returned two series for the same node. Gone by 2026-11-09 (4 series, one per node, all up).
