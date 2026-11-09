@@ -59,9 +59,9 @@ the descheduler's placement logic:
   the last one actively evicts any pod violating a required node affinity, which is the
   enforcement mechanism behind the USB-device pinning above. Only `mini-nodes` runs
   `LowNodeUtilization` (the profiles' evictor `nodeSelector` does not scope which nodes
-  get classified, so a second balancer just doubled evictions). Pods on Longhorn PVCs are
-  protected from eviction (`PodsWithPVC`), pods younger than 30m are skipped, and the
-  `storage` namespace is excluded from balancing.
+  get classified, so a second balancer just doubled evictions). Pods younger than 30m are
+  skipped, and the `storage` namespace is excluded from balancing. Pods with Longhorn
+  volumes stay evictable on purpose (volumes follow the pod).
 
 **Non-obvious tuning:** the descheduler balances on **actual metrics-server CPU/memory
 usage**, not pod *requests* — a deliberate fix after the default requests-based algorithm
