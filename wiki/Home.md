@@ -100,6 +100,7 @@ Planned work that is not built yet. Pages move to their normal section once done
 | [k3s tuning](06-todo/k3s-tuning.md) | Faster image pulls, graceful node shutdown, system-upgrade-controller + the KillMode question |
 | [UPS graceful shutdown](06-todo/ups-graceful-shutdown.md) | Reviewed design: staged load shedding, label tiers, data-safe shutdown, UPS cycle + auto-recovery |
 | [Bazarr subtitle gaps](06-todo/bazarr-subtitle-gaps.md) | Missing Dutch subtitles: investigate Lingarr, provider cleanup, optional Whisper |
+| [Descheduler follow-up](06-todo/descheduler-followup.md) | Verify the eviction-churn fix held over a full day (Loki queries, expectations) |
 | [Future ideas](06-todo/future-ideas.md) | Vetted backlog: UniFi Poller, ntfy, Paperless, BLE presence; hardware-gated LLM + heating |
 
 ### 07 · Rejected
