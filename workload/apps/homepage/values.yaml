@@ -289,7 +289,7 @@ configMaps:
             - UniFi:
                 icon: unifi
                 href: https://unifi.<secret:kv/data/shared/domains~domain>
-                description: Network (via unifi-proxy.yaml)
+                description: Network
                 widget:
                   type: unifi
                   url: https://unifi.<secret:kv/data/shared/domains~domain>
