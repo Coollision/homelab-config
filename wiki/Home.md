@@ -102,6 +102,8 @@ Planned work that is not built yet. Pages move to their normal section once done
 | [Bazarr subtitle gaps](06-todo/bazarr-subtitle-gaps.md) | Missing Dutch subtitles: investigate Lingarr, provider cleanup, optional Whisper |
 | [Descheduler follow-up](06-todo/descheduler-followup.md) | Verify the eviction-churn fix held over a full day (Loki queries, expectations) |
 | [Future ideas](06-todo/future-ideas.md) | Vetted backlog: UniFi Poller, ntfy, Paperless, BLE presence; hardware-gated LLM + heating |
+| [UniFi OS 6 re-check](06-todo/unifi-os6-recheck.md) | After the console update: does UniFi's mDNS proxy still re-publish? Is `mcast_to_unicast` still needed / does the watchdog still run? |
+| [UniFi Matter sync (n8n)](06-todo/unifi-matter-sync-n8n.md) | Daily + manual workflow: sync Home Assistant names into UniFi's Matter nodes and enrol missing Thread devices |
 
 ### 07 · Rejected
 Ideas that were looked at and deliberately not built, with the reasoning.
