@@ -378,6 +378,25 @@ address still held by another client fails until that client is explicitly forgo
 first, and a forgotten client's record can reappear on any residual traffic from it.
 
 
+### UniFi Matter/Thread monitoring has an undocumented API {#unifi-matter-api}
+
+The official Network API spec (checked v10.6 and v11.0) has **no** Matter or Thread endpoint, but the web UI uses one
+that also accepts the normal API key through the cloud console proxy (no browser cookie or CSRF token needed).
+Base path: `<console-proxy>/proxy/network/v2/api/site/default/matter/nodes`.
+
+| Call | What it does |
+|---|---|
+| `GET .../matter/nodes` | List enrolled nodes: `node_id` (UniFi's own number, starts at 1000000), `device_name`, `name` (custom, null if unset), `display_name`, `status`, `channel`, `error_code`, `setup_code` (treat as a secret) |
+| `POST .../matter/nodes` `{"setup_code": "<11-digit manual code>"}` | Enrol a device. Returns `202` at once; poll the list: `COMMISSIONING` then `PROVISIONING` then `COMMISSIONED` (about 30 s for a sleepy sensor) |
+| `PUT .../matter/nodes/<node_id>` `{"name": "<text>"}` | Rename. `{"name": null}` **clears** a custom name, so it is only a harmless probe on unnamed nodes; to read a node's details without changing anything, send its current name back. The response is the full client record, including `matter.basic_info.unique_id` |
+
+Gotchas: `GET`, `PATCH` and `POST` on a single node return `405`, `OPTIONS` returns `404`; the code is only valid while the device's
+commissioning window is open (300 s from matter-server); **the stable join key between UniFi, matter-server and Home Assistant is the
+Matter `UniqueID`** (UniFi `basic_info.unique_id` = matter-server attribute `0/40/18`; Home Assistant does not expose it and most of
+these devices have no serial number there). A code comes from matter-server's WebSocket command `open_commissioning_window`
+(`setup_manual_code` in the result); matter-server serves only a WebSocket on its port, no REST. UniFi monitors Thread devices only.
+Pilot result: one door sensor enrolled cleanly (fabric count 2 to 3 of 5, no border-router or matter-server warnings).
+
 ### IPTV multicast never crosses the ISP box's internet bridge {#iptv-multicast-never-crosses-the-isp-box-bridge}
 
 With VDSL and the ISP's Internet Box bridging the internet session to the UDM, the UDM's IGMP

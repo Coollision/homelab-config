@@ -165,6 +165,41 @@ Lessons from the rollout, each also in [Known Issues](../05-operations/known-iss
 installing the `systemd-resolved` package replaces `resolv.conf` with a stub symlink immediately; and a mis-templated
 `KillMode` made every k3s restart kill all containers on the node.
 
+## Updating the UniFi gateway console {#unifi-console-update}
+
+A UniFi OS update reboots the gateway, so **every VLAN loses routing, DHCP, DNS redirect and the
+site-to-site tunnel for roughly 5-15 minutes**, and the camera/NVR app on the same console stops
+recording meanwhile. Nothing in the cluster needs a drain (k3s tolerates a short network loss; the
+nodes keep their static addressing), but do not run it while another maintenance task is in flight.
+
+**What lives on the console and can be lost or reset**
+
+| Thing | Where documented | After the update |
+|---|---|---|
+| TV multicast→unicast watchdog (`/data/custom/tv-m2u`) | [IPTV](iptv.md#keeping-it-on-the-watchdog) | Check the timer is active; if not, `sh /data/custom/tv-m2u/install.sh` |
+| IGMP proxy / WAN2 for the ISP box LAN | [IPTV](iptv.md) | Live TV on both decoders |
+| Thread static IPv6 route + Matter/mDNS settings | `workload/smarthome/thread-border-router/values.yaml` | Route still present; Matter devices available in HA |
+| DNS DNAT redirect rules (all VLANs/VPNs) | [DNS](dns.md) | A non-Technitium `dig` from a LAN client still answers from Technitium |
+| Technitium static DHCP leases + IPv6 ULA / extra advertised IPs | [DNS](dns.md) | Both DNS pods keep their addresses |
+| Zone-based firewall policies, IPS suppressions, SSH toggle | repo has none; config snapshot taken before the update | Policy order/chain names may change in a major release; confirm the SSH-scan IPS suppression survived; spot-test one allow per zone pair (TV → media server, Servers → NAS) |
+| Site-to-site (SD-WAN) tunnel to the family site | [Observability](observability.md) (SNMP) | Tunnel status connected; NAS SNMP `up` |
+| Smart Queues on both WANs (tunnel bufferbloat fix) | [Known issues](../05-operations/known-issues.md) | Still enabled with the tuned rates |
+| Anything running from the gateway's RAM disk (`/dev/shm`: ad-hoc traffic recorders, captures) | operator notes | Lost on reboot: collect and copy it off **before** updating; kernel packet counters also reset to 0 |
+| UniFi syslog to Loki, Homepage widget API key, HA integration | [Observability](observability.md) | Logs flowing, widget loads, HA UniFi trackers update |
+
+**Procedure**
+
+1. Pre-checks (all read-only): cluster nodes Ready and ArgoCD apps Healthy; no Longhorn volume degraded;
+   tunnel status connected; all UniFi devices online (an already-offline device is not the update's fault, note it).
+2. Take a **fresh console backup** in the UniFi UI (the auto-backup may be days old) and save a config
+   snapshot via the API (networks, routes, firewall policies, NAT, settings, clients; strip secret fields).
+3. Update the console during a quiet window (not 04:15-05:45 backup window; not the nightly Plex/Hyper Backup bump).
+4. Post-checks: the table above, then `kubectl get pods -A | grep -v Running`, HA repairs, NAS SNMP.
+5. Update switches/APs **separately and afterwards**, one at a time, never in the same step as the console.
+
+**Rollback:** not verified. Assume a major-version jump is one-way and that going back means reinstalling the
+previous firmware and restoring the console backup. That is why step 2 is not optional.
+
 ## Design rationale worth keeping in mind
 
 - **Why a second Traefik instance for the tunnel, instead of one Traefik with two
