@@ -54,9 +54,8 @@ Administration are all denied. That state lives in Technitium's own data, **not 
 the defaults again (Everyone can view Zones/Cache/Allowed/Blocked/Apps/DnsClient/DhcpServer/Logs), so redo it with
 `admin/permissions/set` (`groupPermissions=Everyone|false|false|false` per section).
 UniFi: the key (`unifi-key`) belongs to a dedicated local admin so it can be revoked on its own; the console offers
-no role choice, so treat it as read-write. The console's certificate is self-signed with no IP SAN, so Homepage reaches
-it through `templates/unifi-proxy.yaml` (Traefik, wildcard cert, `unifi.<internal-domain>`). The gateway address is in
-Vault (`unifi-gateway`), not git.
+no role choice, so treat it as read-write. The console serves its own Let's Encrypt wildcard certificate and `unifi.<internal-domain>` resolves straight to the
+console (internal DNS), so Homepage talks to it directly with no proxy in between.
 Home Assistant has no widget on purpose: it keeps its own dashboard and there is nothing worth surfacing here, so
 no long-lived token exists for Homepage (HA tokens cannot be scoped read-only anyway). Its card is just the link and
 pod status from auto-discovery.
