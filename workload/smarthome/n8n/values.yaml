@@ -78,6 +78,13 @@ config:
   # non-heap memory (native buffers, task broker, worker threads, RSS overhead).
   NODE_OPTIONS: "--max-old-space-size=640"
 
+  # Own node "WebSocket Request" (configMaps below, mounted at /opt/n8n-custom): n8n loads *.node.js from this folder
+  # at startup. A wrong path or an exported class name that differs from the file name only logs "Skipping custom node".
+  N8N_CUSTOM_EXTENSIONS: /opt/n8n-custom
+  # URLs that node may open (';' separated, exact match, empty = none). matter-server has no auth and also accepts
+  # remove_node, so the node must not be usable against other in-cluster WebSockets.
+  WS_REQUEST_ALLOWED_URLS: ws://matter-server-service:5580/ws
+
 resources:
   requests:
     cpu: 100m
@@ -94,9 +101,123 @@ homepage:
   icon: n8n
   description: Workflow automation
 
+# Why a node of our own: n8n's Code node has no network and no WebSocket, no HTTP node can speak WebSocket, and the
+# only community WebSocket nodes are servers, not clients. Home Assistant only hands out Matter pairing codes over
+# WebSocket (no REST service), so the UniFi Matter sync workflow needs a client. See wiki/02-smarthome/matter-thread.md.
+configMaps:
+  - name: n8n-custom-nodes
+    data:
+      WebSocketRequest.node.js: |
+        // WebSocket Request: connect to a WebSocket, send one JSON message, return the reply carrying the same id.
+        // Built for matter-server (command/message_id protocol), generic otherwise. No imports: it runs on the global
+        // WebSocket, because n8n-workflow cannot be resolved from a custom-extensions folder and the Code node has no
+        // network. Locked to the URLs in WS_REQUEST_ALLOWED_URLS (';' separated, exact match; empty means nothing is
+        // allowed) so a workflow editor cannot aim it at other in-cluster WebSockets, which have no auth. Nothing is
+        // logged: replies can contain one-time pairing codes.
+        const MAX_MESSAGE_CHARS = 10000;
+        const DEFAULT_TIMEOUT_S = 30;
+        const MAX_TIMEOUT_S = 180;
+
+        function allowedUrls() {
+          return String(process.env.WS_REQUEST_ALLOWED_URLS || '')
+            .split(';')
+            .map(function (u) { return u.trim(); })
+            .filter(Boolean);
+        }
+
+        function request(url, message, field, timeoutMs) {
+          return new Promise(function (resolve, reject) {
+            let done = false;
+            let timer = null;
+            const ws = new WebSocket(url);
+            function finish(err, value) {
+              if (done) return;
+              done = true;
+              clearTimeout(timer);
+              try { ws.close(); } catch (e) { /* already closed */ }
+              if (err) reject(err); else resolve(value);
+            }
+            timer = setTimeout(function () {
+              finish(new Error('WebSocket request timed out after ' + timeoutMs / 1000 + ' s'));
+            }, timeoutMs);
+            ws.onopen = function () { ws.send(JSON.stringify(message)); };
+            ws.onerror = function () { finish(new Error('WebSocket connection error')); };
+            ws.onclose = function () { finish(new Error('WebSocket closed before a reply arrived')); };
+            ws.onmessage = function (ev) {
+              let m;
+              try { m = JSON.parse(String(ev.data)); } catch (e) { return; }
+              // the server-info greeting and any event carry no matching id and are skipped
+              if (m && m[field] !== undefined && m[field] === message[field]) finish(null, m);
+            };
+          });
+        }
+
+        class WebSocketRequest {
+          constructor() {
+            this.description = {
+              displayName: 'WebSocket Request',
+              name: 'webSocketRequest',
+              group: ['transform'],
+              version: 1,
+              description: 'Connect to a WebSocket, send one JSON message and return the reply with the same id',
+              defaults: { name: 'WebSocket Request' },
+              inputs: ['main'],
+              outputs: ['main'],
+              properties: [
+                {
+                  displayName: 'URL', name: 'url', type: 'string', default: '', required: true, placeholder: 'ws://host:5580/ws',
+                  description: 'Must be listed in the WS_REQUEST_ALLOWED_URLS environment variable of n8n',
+                },
+                {
+                  displayName: 'Message (JSON)', name: 'message', type: 'json', default: '{}',
+                  description: 'Sent as is; the match field below is filled in with a unique value when it is missing',
+                },
+                {
+                  displayName: 'Match Field', name: 'matchField', type: 'string', default: 'message_id',
+                  description: 'The reply is accepted when this field equals the one that was sent',
+                },
+                {
+                  displayName: 'Timeout (Seconds)', name: 'timeout', type: 'number', default: DEFAULT_TIMEOUT_S,
+                  description: 'Between 1 and ' + MAX_TIMEOUT_S,
+                },
+              ],
+            };
+          }
+
+          async execute() {
+            const items = this.getInputData();
+            const allowed = allowedUrls();
+            const out = [];
+            for (let i = 0; i < items.length; i++) {
+              const url = this.getNodeParameter('url', i);
+              if (allowed.indexOf(url) === -1) {
+                throw new Error('WebSocket Request: this URL is not in WS_REQUEST_ALLOWED_URLS');
+              }
+              let message = this.getNodeParameter('message', i);
+              if (typeof message === 'string') message = JSON.parse(message);
+              if (JSON.stringify(message).length > MAX_MESSAGE_CHARS) throw new Error('WebSocket Request: message too large');
+              const field = this.getNodeParameter('matchField', i);
+              const seconds = Math.min(Math.max(Number(this.getNodeParameter('timeout', i)) || DEFAULT_TIMEOUT_S, 1), MAX_TIMEOUT_S);
+              if (message[field] === undefined) message[field] = 'n8n-' + Date.now() + '-' + i;
+              const reply = await request(url, message, field, seconds * 1000);
+              if (reply.error_code !== undefined || reply.error !== undefined) {
+                throw new Error('WebSocket Request: server returned an error: ' + String(reply.details || reply.error || reply.error_code));
+              }
+              out.push({ json: reply, pairedItem: { item: i } });
+            }
+            return [out];
+          }
+        }
+
+        module.exports = { WebSocketRequest };
 storage:
   - mountPath: /home/node/.n8n
     size: 5Gi
     type: longhorn
     volumeName: n8n-data
     nameSuffix: data
+  - mountPath: /opt/n8n-custom
+    type: configMap
+    configMapName: n8n-custom-nodes
+    nameSuffix: custom-nodes
+    readOnly: true

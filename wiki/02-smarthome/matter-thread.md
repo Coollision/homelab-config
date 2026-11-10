@@ -36,6 +36,18 @@ A **dumb, verbatim L2 packet repeater** — not a re-publishing mDNS responder. 
 distinction is the fix for the single worst *root cause* behind mesh outages, also
 explained below.
 
+### n8n "WebSocket Request" node (helper, not part of the mesh)
+`workload/smarthome/n8n/values.yaml` carries a small custom n8n node, mounted from a ConfigMap and loaded through
+`N8N_CUSTOM_EXTENSIONS`. It exists for the workflow that keeps UniFi's Matter monitoring in step with Home Assistant (see
+[the n8n sync plan](../06-todo/unifi-matter-sync-n8n.md)): that workflow needs a one-time pairing code, which only matter-server
+(and Home Assistant) hand out over a **WebSocket**, and n8n has no WebSocket client (the Code node has no network, no HTTP node
+speaks WebSocket, and the community WebSocket nodes are servers, not clients).
+The node connects, sends one JSON message and returns the reply with the same `message_id`; it needs no dependencies (global
+`WebSocket`, no `n8n-workflow` import). Guards: it only opens URLs listed in `WS_REQUEST_ALLOWED_URLS` (matter-server and Zigbee2MQTT
+have no auth, and matter-server also accepts `remove_node`), message size and timeout are capped, an error reply becomes an error,
+nothing is logged. Gotchas: n8n only logs "Skipping custom node" if the exported class name differs from the file name or the folder
+path is wrong, and every change to the script restarts the n8n pod once.
+
 ## Why this mesh is fragile, and the two structural fixes that mattered
 
 The Matter fabric hangs almost entirely on a handful of mains-powered Thread router
