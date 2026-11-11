@@ -395,7 +395,7 @@ commissioning window is open (300 s from matter-server); **the stable join key b
 Matter `UniqueID`** (UniFi `basic_info.unique_id` = matter-server attribute `0/40/18`; Home Assistant does not expose it and most of
 these devices have no serial number there). A code comes from matter-server's WebSocket command `open_commissioning_window`
 (`setup_manual_code` in the result); matter-server serves only a WebSocket on its port, no REST. UniFi monitors Thread devices only.
-Pilot result: one door sensor enrolled cleanly (fabric count 2 to 3 of 5, no border-router or matter-server warnings).
+**Enrolments are queued by UniFi**: two `POST`s in a row both return `202` with status `QUEUED`, and the second device is not a Matter node yet (a `PUT` on it returns `404 MatterNodeNotFound`) until the first has finished, so enrol strictly one device at a time and name it only after its own commissioning (about 40 s for a sleepy sensor). Pilot result: one door sensor enrolled cleanly (fabric count 2 to 3 of 5, no border-router or matter-server warnings).
 
 ### IPTV multicast never crosses the ISP box's internet bridge {#iptv-multicast-never-crosses-the-isp-box-bridge}
 
