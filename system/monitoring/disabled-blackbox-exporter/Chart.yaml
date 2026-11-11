@@ -8,5 +8,5 @@ maintainers:
     email: Coollision@users.noreply.github.com
 dependencies:
   - name: prometheus-blackbox-exporter
-    version: 11.21.1
+    version: 11.21.2
     repository: https://prometheus-community.github.io/helm-charts
