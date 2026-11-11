@@ -2,9 +2,9 @@
 
 [← Back to Home](../Home.md) · Related: [UniFi OS 6 re-check](unifi-os6-recheck.md) · [Matter & Thread](../02-smarthome/matter-thread.md) · [Known issues: the UniFi Matter API](../05-operations/known-issues.md#unifi-matter-api)
 
-> **Status (2026-11):** the workflow exists in n8n as a draft ("Matter: sync names and enrolment to UniFi", inactive, dry run on) and
-> its first half has run for real. It cannot finish until the custom `WebSocket Request` node in `workload/smarthome/n8n` is deployed
-> (written, tested locally and validated, not pushed yet), after which the two bridge steps are swapped for that node. By hand so far: three devices enrolled in UniFi and the two that have a custom Home Assistant name renamed.
+> **Status (2026-11): done and live.** The custom `WebSocket Request` node is deployed in n8n and the workflow is published (daily 03:30
+> plus a manual trigger). All 11 Thread devices are in UniFi under their Home Assistant names; the Wi-Fi vacuum is excluded by design.
+> Only the follow-ups at the bottom remain.
 
 ## Goal
 
@@ -25,8 +25,10 @@ and the matter-server WebSocket URL.
 4. A Code node plans: **rename** where the UniFi name differs, **skip** devices still unnamed in Home Assistant, **enrol** Thread
    devices missing in UniFi (sleepy devices first, router plugs last, the Wi-Fi vacuum never), and no enrolment at all while any UniFi
    node is still commissioning.
-5. Dry run only reports. Otherwise: renames are applied, enrolments are limited per run, each opens a pairing window through the
-   node (`open_commissioning_window`), posts the code to UniFi, waits 45 s, names the new node and checks the result.
+5. Dry run only reports. Otherwise: renames are applied, enrolments are limited per run and handled **strictly one at a time**
+   (UniFi queues enrolments, so a second device is not a node yet while the first commissions): each opens a pairing window through the
+   node (`open_commissioning_window`), posts the code to UniFi, waits 60 s, names the new node (best effort, the next run's rename
+   step is the safety net) and then the next device starts.
 6. One Slack summary in `#homeinfra`; silent when there is nothing to do.
 
 A run that is interrupted or fails halfway is repaired by the next one: it re-reads both sides every time and keeps no state.
@@ -47,8 +49,9 @@ error reply); opening a real window is the same call the earlier manual pilot us
 
 ## Left to do
 
-- Deploy the node (push; n8n restarts once), swap the workflow's bridge steps for it, save no execution data for successful runs (the
-  pairing code is in the reply), run the workflow once in dry run, read the Slack summary, then set `dryRun` to false. At 2 per run the 8
-  remaining devices take four daily runs, or use the manual trigger.
-- Name the unnamed `GRILLPLATS Plug` in Home Assistant (it has no area or custom name); the rename step skips it until then.
-- Group the canvas stages (20 top-level nodes), and expect two Slack messages when a rename and an enrol branch both run.
+- One `GRILLPLATS Plug` is deliberately unnamed in Home Assistant: it is only a Thread network booster (router) with no function of its own.
+  The sync leaves it with its default name in UniFi (it reports it as skipped, silently); naming it in Home Assistant later is picked up by
+  the next run.
+- Group the canvas stages (22 top-level nodes), and expect two Slack messages when a rename and an enrol branch both run.
+- Successful runs are not saved (the node's reply holds a one-time pairing code); failed runs are. A run with nothing to do is silent.
+- A new Matter device added to Home Assistant is enrolled by the next run (or the manual trigger), at most two per run.
