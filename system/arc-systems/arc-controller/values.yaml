@@ -1,6 +1,6 @@
 gha-runner-scale-set-controller:
   # Fixed name: runner scale set charts reference the controller SA by name + namespace
-  # (controllerServiceAccount in system/arc-systems/*/values.yaml).
+  # (controllerServiceAccount in workload/arc-runners/*/values.yaml).
   serviceAccount:
     create: true
     name: arc-controller

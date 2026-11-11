@@ -7,9 +7,9 @@ gha-runner-scale-set:
   # GitHub App auth (preferred over a PAT: higher rate limits, no user dependency).
   # Chart renders these into a Secret; values resolve from Vault at sync time.
   githubConfigSecret:
-    github_app_id: "<secret:kv/data/system/arc-systems/original-group~app-id>"
-    github_app_installation_id: "<secret:kv/data/system/arc-systems/original-group~installation-id>"
-    github_app_private_key: "<secret:kv/data/system/arc-systems/original-group~private-key>"
+    github_app_id: "<secret:kv/data/workload/arc-runners/original-group~app-id>"
+    github_app_installation_id: "<secret:kv/data/workload/arc-runners/original-group~installation-id>"
+    github_app_private_key: "<secret:kv/data/workload/arc-runners/original-group~private-key>"
 
   # Must match the controller chart (system/arc-systems/arc-controller).
   controllerServiceAccount:
