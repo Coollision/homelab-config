@@ -1,0 +1,41 @@
+gha-runner-scale-set:
+  # Org-level scale set: every repo in the org can use `runs-on: original-group`
+  # (repos must be allowed in the org's runner group, default group = all repos).
+  githubConfigUrl: https://github.com/The-Original-Group
+  runnerScaleSetName: original-group
+
+  # GitHub App auth (preferred over a PAT: higher rate limits, no user dependency).
+  # Chart renders these into a Secret; values resolve from Vault at sync time.
+  githubConfigSecret:
+    github_app_id: "<secret:kv/data/system/arc-systems/original-group~app-id>"
+    github_app_installation_id: "<secret:kv/data/system/arc-systems/original-group~installation-id>"
+    github_app_private_key: "<secret:kv/data/system/arc-systems/original-group~private-key>"
+
+  # Must match the controller chart (system/arc-systems/arc-controller).
+  controllerServiceAccount:
+    namespace: arc-systems
+    name: arc-controller
+
+  # Scale to zero when idle; cluster RAM is tight (worker-silver ~6Gi), so keep the cap low.
+  minRunners: 0
+  maxRunners: 3
+
+  # dind sidecar gives workflows a working `docker` (build/compose/service containers).
+  containerMode:
+    type: dind
+
+  template:
+    spec:
+      # Org workflows assume x86; worker-red is arm64.
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      containers:
+        - name: runner
+          image: ghcr.io/actions/actions-runner:latest
+          command: ["/home/runner/run.sh"]
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 2Gi

@@ -1,0 +1,14 @@
+gha-runner-scale-set-controller:
+  # Fixed name: runner scale set charts reference the controller SA by name + namespace
+  # (controllerServiceAccount in system/arc-systems/*/values.yaml).
+  serviceAccount:
+    create: true
+    name: arc-controller
+
+  # Controller only long-polls GitHub and reconciles CRs; stays tiny.
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
