@@ -582,6 +582,10 @@ promstack:
     # CPUThrottlingHigh: info-level, fired ~155h/week on scale-to-zero apps (Sablier) and Vault; never actionable.
     disabled:
       CPUThrottlingHigh: true
+      # Replaced by NodeSystemSaturation in templates/prometheusrules.yaml (for: 45m). The stock
+      # 15m version fired nightly: the 04:02 backup/snapshot window saturates worker-silver's disk
+      # for 10-30 min (load 10-22 per core, iowait ~25%).
+      NodeSystemSaturation: true
     rules:
       etcd: false
       # Rule groups for the three control-plane scrapes disabled above. Without these
