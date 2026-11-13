@@ -331,6 +331,21 @@ spec:
     - name: node-temperature.alerts
       interval: 1m
       rules:
+        # Replaces the stock kube-prometheus alert (disabled in values.yaml defaultRules). Same
+        # expression, `for` raised 15m -> 45m: the nightly ~04:02 disk-bound window on worker-silver
+        # lasts 10-30 min (peak 10-22 per core), so it no longer pages, while sustained saturation does.
+        - alert: NodeSystemSaturation
+          expr: >-
+            node_load1{job="node-exporter"}
+            / count without (cpu, mode) (node_cpu_seconds_total{job="node-exporter", mode="idle"}) > 2
+          for: 45m
+          labels:
+            severity: warning
+            category: hardware
+          annotations:
+            summary: "Node {{`{{ $labels.instance }}`}} is saturated (load per core {{`{{ $value | humanize }}`}})"
+            description: "Load per core on {{`{{ $labels.instance }}`}} has been above 2 for 45 minutes. The nightly ~04:02 backup window (10-30 min) is expected and is filtered out by the duration; this is longer than that."
+
         - alert: NodeCpuTemperatureHigh
           expr: >-
             max by (instance) (node_hwmon_temp_celsius{chip=~"platform_coretemp.*|thermal_thermal_zone0"} > 0) > 80
