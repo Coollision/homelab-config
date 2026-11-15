@@ -452,7 +452,8 @@ promstack:
             action: drop
           # Drop object metadata families that are too verbose for homelab use.
           - sourceLabels: [__name__]
-            regex: "kube_(secret|configmap|job|cronjob|lease|role|rolebinding|clusterrole|clusterrolebinding|serviceaccount)_.*"
+            # job/cronjob are kept on purpose: the CertPushStale alert reads kube_cronjob_status_last_successful_time.
+            regex: "kube_(secret|configmap|lease|role|rolebinding|clusterrole|clusterrolebinding|serviceaccount)_.*"
             action: drop
           # Don't need individual pod parent object references
           - sourceLabels: [__name__]

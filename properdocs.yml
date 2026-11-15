@@ -20,6 +20,7 @@ nav:
       - 01-platform/databases.md
       - 01-platform/secrets-vault.md
       - 01-platform/certificates.md
+      - 01-platform/cert-push.md
       - 01-platform/observability.md
       - 01-platform/cluster-housekeeping.md
       - 01-platform/power-nut.md

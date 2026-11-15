@@ -542,3 +542,29 @@ spec:
           annotations:
             summary: "Certificate {{`{{ $labels.namespace }}/{{ $labels.name }}`}} expires in under 3 days"
             description: "Certificate {{`{{ $labels.namespace }}/{{ $labels.name }}`}} expires in {{`{{ $value | humanizeDuration }}`}}. Renewal has failed — services will start showing TLS errors."
+
+        # cert-push (system/default/cert-push) pushes the wildcard to the NAS + UniFi console daily. A failed run is already
+        # caught by the stock KubeJobFailed rule; these two cover "it stopped running at all".
+        - alert: CertPushStale
+          expr: >-
+            time() - kube_cronjob_status_last_successful_time{namespace="default", cronjob="cert-push"} > 3 * 86400
+          for: 1h
+          labels:
+            severity: warning
+            category: certificates
+          annotations:
+            summary: "cert-push has not succeeded for over 3 days"
+            description: "The cert-push CronJob last succeeded {{`{{ $value | humanizeDuration }}`}} ago. The NAS / UniFi certificates are not being verified or renewed. Check the latest Job logs: kubectl -n default logs job/<newest cert-push job>."
+
+        - alert: CertPushNeverRan
+          # last_successful_time only exists after a first success, so compare against the CronJob's creation time.
+          expr: >-
+            (time() - kube_cronjob_created{namespace="default", cronjob="cert-push"} > 2 * 86400)
+            unless on (namespace, cronjob) kube_cronjob_status_last_successful_time{namespace="default", cronjob="cert-push"}
+          for: 1h
+          labels:
+            severity: warning
+            category: certificates
+          annotations:
+            summary: "cert-push never succeeded since it was created"
+            description: "The cert-push CronJob exists for over 2 days without a single successful run."

@@ -47,6 +47,7 @@ The infrastructure layer every workload depends on — all under `system/`.
 | [Cluster housekeeping](01-platform/cluster-housekeeping.md) | Keel, kube-fledged, Reloader, Sablier scale-to-zero, NFD/descheduler |
 | [DNS](01-platform/dns.md) | Split-horizon design, Technitium cluster, Cloudflare view, enforcement, audit gaps |
 | [Certificates](01-platform/certificates.md) | cert-manager + the Cloudflare DNS-01 wildcard cert |
+| [cert-push](01-platform/cert-push.md) | Daily job that pushes the wildcard to the NAS and UniFi console and verifies what they serve |
 | [Power — NUT](01-platform/power-nut.md) | UPS monitoring, PeaNUT dashboard, planned auto-shutdown |
 | [Routed IPTV](01-platform/iptv.md) | Proximus TV on its own UniFi VLAN/zone: WAN2 on the ISP box LAN, IGMP proxy, multicast→unicast over WiFi mesh + watchdog |
 
