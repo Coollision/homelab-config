@@ -6,6 +6,7 @@ deployment:
     repository: ghcr.io/ggml-org/whisper.cpp
     tag: main-vulkan
     # pinned on purpose: Intel Vulkan compute has had accuracy bugs, so re-run scripts/voice-bench before bumping
+    # (Renovate is disabled for this image in renovate.json; its ghcr digest lookup fails, so bump by hand)
     digest: ee9d1d37f72a0936f3952dc0fc192c0528e09031eb106b1bd82a546936704bd4
   # a rollout would otherwise start a second server next to the old one (2 x 2 Gi + a shared iGPU)
   strategy:

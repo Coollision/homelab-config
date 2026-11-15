@@ -7,7 +7,13 @@
     "managerFilePatterns": ["/\\.yaml$/"],
     "ignorePaths": ["lib/**"]
   },
+  "ignorePaths": ["**/disabled-*/**"],
   "packageRules": [
+    {
+      "description": "whisper.cpp - digest pinned on purpose (Intel Vulkan accuracy); ghcr digest lookup fails, bumps are manual after scripts/voice-bench",
+      "matchPackageNames": ["ghcr.io/ggml-org/whisper.cpp"],
+      "enabled": false
+    },
     {
       "description": "MariaDB - stay on the 12.3 LTS line (13.0 is a short-lived rolling release; auto-upgrade makes downgrade unsupported). Revisit at 13.3 LTS.",
       "matchDatasources": ["docker"],
