@@ -1,0 +1,80 @@
+name: cert-push-image
+
+on:
+  push:
+    branches:
+      - orphan/cert-push-image-standalone
+    paths:
+      - "cert-push-image/**"
+      - ".github/workflows/cert-push-image.yaml"
+  schedule:
+    - cron: "17 3 * * 1" # weekly rebuild: picks up Alpine package fixes between base bumps
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: ghcr.io/coollision/cert-push
+
+jobs:
+  build:
+    name: Build, scan, push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build (amd64, local) for scanning
+        uses: docker/build-push-action@v7
+        with:
+          context: cert-push-image
+          platforms: linux/amd64
+          load: true
+          tags: cert-push:scan
+
+      - name: Scan (fail on fixable HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: cert-push:scan
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Smoke test the tools the script needs
+        run: |
+          docker run --rm --entrypoint /bin/bash cert-push:scan -c \
+            'id -u | grep -qx 65532 && bash --version >/dev/null && curl --version >/dev/null && openssl version && jq --version && timeout 1 true && ! command -v apk'
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Short SHA
+        id: meta
+        run: |
+          echo "sha_short=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push (multi-arch)
+        uses: docker/build-push-action@v7
+        with:
+          context: cert-push-image
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.date }}-${{ steps.meta.outputs.sha_short }}
+            ${{ env.IMAGE_NAME }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
