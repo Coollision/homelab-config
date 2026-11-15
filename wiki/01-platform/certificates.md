@@ -18,3 +18,6 @@ cert for everything.
   Traefik's `TLSStore` as the cluster-wide default — issue once here, serve everywhere.
 
 That's the whole design: one `ClusterIssuer`, one wildcard `Certificate`, one consumer.
+
+The same certificate is also delivered to the Synology NAS and the UniFi console by a daily job, see
+[cert-push](cert-push.md).

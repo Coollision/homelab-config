@@ -1,0 +1,21 @@
+# Egress only to the two devices. No DNS rule on purpose: the script reaches them by IP (curl --resolve, openssl -connect),
+# so the pod resolves nothing. podSelector is label-scoped because ns default holds other workloads.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cert-push-egress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "helm.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cert-push
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: <secret:kv/data/system/default/cert-push~nas-ip>/32
+        - ipBlock:
+            cidr: <secret:kv/data/system/default/cert-push~unifi-ip>/32

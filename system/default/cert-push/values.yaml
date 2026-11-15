@@ -1,0 +1,63 @@
+fullnameOverride: cert-push
+
+# Daily job that pushes the cert-manager wildcard (the same Secret Traefik uses) to the NAS and the UniFi console,
+# re-probes what each one serves and fails loudly (Job fails -> KubeJobFailed, CertPushStale) on anything off.
+# Design, risks and rollout: wiki/01-platform/cert-push.md. The script is files/push.sh (ConfigMap).
+
+# Tools-only image (Alpine + bash/curl/openssl/jq, non-root, no apk), built from the orphan branch
+# orphan/cert-push-image-standalone like the operators. Pinned by digest (Renovate bumps it).
+image:
+  repository: ghcr.io/coollision/cert-push
+  tag: latest@sha256:7c7a4fecf3aee2c55aed479ce2546a1bb701a673b2bc3cedf23a9d09385d90c2
+  pullPolicy: IfNotPresent
+
+# false = real pushes. true = probe + compare + expiry checks only, no login.
+dryRun: false
+
+# Which devices a run touches. Drop one to take it out of the loop without deleting its Vault keys.
+targets: "nas unifi"
+
+# DSM web API port (HTTPS) on the NAS; the UniFi console API is on 443.
+nasApiPort: 5001
+
+# cert-manager's wildcard Secret (ns default, tls.crt + tls.key). Name is derived from the domain, resolved at sync time.
+wildcardSecret: wildcard-cert-<secret:kv/data/shared/domains~domain-dash>-key
+
+# Daily, off-peak. A push only happens when the certificate changed (about every 60 days).
+schedule: "17 4 * * *"
+timeZone: Europe/Brussels
+
+# cert-push runs on the schedule; cert-push-force is suspended and only ever created by hand (kubectl create job --from, or
+# ArgoCD "Create Job"): FORCE=1 cannot be set when ArgoCD clones the daily job's template. Both verify TLS.
+cronjobs:
+  - name: cert-push
+    suspend: false
+    force: false
+  - name: cert-push-force
+    suspend: true
+    force: true
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    cpu: 250m
+    memory: 128Mi
+
+# Both device accounts are dedicated to this job (admin-equivalent, see the wiki risks). Probes are "name:port" lists
+# (names resolve via the device address, not DNS); "none" skips verification for that device until bindings exist.
+# vault kv put kv/system/default/cert-push ... (exact commands in the wiki page).
+secrets:
+  - name: cert-push-creds
+    secret_kv:
+      nas-ip: <secret:kv/data/system/default/cert-push~nas-ip>
+      nas-host: <secret:kv/data/system/default/cert-push~nas-host>
+      nas-probes: <secret:kv/data/system/default/cert-push~nas-probes>
+      nas-username: <secret:kv/data/system/default/cert-push~nas-username>
+      nas-password: <secret:kv/data/system/default/cert-push~nas-password>
+      unifi-ip: <secret:kv/data/system/default/cert-push~unifi-ip>
+      unifi-host: <secret:kv/data/system/default/cert-push~unifi-host>
+      unifi-probes: <secret:kv/data/system/default/cert-push~unifi-probes>
+      unifi-username: <secret:kv/data/system/default/cert-push~unifi-username>
+      unifi-password: <secret:kv/data/system/default/cert-push~unifi-password>
