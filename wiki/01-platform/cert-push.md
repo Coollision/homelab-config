@@ -185,9 +185,12 @@ NAS migration is done by hand, service by service:
    services one at a time with the DSM desktop last. Confirm after the next renewal that every binding survived the import under
    the same ID. Fallback: if this has not landed by about 2026-12-01, renew the registry certificate in DSM by hand.
 2. Add the bound names to `nas-probes` as each one moves.
-3. After one full renewal cycle without failures: remove the old DSM Let's Encrypt certificates and their scheduled renewal
-   (default, Plex, registry; keep QuickConnect and the self-signed one), then **close port 80** on the gateway and any port 80
-   DNAT to the NAS. Confirm nothing else needed it (for example an HTTP→HTTPS redirect for a public hostname).
+3. **Port 80 is closed (2026-11-15):** the gateway forward "NAS HTTPS + DSM" went from `443,5001,80` to `443,5001` (no other
+   NAT rule used port 80). From now on DSM's own HTTP-01 renewal cannot work, so every service must be on the pushed certificate
+   before the old certificates expire. Still on the old default at the time: one reverse-proxy entry (certificate expires
+   2027-02-09), move it first. Then delete the old DSM Let's Encrypt certificates (default, Plex, registry, all unbound) and their
+   scheduled renewal; keep QuickConnect and the self-signed one. Closing port 80 breaks nothing at once, the cost is an expired
+   certificate on anything left behind.
 4. Drop the 522 / multi-name renewal note from [known issues](../05-operations/known-issues.md) if it is still there.
 5. Decide whether to keep the hand-uploaded UniFi certificate as a manual break-glass copy (the job never touches it, it is inactive).
 6. Homepage card with tiles (days until expiry, days until planned renewal, age of last push) and a link to the CronJob in ArgoCD.
