@@ -430,6 +430,18 @@ dead man's switch — see [Routed IPTV → the watchdog](../01-platform/iptv.md#
 
 ---
 
+### NAS reverse-proxy host works by IPv4 / curl but shows the DSM "does not exist" page in a browser {#nas-reverse-proxy-ipv6-acl}
+
+**Symptom:** a NAS reverse-proxy hostname (the registry mirror) answers over the IP and in `curl`, but a browser gets the Synology
+"does not exist" page.
+- **Cause:** the hostname has an AAAA record and the reverse-proxy rule listens on `[::]:443`, so browsers connect over IPv6.
+  The rule's *Access Control Profile* (the "allow local" profile) listed only IPv4 subnets followed by `deny all`, so every IPv6
+  client got a 403, which DSM renders as that error page. `curl` defaults to IPv4 here, so it passed.
+- **Fix:** add the IPv6 ULA `/64` of each VLAN that should reach it to the profile (Control Panel, Login Portal, Advanced, Access
+  Control Profile), before `deny all`. Use the stable ULA prefixes, not the ISP-delegated public ones (those can change). Only
+  VLANs with IPv6 enabled on the gateway need an entry. Verify with `curl -6 -k https://<host>/` and `curl -4 …`; the generated
+  rule lives in `/usr/local/etc/nginx/conf.d/.acl.<id>.conf` on the NAS. Dropping the AAAA record is the alternative.
+
 ## Databases
 
 ### A forgotten psql session blocks vacuum and pins a Longhorn instance-manager {#stuck-psql-session-vacuum}
