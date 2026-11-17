@@ -22,8 +22,7 @@ Stateless, **no volume**: the config files are one ConfigMap in `values.yaml`, m
 ## Off-cluster cards
 
 Things on the NAS (Gobelijn) are hand-written in `services.yaml` under `NAS`: DSM, Netboot.xyz
-(console :3000) and the docker.io registry mirror (API only, reached by its HTTPS reverse-proxy hostname
-`registry.<internal-domain>`, not the IP: it also gets the DSM allow-local ACL, which needs the IPv6 ULA subnets), all Docker; plus Plex (DSM package, :32400, link and
+(console :3000) and the docker.io registry mirror (API only, reached directly at the NAS address on :7777 over plain HTTP), all Docker; plus Plex (DSM package, :32400, link and
 status only: its token is account-wide, so no widget). Status is a plain `siteMonitor` from the pod;
 the NAS address comes from the `HOMEPAGE_VAR_GOBELIJN_IP` env var (Vault `kv/shared/network~gobelijn-ip`), never git.
 
