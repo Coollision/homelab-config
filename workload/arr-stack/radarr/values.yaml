@@ -2,7 +2,7 @@ fullnameOverride: radarr
 statefulset:
   image:
     repository: linuxserver/radarr
-    tag: 6.4.4
+    tag: 7.0.3
     imagePullPolicy: Always
   ports:
     web: 7878
