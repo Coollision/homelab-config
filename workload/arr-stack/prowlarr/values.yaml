@@ -3,7 +3,7 @@ statefulset:
   image:
     repository: linuxserver/prowlarr
     tag: 3.0.2
-    imagePullPolicy: Always
+    imagePullPolicy: IfNotPresent
   ports:
     web: 9696
 
