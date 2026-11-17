@@ -3,7 +3,7 @@ statefulset:
   image:
     repository: linuxserver/radarr
     tag: 7.0.3
-    imagePullPolicy: Always
+    imagePullPolicy: IfNotPresent
   ports:
     web: 7878
 
