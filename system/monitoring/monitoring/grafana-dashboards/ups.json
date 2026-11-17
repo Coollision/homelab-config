@@ -832,7 +832,7 @@
           "color": {
             "mode": "thresholds"
           },
-          "max": 1600,
+          "max": 900,
           "min": 0,
           "thresholds": {
             "mode": "absolute",
@@ -843,11 +843,11 @@
               },
               {
                 "color": "yellow",
-                "value": 800
+                "value": 450
               },
               {
                 "color": "red",
-                "value": 1400
+                "value": 720
               }
             ]
           },
@@ -899,7 +899,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "network_ups_tools_ups_load{instance=\"apc-bx1600mi\"} * 16",
+          "expr": "network_ups_tools_ups_load{instance=\"apc-bx1600mi\"} * on(instance) network_ups_tools_ups_realpower_nominal{instance=\"apc-bx1600mi\"} / 100",
           "instant": true,
           "legendFormat": "Load (W)",
           "range": false,
@@ -1541,7 +1541,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "network_ups_tools_ups_load{instance=\"apc-bx1600mi\"} * 16",
+          "expr": "network_ups_tools_ups_load{instance=\"apc-bx1600mi\"} * on(instance) network_ups_tools_ups_realpower_nominal{instance=\"apc-bx1600mi\"} / 100",
           "legendFormat": "Load (W)",
           "range": true,
           "refId": "A"
@@ -1883,6 +1883,156 @@
         }
       ],
       "type": "state-timeline"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 21
+              }
+            ]
+          },
+          "unit": "volt",
+          "min": 20,
+          "max": 28,
+          "decimals": 1
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Nominal"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "text",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    10
+                  ],
+                  "fill": "dash"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 31
+      },
+      "id": 35,
+      "options": {
+        "annotations": {
+          "clustering": -1,
+          "multiLane": false
+        },
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "min"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "13.0.1+security-01",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "network_ups_tools_battery_voltage{instance=\"apc-bx1600mi\"}",
+          "legendFormat": "Battery Voltage",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "network_ups_tools_battery_voltage_nominal{instance=\"apc-bx1600mi\"}",
+          "legendFormat": "Nominal",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Battery Voltage",
+      "type": "timeseries",
+      "description": "24 V nominal pack (2x12 V lead-acid). Float charge ~27.3 V. Under load the voltage sag shows battery health better than the charge % (which the UPS estimates from voltage). Dashed red line = 21 V (~10.5 V/block, generic lead-acid empty point; APC does not expose its exact cutoff)."
     }
   ],
   "preload": false,
