@@ -3,7 +3,6 @@ package controllers
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -184,6 +183,9 @@ const (
 	// attempts against AWS) until an interactive login clears it. Value is the RFC3339 UTC time
 	// at which the profile was parked.
 	annotNeedsLogin = "proxies.homelab.io/needs-login-since"
+	// annotLastRefreshOK records (RFC3339 UTC) the last time the silent refresh minted fresh STS
+	// creds for a profile. Cleared on interactive login so it never predates the current login.
+	annotLastRefreshOK = "proxies.homelab.io/last-refresh-ok"
 
 	// refreshMaxFailures is how many consecutive refresh failures park a profile. A definitive
 	// "token has expired" error from the AWS CLI parks it immediately.
@@ -239,7 +241,7 @@ func setProfileAnnotations(ctx context.Context, c client.Client, namespace, secr
 // markLoggedIn stamps the login time and clears any needs-login parking for a profile.
 func markLoggedIn(ctx context.Context, c client.Client, namespace, secretName string, at time.Time) error {
 	ts := at.UTC().Format(time.RFC3339)
-	return setProfileAnnotations(ctx, c, namespace, secretName, map[string]*string{annotLastLogin: &ts, annotNeedsLogin: nil})
+	return setProfileAnnotations(ctx, c, namespace, secretName, map[string]*string{annotLastLogin: &ts, annotNeedsLogin: nil, annotLastRefreshOK: nil})
 }
 
 // markNeedsLogin parks a profile until the next interactive login.
@@ -248,34 +250,8 @@ func markNeedsLogin(ctx context.Context, c client.Client, namespace, secretName 
 	return setProfileAnnotations(ctx, c, namespace, secretName, map[string]*string{annotNeedsLogin: &ts})
 }
 
-// ssoAccessTokenExpiry returns the expiresAt of the cached SSO access token for a start URL, read
-// from the token Secret's AWS CLI cache files (the latest one wins). After the session dies the
-// value stops advancing, so it freezes at the last successful refresh + the access token TTL.
-func ssoAccessTokenExpiry(tokenSecret *corev1.Secret, startURL string) (time.Time, bool) {
-	if tokenSecret == nil || startURL == "" {
-		return time.Time{}, false
-	}
-	var best time.Time
-	found := false
-	for _, raw := range tokenSecret.Data {
-		var f struct {
-			StartURL    string `json:"startUrl"`
-			AccessToken string `json:"accessToken"`
-			ExpiresAt   string `json:"expiresAt"`
-		}
-		if json.Unmarshal(raw, &f) != nil || f.AccessToken == "" || strings.TrimRight(f.StartURL, "/#") != strings.TrimRight(startURL, "/#") {
-			continue
-		}
-		t, err := time.Parse(time.RFC3339, f.ExpiresAt)
-		if err != nil {
-			// the CLI writes e.g. 2026-11-17T09:08:00Z; tolerate a missing zone designator
-			if t, err = time.Parse("2006-01-02T15:04:05", strings.TrimSuffix(f.ExpiresAt, "Z")); err != nil {
-				continue
-			}
-		}
-		if !found || t.After(best) {
-			best, found = t.UTC(), true
-		}
-	}
-	return best, found
+// markRefreshOK stamps the time of a successful silent refresh for a profile.
+func markRefreshOK(ctx context.Context, c client.Client, namespace, secretName string, at time.Time) error {
+	ts := at.UTC().Format(time.RFC3339)
+	return setProfileAnnotations(ctx, c, namespace, secretName, map[string]*string{annotLastRefreshOK: &ts})
 }

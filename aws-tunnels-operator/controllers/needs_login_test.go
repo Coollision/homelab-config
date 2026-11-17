@@ -21,26 +21,6 @@ func TestIsTokenExpiredError(t *testing.T) {
 	}
 }
 
-func TestSSOAccessTokenExpiry(t *testing.T) {
-	sec := &corev1.Secret{Data: map[string][]byte{
-		"reg.json": []byte(`{"clientId":"x","expiresAt":"2030-01-01T00:00:00Z"}`),
-		"old.json": []byte(`{"startUrl":"https://example.awsapps.com/start","accessToken":"a","expiresAt":"2026-11-17T08:00:00Z"}`),
-		"new.json": []byte(`{"startUrl":"https://example.awsapps.com/start/","accessToken":"b","expiresAt":"2026-11-17T09:00:00Z"}`),
-		"other":    []byte(`{"startUrl":"https://other.awsapps.com/start","accessToken":"c","expiresAt":"2031-01-01T00:00:00Z"}`),
-		"garbage":  []byte(`not json`),
-	}}
-	got, ok := ssoAccessTokenExpiry(sec, "https://example.awsapps.com/start")
-	if !ok || !got.Equal(time.Date(2026, 11, 17, 9, 0, 0, 0, time.UTC)) {
-		t.Fatalf("got %v %v", got, ok)
-	}
-	if _, ok := ssoAccessTokenExpiry(sec, "https://missing.example/start"); ok {
-		t.Fatal("unknown start url must not match")
-	}
-	if _, ok := ssoAccessTokenExpiry(nil, "x"); ok {
-		t.Fatal("nil secret must not match")
-	}
-}
-
 func TestNeedsLoginAnnotationLifecycle(t *testing.T) {
 	ctx := context.Background()
 	sec := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "ns"}}
@@ -55,11 +35,19 @@ func TestNeedsLoginAnnotationLifecycle(t *testing.T) {
 		t.Fatal("expected parked after markNeedsLogin")
 	}
 
+	if err := markRefreshOK(ctx, c, "ns", "s", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	_ = c.Get(ctx, clientKey("ns", "s"), got)
+	if got.Annotations[annotLastRefreshOK] == "" {
+		t.Fatal("expected last-refresh-ok stamp")
+	}
+
 	if err := markLoggedIn(ctx, c, "ns", "s", time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	_ = c.Get(ctx, clientKey("ns", "s"), got)
-	if profileNeedsLogin(got) || got.Annotations[annotLastLogin] == "" {
+	if profileNeedsLogin(got) || got.Annotations[annotLastLogin] == "" || got.Annotations[annotLastRefreshOK] != "" {
 		t.Fatalf("login must unpark and stamp last-login: %v", got.Annotations)
 	}
 	// missing secret is a no-op, not an error
