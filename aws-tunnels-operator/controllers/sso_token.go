@@ -3,6 +3,7 @@ package controllers
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -173,4 +174,108 @@ func (r *SingleStackRunner) refreshProfileCredentials(ctx context.Context, cfg S
 		return false, err
 	}
 	return prevKey != creds.AccessKeyID, nil
+}
+
+const (
+	// annotLastLogin records (RFC3339 UTC) when a profile was last logged in interactively. It is
+	// set on the profile's creds Secret by the login flow only, never by the silent refresh.
+	annotLastLogin = "proxies.homelab.io/last-login-at"
+	// annotNeedsLogin marks a profile whose SSO session is dead: auto-refresh is parked (no more
+	// attempts against AWS) until an interactive login clears it. Value is the RFC3339 UTC time
+	// at which the profile was parked.
+	annotNeedsLogin = "proxies.homelab.io/needs-login-since"
+
+	// refreshMaxFailures is how many consecutive refresh failures park a profile. A definitive
+	// "token has expired" error from the AWS CLI parks it immediately.
+	refreshMaxFailures = 5
+)
+
+// isTokenExpiredError reports whether a refresh error is the AWS CLI's definitive "the SSO session is
+// dead" answer (as opposed to a transient network/API error worth retrying).
+func isTokenExpiredError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "Token has expired")
+}
+
+// profileNeedsLogin reports whether a creds Secret carries the needs-login parked marker.
+func profileNeedsLogin(secret *corev1.Secret) bool {
+	if secret == nil {
+		return false
+	}
+	_, ok := secret.Annotations[annotNeedsLogin]
+	return ok
+}
+
+// setProfileAnnotations patches annotations on a creds Secret: non-nil values are set, nil values
+// removed. A missing Secret is ignored.
+func setProfileAnnotations(ctx context.Context, c client.Client, namespace, secretName string, set map[string]*string) error {
+	secret := &corev1.Secret{}
+	if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: secretName}, secret); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	changed := false
+	if secret.Annotations == nil {
+		secret.Annotations = map[string]string{}
+	}
+	for k, v := range set {
+		if v == nil {
+			if _, ok := secret.Annotations[k]; ok {
+				delete(secret.Annotations, k)
+				changed = true
+			}
+		} else if secret.Annotations[k] != *v {
+			secret.Annotations[k] = *v
+			changed = true
+		}
+	}
+	if !changed {
+		return nil
+	}
+	return c.Update(ctx, secret)
+}
+
+// markLoggedIn stamps the login time and clears any needs-login parking for a profile.
+func markLoggedIn(ctx context.Context, c client.Client, namespace, secretName string, at time.Time) error {
+	ts := at.UTC().Format(time.RFC3339)
+	return setProfileAnnotations(ctx, c, namespace, secretName, map[string]*string{annotLastLogin: &ts, annotNeedsLogin: nil})
+}
+
+// markNeedsLogin parks a profile until the next interactive login.
+func markNeedsLogin(ctx context.Context, c client.Client, namespace, secretName string, at time.Time) error {
+	ts := at.UTC().Format(time.RFC3339)
+	return setProfileAnnotations(ctx, c, namespace, secretName, map[string]*string{annotNeedsLogin: &ts})
+}
+
+// ssoAccessTokenExpiry returns the expiresAt of the cached SSO access token for a start URL, read
+// from the token Secret's AWS CLI cache files (the latest one wins). After the session dies the
+// value stops advancing, so it freezes at the last successful refresh + the access token TTL.
+func ssoAccessTokenExpiry(tokenSecret *corev1.Secret, startURL string) (time.Time, bool) {
+	if tokenSecret == nil || startURL == "" {
+		return time.Time{}, false
+	}
+	var best time.Time
+	found := false
+	for _, raw := range tokenSecret.Data {
+		var f struct {
+			StartURL    string `json:"startUrl"`
+			AccessToken string `json:"accessToken"`
+			ExpiresAt   string `json:"expiresAt"`
+		}
+		if json.Unmarshal(raw, &f) != nil || f.AccessToken == "" || strings.TrimRight(f.StartURL, "/#") != strings.TrimRight(startURL, "/#") {
+			continue
+		}
+		t, err := time.Parse(time.RFC3339, f.ExpiresAt)
+		if err != nil {
+			// the CLI writes e.g. 2026-11-17T09:08:00Z; tolerate a missing zone designator
+			if t, err = time.Parse("2006-01-02T15:04:05", strings.TrimSuffix(f.ExpiresAt, "Z")); err != nil {
+				continue
+			}
+		}
+		if !found || t.After(best) {
+			best, found = t.UTC(), true
+		}
+	}
+	return best, found
 }

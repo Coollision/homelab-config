@@ -27,7 +27,11 @@ Returns a lightweight login/status UI with profile-scoped login buttons and stac
 
 ### `GET /status.json`
 
-Returns discovered stack/profile targets and credential status.
+Returns discovered stack/profile targets and credential status. Each target also carries
+`lastLogin` (last interactive login, RFC3339 UTC), `tokenExpiresAt` (expiry of the last known
+short-lived SSO access token; it advances while refresh works and freezes in the past once the
+session dies, so `lastLogin` → `tokenExpiresAt` approximates the login's lifetime) and
+`needsLogin` (auto-refresh is parked until the next login).
 
 ### `POST /login`
 

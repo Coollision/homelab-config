@@ -64,6 +64,13 @@ type loginTarget struct {
 	Secret     string `json:"secret"`
 	Expiration string `json:"expiration,omitempty"`
 	Valid      bool   `json:"valid"`
+	// LastLogin is when this profile was last logged in interactively (RFC3339 UTC).
+	LastLogin string `json:"lastLogin,omitempty"`
+	// TokenExpiresAt is the expiry of the last known short-lived SSO access token. While refresh
+	// works it keeps advancing; once the session dies it freezes in the past.
+	TokenExpiresAt string `json:"tokenExpiresAt,omitempty"`
+	// NeedsLogin is true when auto-refresh is parked until an interactive login.
+	NeedsLogin bool `json:"needsLogin,omitempty"`
 }
 
 type ssoSession struct {
@@ -656,7 +663,13 @@ func exportProcessCredentials(ctx context.Context, profile string, awsEnv []stri
 }
 
 func (s *AuthServer) storeCredentials(ctx context.Context, req loginRequest, creds exportCredentials) error {
-	return writeCredsSecretData(ctx, s.Client, req.Namespace, credsSecretName(req.Stack, req.Profile), creds)
+	secretName := credsSecretName(req.Stack, req.Profile)
+	if err := writeCredsSecretData(ctx, s.Client, req.Namespace, secretName, creds); err != nil {
+		return err
+	}
+	// Only the interactive login path comes through here (silent refresh uses writeCredsSecretData
+	// directly), so this is exactly "last manual login" and also lifts any needs-login parking.
+	return markLoggedIn(ctx, s.Client, req.Namespace, secretName, time.Now())
 }
 
 // writeCredsSecretData upserts the AWS STS credential keys (and expiration) into a creds Secret,
@@ -1108,6 +1121,10 @@ func (s *AuthServer) discoverTargets(ctx context.Context) ([]loginTarget, error)
 	}
 
 	profiles := cfg.ReferencedAWSProfiles()
+	tokenSecret := &corev1.Secret{}
+	if err := s.Client.Get(ctx, types.NamespacedName{Namespace: cfg.Namespace, Name: tokenSecretName(cfg.Name)}, tokenSecret); err != nil {
+		tokenSecret = nil
+	}
 	targets := make([]loginTarget, 0, len(profiles))
 	for _, profile := range profiles {
 		secretName := credsSecretName(cfg.Name, profile)
@@ -1117,6 +1134,11 @@ func (s *AuthServer) discoverTargets(ctx context.Context) ([]loginTarget, error)
 			t.Valid = IsCredentialValid(secret)
 			if secret.Data != nil {
 				t.Expiration = strings.TrimSpace(string(secret.Data["expiration"]))
+			}
+			t.LastLogin = secret.Annotations[annotLastLogin]
+			t.NeedsLogin = profileNeedsLogin(secret)
+			if exp, ok := ssoAccessTokenExpiry(tokenSecret, cfg.ProfileStartURL(profile)); ok {
+				t.TokenExpiresAt = exp.Format(time.RFC3339)
 			}
 		}
 		targets = append(targets, t)
