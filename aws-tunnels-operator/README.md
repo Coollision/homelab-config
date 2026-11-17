@@ -92,7 +92,8 @@ Primary flow — just click the login link, same as before:
    token back. A failing refresh backs off (1m doubling to 15m); after 5 consecutive failures, or
    immediately on the CLI's `Token has expired`, the profile is **parked**
    (`proxies.homelab.io/needs-login-since` annotation on its creds Secret): no further attempts are
-   made until an interactive login clears it. Logins stamp `proxies.homelab.io/last-login-at`.
+   made until an interactive login clears it. Logins stamp `proxies.homelab.io/last-login-at`; successful refreshes stamp
+   `proxies.homelab.io/last-refresh-ok`.
 4. The tunnel pods **mount that creds Secret and read it on demand** (the operator is the single
    holder of the SSO refresh token, so only it ever refreshes — pods just consume short-lived STS
    creds). Kubernetes propagates the updated Secret into the running pod, the tunnel-runner's

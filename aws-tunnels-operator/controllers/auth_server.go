@@ -66,9 +66,10 @@ type loginTarget struct {
 	Valid      bool   `json:"valid"`
 	// LastLogin is when this profile was last logged in interactively (RFC3339 UTC).
 	LastLogin string `json:"lastLogin,omitempty"`
-	// TokenExpiresAt is the expiry of the last known short-lived SSO access token. While refresh
-	// works it keeps advancing; once the session dies it freezes in the past.
-	TokenExpiresAt string `json:"tokenExpiresAt,omitempty"`
+	// LastRefreshOK is when the operator last silently renewed this profile's creds (RFC3339 UTC).
+	LastRefreshOK string `json:"lastRefreshOk,omitempty"`
+	// NeedsLoginSince is when auto-refresh was parked (RFC3339 UTC); set only while NeedsLogin.
+	NeedsLoginSince string `json:"needsLoginSince,omitempty"`
 	// NeedsLogin is true when auto-refresh is parked until an interactive login.
 	NeedsLogin bool `json:"needsLogin,omitempty"`
 }
@@ -1121,10 +1122,6 @@ func (s *AuthServer) discoverTargets(ctx context.Context) ([]loginTarget, error)
 	}
 
 	profiles := cfg.ReferencedAWSProfiles()
-	tokenSecret := &corev1.Secret{}
-	if err := s.Client.Get(ctx, types.NamespacedName{Namespace: cfg.Namespace, Name: tokenSecretName(cfg.Name)}, tokenSecret); err != nil {
-		tokenSecret = nil
-	}
 	targets := make([]loginTarget, 0, len(profiles))
 	for _, profile := range profiles {
 		secretName := credsSecretName(cfg.Name, profile)
@@ -1137,9 +1134,8 @@ func (s *AuthServer) discoverTargets(ctx context.Context) ([]loginTarget, error)
 			}
 			t.LastLogin = secret.Annotations[annotLastLogin]
 			t.NeedsLogin = profileNeedsLogin(secret)
-			if exp, ok := ssoAccessTokenExpiry(tokenSecret, cfg.ProfileStartURL(profile)); ok {
-				t.TokenExpiresAt = exp.Format(time.RFC3339)
-			}
+			t.LastRefreshOK = secret.Annotations[annotLastRefreshOK]
+			t.NeedsLoginSince = secret.Annotations[annotNeedsLogin]
 		}
 		targets = append(targets, t)
 	}

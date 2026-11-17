@@ -377,6 +377,9 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 						continue
 					}
 					r.clearRefreshBackoff(profile)
+					if merr := markRefreshOK(ctx, r.Client, cfg.Namespace, credsSecretName(stackName, profile), now); merr != nil {
+						log.Error(merr, "failed to record last-refresh-ok", "profile", profile)
+					}
 					if changed {
 						profilesToRoll[profile] = true
 						log.Info("refreshed STS creds from cached SSO token", "profile", profile)
