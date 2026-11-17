@@ -375,8 +375,8 @@ configMaps:
                 description: PXE boot menu (assets on :8080)
             - Registry:
                 icon: distribution
-                href: http://{{HOMEPAGE_VAR_GOBELIJN_IP}}:7777/v2/_catalog
-                siteMonitor: http://{{HOMEPAGE_VAR_GOBELIJN_IP}}:7777/v2/
+                href: https://registry.<secret:kv/data/shared/domains~domain>/v2/_catalog
+                siteMonitor: https://registry.<secret:kv/data/shared/domains~domain>/v2/
                 description: docker.io pull-through mirror (API only)
             - Plex:
                 icon: plex
