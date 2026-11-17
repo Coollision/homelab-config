@@ -89,7 +89,10 @@ Primary flow — just click the login link, same as before:
    creds are expired or within ~10 min of expiry runs `aws configure export-credentials` — which
    **silently refreshes** the access token from the refresh token, no interactive login — writes
    fresh STS creds into the profile's `<stack>-<profile>` Secret, and persists any rotated refresh
-   token back.
+   token back. A failing refresh backs off (1m doubling to 15m); after 5 consecutive failures, or
+   immediately on the CLI's `Token has expired`, the profile is **parked**
+   (`proxies.homelab.io/needs-login-since` annotation on its creds Secret): no further attempts are
+   made until an interactive login clears it. Logins stamp `proxies.homelab.io/last-login-at`.
 4. The tunnel pods **mount that creds Secret and read it on demand** (the operator is the single
    holder of the SSO refresh token, so only it ever refreshes — pods just consume short-lived STS
    creds). Kubernetes propagates the updated Secret into the running pod, the tunnel-runner's

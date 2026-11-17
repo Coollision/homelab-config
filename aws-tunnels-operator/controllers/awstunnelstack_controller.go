@@ -353,6 +353,11 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 						r.clearRefreshBackoff(profile)
 						continue
 					}
+					// Parked: the SSO session is dead. Make no further attempts until an interactive
+					// login clears the marker (annotation survives operator restarts).
+					if profileNeedsLogin(credSecret) {
+						continue
+					}
 					// Don't re-hit AWS every tick for a profile whose refresh is failing (e.g. the SSO
 					// session has expired); wait out its cooldown.
 					if r.refreshInCooldown(profile, now) {
@@ -361,7 +366,14 @@ func (r *SingleStackRunner) reconcileOnce(ctx context.Context) error {
 					changed, rerr := r.refreshProfileCredentials(ctx, cfg, profile, awsConfigText, awsProfiles)
 					if rerr != nil {
 						backoff := r.recordRefreshFailure(profile, now)
-						log.Error(rerr, "sso token refresh failed; backing off (a fresh login may be required)", "profile", profile, "retryAfter", backoff)
+						if isTokenExpiredError(rerr) || r.refreshFailures[profile] >= refreshMaxFailures {
+							if perr := markNeedsLogin(ctx, r.Client, cfg.Namespace, credsSecretName(stackName, profile), now); perr != nil {
+								log.Error(perr, "failed to record needs-login state", "profile", profile)
+							}
+							log.Error(rerr, "sso session is dead; refresh parked until the next interactive login", "profile", profile, "failures", r.refreshFailures[profile])
+							continue
+						}
+						log.Error(rerr, "sso token refresh failed; backing off", "profile", profile, "retryAfter", backoff, "failures", r.refreshFailures[profile])
 						continue
 					}
 					r.clearRefreshBackoff(profile)

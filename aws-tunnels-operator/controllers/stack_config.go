@@ -277,3 +277,16 @@ func SyncAWSConfigMap(ctx context.Context, c client.Client, cfg StackConfig) (st
 
 	return configMapName, configText, profiles, nil
 }
+
+// ProfileStartURL returns the SSO start URL configured for an AWS profile ("" if unknown).
+func (c StackConfig) ProfileStartURL(profile string) string {
+	if strings.TrimSpace(c.Spec.AWS.Profile) == profile {
+		return strings.TrimSpace(c.Spec.AWS.SSOStartURL)
+	}
+	for _, p := range c.Spec.AWS.ExtraProfile {
+		if strings.TrimSpace(p.Name) == profile {
+			return strings.TrimSpace(p.SSOStartURL)
+		}
+	}
+	return ""
+}

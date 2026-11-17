@@ -210,7 +210,9 @@
             <th>Stack</th>
             <th>Profile</th>
             <th>Status</th>
-            <th>Expiration</th>
+            <th>Creds expire</th>
+            <th>Last login</th>
+            <th>SSO token expires</th>
             <th>Action</th>
           </tr>
         </thead>
@@ -222,7 +224,9 @@
                 <td>{{.Stack}}</td>
                 <td>{{.Profile}}</td>
                 <td class="c-cred">
-                  {{if .Valid}}
+                  {{if .NeedsLogin}}
+                    <span class="badge badge-expired">login required</span>
+                  {{else if .Valid}}
                     <span class="badge badge-valid">valid</span>
                   {{else if .Expiration}}
                     <span class="badge badge-expired">expired</span>
@@ -230,7 +234,9 @@
                     <span class="badge badge-missing">missing</span>
                   {{end}}
                 </td>
-                <td class="c-exp">{{.Expiration}}</td>
+                <td class="c-exp" data-ts="{{.Expiration}}">{{.Expiration}}</td>
+                <td class="c-login" data-ts="{{.LastLogin}}">{{.LastLogin}}</td>
+                <td class="c-tokexp" data-ts="{{.TokenExpiresAt}}">{{.TokenExpiresAt}}</td>
                 <td>
                   <form method="POST" action="/login" style="display:inline">
                     <input type="hidden" name="profile" value="{{.Profile}}">
@@ -240,7 +246,7 @@
               </tr>
             {{end}}
           {{else}}
-            <tr><td colspan="6">No stack configuration found. Configure stack values so the stack ConfigMap includes tunnels.</td></tr>
+            <tr><td colspan="8">No stack configuration found. Configure stack values so the stack ConfigMap includes tunnels.</td></tr>
           {{end}}
         </tbody>
       </table>
@@ -381,8 +387,23 @@
         return n;
       }
       function badge(t) {
+        if (t.needsLogin) return el("span", "badge badge-expired", "login required");
         var cls = t.valid ? "valid" : (t.expiration ? "expired" : "missing");
         return el("span", "badge badge-" + cls, cls);
+      }
+      // Render an RFC3339 timestamp in the viewer's local timezone (empty -> "—").
+      function localTime(iso) {
+        if (!iso) return "—";
+        var d = new Date(iso);
+        return isNaN(d.getTime()) ? iso : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "medium" });
+      }
+      function setTime(cell, iso) {
+        if (!cell) return;
+        cell.textContent = localTime(iso);
+        cell.title = iso || "";
+        cell.dataset.ts = iso || "";
+        // an access-token expiry in the past = the session stopped refreshing around then
+        cell.style.color = (cell.classList.contains("c-tokexp") && iso && new Date(iso) < new Date()) ? "#ffe1a5" : "";
       }
       function readyCell(t) {
         var dot = "ok", text = t.ready + "/" + t.desired;
@@ -411,7 +432,9 @@
           var row = document.querySelector('tr[data-profile="' + CSS.escape(t.profile) + '"]');
           if (!row) return;
           swap(row.querySelector(".c-cred"), badge(t));
-          row.querySelector(".c-exp").textContent = t.expiration || "";
+          setTime(row.querySelector(".c-exp"), t.expiration);
+          setTime(row.querySelector(".c-login"), t.lastLogin);
+          setTime(row.querySelector(".c-tokexp"), t.tokenExpiresAt);
         });
         (data.tunnels || []).forEach(function(t) {
           var row = document.querySelector('tr[data-tunnel="' + CSS.escape(t.name) + '"]');
