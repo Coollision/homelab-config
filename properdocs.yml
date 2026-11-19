@@ -59,6 +59,7 @@ nav:
       - 06-todo/bazarr-subtitle-gaps.md
       - 06-todo/unifi-os6-recheck.md
       - 06-todo/unifi-matter-sync-n8n.md
+      - 06-todo/remote-access-proxy.md
       - 06-todo/future-ideas.md
   - Rejected:
       - 07-rejected/README.md
