@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -677,19 +678,21 @@ func (s *AuthServer) storeCredentials(ctx context.Context, req loginRequest, cre
 // preserving any labels/annotations the reconcile loop set. Shared by the login flow and the
 // reconcile-loop auto-refresh.
 func writeCredsSecretData(ctx context.Context, c client.Client, namespace, secretName string, creds exportCredentials) error {
-	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: namespace}}
-	_, err := controllerutil.CreateOrUpdate(ctx, c, secret, func() error {
-		secret.Type = corev1.SecretTypeOpaque
-		if secret.Data == nil {
-			secret.Data = map[string][]byte{}
-		}
-		secret.Data["AWS_ACCESS_KEY_ID"] = []byte(creds.AccessKeyID)
-		secret.Data["AWS_SECRET_ACCESS_KEY"] = []byte(creds.SecretAccessKey)
-		secret.Data["AWS_SESSION_TOKEN"] = []byte(creds.SessionToken)
-		secret.Data["expiration"] = []byte(creds.Expiration)
-		return nil
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: namespace}}
+		_, err := controllerutil.CreateOrUpdate(ctx, c, secret, func() error {
+			secret.Type = corev1.SecretTypeOpaque
+			if secret.Data == nil {
+				secret.Data = map[string][]byte{}
+			}
+			secret.Data["AWS_ACCESS_KEY_ID"] = []byte(creds.AccessKeyID)
+			secret.Data["AWS_SECRET_ACCESS_KEY"] = []byte(creds.SecretAccessKey)
+			secret.Data["AWS_SESSION_TOKEN"] = []byte(creds.SessionToken)
+			secret.Data["expiration"] = []byte(creds.Expiration)
+			return nil
+		})
+		return err
 	})
-	return err
 }
 
 func (s *AuthServer) handleRestart(w http.ResponseWriter, r *http.Request) {
