@@ -6,7 +6,7 @@ deployment:
   image:
     repository: rhasspy/wyoming-whisper
     # pinned: the script imports the image's wyoming package (1.10.x API); renovate bumps are manual (see renovate.json)
-    tag: 3.8.1
+    tag: 3.9.1
   command: ["/usr/src/.venv/bin/python3", "/app/bridge.py"]
   ports:
     whisper: 10300
