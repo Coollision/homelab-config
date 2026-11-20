@@ -92,6 +92,8 @@ Design choices that look odd but are deliberate:
   TLS handshake (the next day was fine).
 - **A failed probe is logged** (`probe says not up to date: <name:port>(unreachable|serves-other:<fp>)`) before the job falls
   through to a login, so the log says why it pushed.
+- **Retention:** 1 successful Job (about a day on the daily schedule); failed Jobs are kept up to 3 days. `ttlSecondsAfterFinished`
+  (3 days) cannot differ per outcome, so the success history limit does the pruning.
 - **Failed Job history is 1.** The stock `KubeJobFailed` rule fires while a failed Job exists, so a stale failure must not linger.
   It clears after the next successful run.
 - **Probes go to the device address, not DNS**: some names resolve to public/Cloudflare addresses that the policy blocks and that
@@ -107,7 +109,7 @@ Design choices that look odd but are deliberate:
 | Force a new certificate | `cmctl renew -n default <wildcard-certificate>`; without `cmctl`, patch the Certificate's status subresource to add the `Issuing=True` condition (what `cmctl` does). This also re-issues Traefik's certificate. Then run the job |
 | Probe only, no login | set `dryRun: true` in `values.yaml` |
 | Break-glass | when the device currently serves a certificate the job cannot verify (expired or wrong), create a one-off Job by hand with `INSECURE=1` set on its command line. It is never a default and never in the chart |
-| Clean up test Jobs | `kubectl -n default delete job <name>` (Jobs created by hand are not garbage-collected sooner than `ttlSecondsAfterFinished`, 7 days) |
+| Clean up test Jobs | `kubectl -n default delete job <name>` (Jobs created by hand are not garbage-collected sooner than `ttlSecondsAfterFinished`, 3 days) |
 
 Changing a Vault value reaches the pod on the next ArgoCD sync (the Secret is rendered at sync time), so hard-refresh the app
 after patching. ArgoCD can also serve a stale render for a while, see the `gitops-debug` skill.
