@@ -13,9 +13,9 @@
       integration support in 1.6, which translation backends it offers, cost or API limits, CPU/RAM footprint on K3s,
       and whether a self-hosted model is realistic on the minis. Compare translated Dutch quality on a few episodes
       against Google Translate.
-- [ ] Re-run the missing search after the OpenSubtitles quota resets; find out whether the account is free or VIP.
+- [x] Re-run the missing search after the OpenSubtitles quota resets; find out whether the account is free or VIP. Done 2026-11-20: ran it, all providers Good and unthrottled, 0 new subtitles (140 episodes still missing); free vs VIP still unknown.
 - [x] Disable `tvsubtitles` (404s): done 2026-11-12 via the Bazarr settings API.
-- [ ] Shorten adaptive searching (still 3w delay, 1w delta).
+- [x] Shorten adaptive searching (still 3w delay, 1w delta). Done 2026-11-20 via the settings API: delay 1w, delta 3d.
 - [ ] Optional: Whisper for the roughly 22 episodes with no English subtitle either. Bazarr's Whisper provider needs a
       `whisper-asr-webservice`-style API, so it needs a separate deployment; est. 5-10 min per episode on the iGPU
       (unmeasured), run off-hours so it does not compete with voice.

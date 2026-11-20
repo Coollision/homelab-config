@@ -208,10 +208,10 @@ promstack:
       retention: 90d
       retentionSize: 18GiB
       enableAdminAPI: true
-      # TEMPORARY (2026-11-20 power outage): backfill the UPS discharge log logged on the UPS node
-      # while the cluster was down, via POST /api/v1/write (unauthenticated, so switch both off
-      # again after the import). The OOO window lets samples older than the head in; it only
-      # costs memory/disk while out-of-order samples actually arrive.
+      # Backfill path for data recorded while the cluster was down (e.g. the UPS discharge log a
+      # planned outage leaves on the UPS node), via POST /api/v1/write. Kept on deliberately: the
+      # receiver is unauthenticated, so anything that reaches Prometheus can write. The OOO window
+      # lets samples older than the head in; it only costs memory/disk while such samples arrive.
       enableRemoteWriteReceiver: true
       tsdb:
         outOfOrderTimeWindow: 3d

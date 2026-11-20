@@ -35,6 +35,8 @@
       Home Assistant uses the bridge connection entity today. Options: an HA automation on the bridge connection
       binary sensor (offline for 2+ min), or a Prometheus/Grafana rule if the state is exported. Clean up the ~174
       `unavailable` entities before adding any "unavailable count" alert.
+      Decision 2026-11-20: alert via Prometheus + Alertmanager like every other cluster alert, not an HA automation (HA down = no alert).
+      Blocker: nothing exports the bridge state (mosquitto-exporter only reads `$SYS`), and an extra exporter would not catch a hung Z2M that keeps its MQTT connection, so it is not worth a new component yet. Revisit if a real stuck-Z2M signal exists (e.g. a Z2M health or last-message-age metric).
 
 ## Waiting on hardware
 

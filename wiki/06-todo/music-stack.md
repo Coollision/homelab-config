@@ -16,14 +16,14 @@ Verified on 2026-10-09: both ArgoCD apps healthy; slskd logged into Soulseek wit
 Assistant on its VLAN 5 leg with fixed IP, Published IP set, read-only NFS mounts, Sonos players discovered,
 radio playing across all devices, legacy library scanned (116 albums, 31 album artists, no fake artists).
 
-- [ ] Confirm the permanent VLAN 5 route survives a restart (`setup-vlan5-route` init container): after the
-      pod restarts, grouping a Sonos with the web player on a radio stream still holds.
+- [x] Confirm the permanent VLAN 5 route survives a restart (`setup-vlan5-route` init container): after the
+      pod restarts, grouping a Sonos with the web player on a radio stream still holds. Done 2026-11-20: after a pod restart the init container re-added `192.168.5.0/24 dev net1` and all Sonos players re-registered; grouping the Roam with the web player on a radio stream held (tested 2026-11-20).
 - [x] ReplayGain pass finished (2026-10-10): all 4014 files are ID3v2.4 with ReplayGain tags, 31 album artists, a library
       sync was triggered afterwards. Only 3 files still carry an ID3v1 block (find them: `tail -c 128` starts with `TAG`).
 - [x] Spotify added (2026-10-09, librespot backend). Its first library sync imported the followed artists and
       saved albums (the album-artist list grew by ~60 entries and one album); not a tag problem.
 - [ ] Home Assistant integration connects (ClusterIP service on 8095); phone playback works.
-- [ ] Turn off Music Assistant's cloud remote access unless wanted.
+- [x] Turn off Music Assistant's cloud remote access unless wanted. Done (checked by hand).
 - [x] Music Assistant version still matches the research (2.10.9 on 2026-11-09).
 - [ ] Optional: Picard on the ~40 single-artist albums for MusicBrainz IDs.
 
@@ -40,7 +40,6 @@ radio playing across all devices, legacy library scanned (116 albums, 31 album a
 - [x] Pod Ready on PostgreSQL (after the one extra restart), the databases created, the UI reachable (2026-10-10).
 - [x] Configured via the API and verified: root folder, quality and metadata profiles, Recycle Bin, Download Station
       client and remote path mapping, Prowlarr link (Knaben, The Pirate Bay synced), a test search returned releases.
-- [ ] Look at the two Prowlarr indexers that fail (`BT.etree`, `Torrent Downloads`) and decide whether to fix or drop them.
 - [ ] Add one artist you do not have yet and follow it to a filed album: grabbed, imported into `Music/Lidarr`, visible
       in Music Assistant with sensible tags.
 - [ ] Decide later whether to connect Soulseek (Soularr) and how to keep it apart from the intake.
