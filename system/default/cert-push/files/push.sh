@@ -17,6 +17,8 @@ INSECURE=${INSECURE:-0}
 MIN_SERVED_DAYS=${MIN_SERVED_DAYS:-14}
 OVERDUE_GRACE_DAYS=${OVERDUE_GRACE_DAYS:-3}
 VERIFY_WAIT=${VERIFY_WAIT:-120}
+CONN_RETRIES=${CONN_RETRIES:-3}   # attempts for a UniFi call that never connected (curl exit 6/7/35); 30s, 60s... apart
+RETRY_BASE=${RETRY_BASE:-30}
 NAS_API_PORT=${NAS_API_PORT:-5001}
 UNIFI_API_PORT=${UNIFI_API_PORT:-443}
 NAME_PREFIX=${NAME_PREFIX:-cert-push}
@@ -195,6 +197,8 @@ run_nas() {
 
   if [ "$FORCE" != "1" ] && verify_probes nas "$ip" "$probes" 0; then
     case "$probes" in "" | "-" | none) ;; *) summary nas "up-to-date"; return 0 ;; esac
+  elif [ "$FORCE" != "1" ]; then
+    log "nas: probe says not up to date:${LAST_BAD:-} (proceeding to push)"
   fi
   if [ "$DRYRUN" = "1" ]; then
     log "nas: DRYRUN, would log in and import '$want'"
@@ -243,7 +247,19 @@ ucall() {
   args=("${UCURL[@]}" -X "$1" -D "$WORK/u.hdr" -o "$WORK/u.body" -w '%{http_code}' -H 'Content-Type: application/json')
   [ -n "$CSRF" ] && args+=(-H "X-CSRF-Token: $CSRF")
   [ -n "${3:-}" ] && args+=(--data-binary "@$3")
-  HTTP=$("${args[@]}" "$UNIFI_BASE$2") || HTTP=000
+  # Only retry when no HTTP exchange happened (DNS/connect/TLS handshake failure: curl exit 6, 7, 35): nothing reached the
+  # console, so a retry cannot double-submit or count as a failed login. Any HTTP status, even 5xx, is never retried.
+  local try=1 rc
+  while :; do
+    HTTP=$("${args[@]}" "$UNIFI_BASE$2")
+    rc=$?
+    [ "$rc" -eq 0 ] || HTTP=000
+    case "$rc" in 6 | 7 | 35) ;; *) break ;; esac
+    [ "$try" -lt "$CONN_RETRIES" ] || break
+    log "unifi: $1 $2 could not connect (curl exit $rc), retry $try/$((CONN_RETRIES - 1)) in $((RETRY_BASE * try))s"
+    sleep $((RETRY_BASE * try))
+    try=$((try + 1))
+  done
   local nc
   nc=$(awk -F': ' 'tolower($1)=="x-updated-csrf-token" || tolower($1)=="x-csrf-token" {print $2}' "$WORK/u.hdr" 2>/dev/null | tr -d '\r' | tail -n1)
   [ -z "$nc" ] || CSRF=$nc
@@ -287,6 +303,7 @@ run_unifi() {
     summary unifi "up-to-date"
     return 0
   fi
+  [ "$FORCE" = "1" ] || log "unifi: probe says not up to date:${LAST_BAD:-} (proceeding to push)"
   if [ "$DRYRUN" = "1" ]; then
     log "unifi: DRYRUN, would log in and create/activate '$want'"
     verify_probes unifi "$ip" "$probes" 0 || log "unifi: DRYRUN finding:${LAST_BAD:-} (would be pushed)"

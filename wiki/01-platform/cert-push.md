@@ -86,6 +86,12 @@ Design choices that look odd but are deliberate:
   the pod resolves nothing. The `podSelector` is label-scoped because namespace `default` holds other workloads.
 - **No retry loop on login.** `backoffLimit: 0` and one attempt per run: DSM's auto-block counts failed logins and blocks the
   source IP (a k3s node address, not the pod).
+- **UniFi calls retry only when nothing connected** (curl exit 6/7/35: DNS, connect or TLS handshake failure), 3 attempts with
+  30s/60s back-off. No request reached the console, so it cannot double-submit or count as a failed login. Any HTTP status is
+  never retried, and the NAS has no retry at all. Added after the 2026-11-20 run failed on `unexpected eof` during the console's
+  TLS handshake (the next day was fine).
+- **A failed probe is logged** (`probe says not up to date: <name:port>(unreachable|serves-other:<fp>)`) before the job falls
+  through to a login, so the log says why it pushed.
 - **Failed Job history is 1.** The stock `KubeJobFailed` rule fires while a failed Job exists, so a stale failure must not linger.
   It clears after the next successful run.
 - **Probes go to the device address, not DNS**: some names resolve to public/Cloudflare addresses that the policy blocks and that
