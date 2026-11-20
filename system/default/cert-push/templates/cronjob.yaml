@@ -13,14 +13,14 @@ spec:
   suspend: {{ .suspend }}
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 3600
-  successfulJobsHistoryLimit: 3
+  successfulJobsHistoryLimit: 1 # daily schedule, so about one day of successes
   # 1: the stock KubeJobFailed rule fires while a failed Job exists, so a stale failure must not linger for long.
   failedJobsHistoryLimit: 1
   jobTemplate:
     spec:
       backoffLimit: 0 # never retry a login (DSM auto-block counts failures)
       activeDeadlineSeconds: 900
-      ttlSecondsAfterFinished: 604800
+      ttlSecondsAfterFinished: 259200 # 3 days: failed Jobs stay long enough to inspect (successes go sooner via the history limit)
       template:
         metadata:
           labels:
