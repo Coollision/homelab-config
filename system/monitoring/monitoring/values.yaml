@@ -208,6 +208,13 @@ promstack:
       retention: 90d
       retentionSize: 18GiB
       enableAdminAPI: true
+      # TEMPORARY (2026-11-20 power outage): backfill the UPS discharge log logged on the UPS node
+      # while the cluster was down, via POST /api/v1/write (unauthenticated, so switch both off
+      # again after the import). The OOO window lets samples older than the head in; it only
+      # costs memory/disk while out-of-order samples actually arrive.
+      enableRemoteWriteReceiver: true
+      tsdb:
+        outOfOrderTimeWindow: 3d
       scrapeInterval: 30s
       additionalArgs:
         - name: "storage.tsdb.max-block-duration"

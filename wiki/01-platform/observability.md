@@ -20,6 +20,11 @@ etc.), Prometheus itself runs with `native-histograms` enabled and a capped
 `retentionSize: 18GiB` is the cap that actually bites, so effective retention is shorter
 (roughly three weeks at the time of writing).
 
+**Temporary (2026-11-20):** the remote-write receiver (`/api/v1/write`) and a 3-day
+`outOfOrderTimeWindow` are on to backfill the UPS discharge log from the planned power outage
+(series labelled `source="outage-log"`). The receiver is unauthenticated: turn both off again
+after the import.
+
 Prometheus is kept off the Raspberry Pi worker by a required `nodeAffinity` (`type NotIn rpi`):
 long-range queries plus scrape load are too much for it, and a drain of another node must not
 reschedule it there.
