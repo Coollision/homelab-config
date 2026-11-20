@@ -31,6 +31,7 @@ nav:
       - 02-smarthome/esphome.md
       - 02-smarthome/zigbee.md
       - 02-smarthome/matter-thread.md
+      - 02-smarthome/unifi-matter-sync.md
       - 02-smarthome/voice.md
       - 02-smarthome/voice-benchmark.md
       - 02-smarthome/automation-mcp.md
@@ -55,11 +56,13 @@ nav:
       - 06-todo/zot-registry-mirror.md
       - 06-todo/whisper-upgrade.md
       - 06-todo/mosquitto-modernization.md
+      - 06-todo/ups-shutdown-overview.md
       - 06-todo/ups-graceful-shutdown.md
       - 06-todo/bazarr-subtitle-gaps.md
       - 06-todo/unifi-os6-recheck.md
-      - 06-todo/unifi-matter-sync-n8n.md
       - 06-todo/remote-access-proxy.md
+      - 06-todo/windmill-pilot.md
+      - 06-todo/renovate-batch-2026-11-follow-ups.md
       - 06-todo/future-ideas.md
   - Rejected:
       - 07-rejected/README.md
@@ -98,7 +101,11 @@ markdown_extensions:
   - toc:
       permalink: true
       slugify: !!python/object/apply:pymdownx.slugs.slugify {kwds: {case: lower}}
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.highlight
 
 # Pages link out to repo paths (docs/, workload/, ...) that live outside docs_dir;

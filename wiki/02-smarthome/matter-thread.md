@@ -39,7 +39,7 @@ explained below.
 ### n8n "WebSocket Request" node (helper, not part of the mesh)
 `workload/smarthome/n8n/values.yaml` carries a small custom n8n node, mounted from a ConfigMap and loaded through
 `N8N_CUSTOM_EXTENSIONS`. It exists for the workflow that keeps UniFi's Matter monitoring in step with Home Assistant (see
-[the n8n sync plan](../06-todo/unifi-matter-sync-n8n.md)): that workflow needs a one-time pairing code, which only matter-server
+[the n8n sync workflow](unifi-matter-sync.md)): that workflow needs a one-time pairing code, which only matter-server
 (and Home Assistant) hand out over a **WebSocket**, and n8n has no WebSocket client (the Code node has no network, no HTTP node
 speaks WebSocket, and the community WebSocket nodes are servers, not clients).
 The node connects, sends one JSON message and returns the reply with the same `message_id`; it needs no dependencies (global

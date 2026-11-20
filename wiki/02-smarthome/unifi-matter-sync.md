@@ -1,8 +1,8 @@
-# TODO: n8n workflow that syncs Matter devices into UniFi
+# n8n workflow: sync Matter devices into UniFi
 
-[← Back to Home](../Home.md) · Related: [UniFi OS 6 re-check](unifi-os6-recheck.md) · [Matter & Thread](../02-smarthome/matter-thread.md) · [Known issues: the UniFi Matter API](../05-operations/known-issues.md#unifi-matter-api)
+[← Back to Home](../Home.md) · Related: [UniFi OS 6 re-check](../06-todo/unifi-os6-recheck.md) · [Matter & Thread](matter-thread.md) · [Known issues: the UniFi Matter API](../05-operations/known-issues.md#unifi-matter-api)
 
-> **Status (2026-11): done and live.** The custom `WebSocket Request` node is deployed in n8n and the workflow is published (daily 03:30
+> **Status (2026-11): live.** The custom `WebSocket Request` node is deployed in n8n and the workflow is published (daily 03:30
 > plus a manual trigger). All 11 Thread devices are in UniFi under their Home Assistant names; the Wi-Fi vacuum is excluded by design.
 > Only the follow-ups at the bottom remain.
 
@@ -20,8 +20,11 @@ and the matter-server WebSocket URL.
    (never `null`, which clears a custom name).
 2. Home Assistant device names through the built-in Home Assistant node (template call; the result comes back already parsed
    under `renderedTemplate`).
-3. matter-server nodes through the `WebSocket Request` node (`get_nodes`), joined to UniFi on the Matter **UniqueID**; devices Home Assistant identifies by serial
-   are paired by model when that is unambiguous.
+3. matter-server nodes through the `WebSocket Request` node (`get_nodes`, which also yields serial and IPv6 addresses), joined to UniFi in
+   three steps: Matter **UniqueID**; then the stable **IPv6 addresses** (IKEA TIMMERFLOTTE sensors report a different UniqueID per
+   fabric, so only the addresses match them; the RLOC address is ignored); then model, only when that is unambiguous (several identical
+   unmatched units are merely counted, never re-enrolled or renamed). Home Assistant devices identified as `serial_<n>` are matched to
+   matter-server's serial, the rest by node id in their identifier.
 4. A Code node plans: **rename** where the UniFi name differs, **skip** devices still unnamed in Home Assistant, **enrol** Thread
    devices missing in UniFi (sleepy devices first, router plugs last, the Wi-Fi vacuum never), and no enrolment at all while any UniFi
    node is still commissioning.

@@ -21,6 +21,15 @@
 - [ ] **ntfy**: self-hosted push notifications for alerts and automations.
 - [ ] **Homebox**: inventory of household items.
 - [ ] **HA event flight recorder**: keep a short rolling log of events around an incident for later replay.
+- [ ] **CrowdSec + Traefik bouncer**: behaviour-based blocking of abusive IPs on the public entrypoints. Traefik is
+      the only ingress and already runs a Yaegi plugin (Sablier), so the bouncer fits as a second plugin middleware
+      fed by a CrowdSec LAPI in the cluster. Needs the real client IP to survive the proxy chain (Traefik uses
+      `externalTrafficPolicy: Local` and trusted forwarded-header IPs today), a memory check on the small nodes,
+      and a list of local ranges to never ban.
+- [ ] **Kyverno**: policy engine for guardrails the GitOps repo cannot enforce on its own (required resource
+      limits, no `latest` tags, no privileged pods, required labels), starting in audit mode. Check admission
+      webhook memory on the small nodes and make sure a Kyverno outage cannot block ArgoCD syncs
+      (`failurePolicy: Ignore`).
 - [ ] **Zigbee2MQTT down alert from MQTT state**: alert when the bridge reports offline on `zigbee2mqtt/bridge/state`
       while its pod is still Ready (the pod alerts and the Mosquitto client-count alert do not catch that). Nothing in
       Home Assistant uses the bridge connection entity today. Options: an HA automation on the bridge connection

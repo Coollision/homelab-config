@@ -30,3 +30,8 @@ A node-independent pull-through mirror on the NAS: see [Registry mirror](../06-t
 
 Pulls between nodes become the bottleneck while the NAS mirror is unavailable, or the cluster grows enough that
 a mirror per upstream is too much to run.
+
+**Reopen candidate (2026-11-17):** recovery after a power outage is such a case. Every node comes back, but pods can
+land on a different node than before while the internet and the NAS mirror are still down; the image then sits on a
+peer only. Revisit after the 2026-11-20 outage (see [UPS graceful shutdown §2d R12](../06-todo/ups-graceful-shutdown.md));
+first check that the embedded mirror resolves *tags* offline, not only digests.
