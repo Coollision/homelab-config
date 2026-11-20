@@ -390,10 +390,16 @@ Base path: `<console-proxy>/proxy/network/v2/api/site/default/matter/nodes`.
 | `POST .../matter/nodes` `{"setup_code": "<11-digit manual code>"}` | Enrol a device. Returns `202` at once; poll the list: `COMMISSIONING` then `PROVISIONING` then `COMMISSIONED` (about 30 s for a sleepy sensor) |
 | `PUT .../matter/nodes/<node_id>` `{"name": "<text>"}` | Rename. `{"name": null}` **clears** a custom name, so it is only a harmless probe on unnamed nodes; to read a node's details without changing anything, send its current name back. The response is the full client record, including `matter.basic_info.unique_id` |
 
+`DELETE .../matter/nodes/<node_id>` removes a node (`204`); used to clean up `FAILED` / `COMMISSIONING_REJECTED` leftovers.
+
 Gotchas: `GET`, `PATCH` and `POST` on a single node return `405`, `OPTIONS` returns `404`; the code is only valid while the device's
-commissioning window is open (300 s from matter-server); **the stable join key between UniFi, matter-server and Home Assistant is the
-Matter `UniqueID`** (UniFi `basic_info.unique_id` = matter-server attribute `0/40/18`; Home Assistant does not expose it and most of
-these devices have no serial number there). A code comes from matter-server's WebSocket command `open_commissioning_window`
+commissioning window is open (300 s from matter-server); **the join key between UniFi and matter-server is the Matter `UniqueID`**
+(UniFi `basic_info.unique_id` = matter-server attribute `0/40/18`) **for most devices, but not for IKEA TIMMERFLOTTE temperature
+sensors: they report a different UniqueID per fabric** (UniFi shows a 32-character hash, matter-server a 16-character value), so the
+join never matches. A UniFi node record also lists the device's `ipv6_address` values, which equal matter-server's
+`0/51/0` interface IPv6 list; those are the fallback key (ignore the RLOC address `...:0:ff:fe00:xxxx`, it changes with the mesh
+topology). Home Assistant identifies some devices as `serial_<n>`, which equals matter-server attribute `0/40/15`, and others as
+`deviceid_<fabric>-<node id as 16 hex>-MatterNodeDevice`. A code comes from matter-server's WebSocket command `open_commissioning_window`
 (`setup_manual_code` in the result); matter-server serves only a WebSocket on its port, no REST. UniFi monitors Thread devices only.
 **Enrolments are queued by UniFi**: two `POST`s in a row both return `202` with status `QUEUED`, and the second device is not a Matter node yet (a `PUT` on it returns `404 MatterNodeNotFound`) until the first has finished, so enrol strictly one device at a time and name it only after its own commissioning (about 40 s for a sleepy sensor). Pilot result: one door sensor enrolled cleanly (fabric count 2 to 3 of 5, no border-router or matter-server warnings).
 
