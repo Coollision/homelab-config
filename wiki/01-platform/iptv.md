@@ -115,6 +115,10 @@ firmware update) → a persistent **Spook repair** with the one-line fix; the ex
 Spook-repair notifier pushes exactly once. Self-repairs after a reprovision are normal and only
 go to the logbook. Full details in HA's `docs/automations/infra_network_tv_multicast_watchdog.md`.
 
+**Re-checked 2026-11-20 (after UniFi OS 6 / Network 11):** the watchdog survived the update (units re-installed, one
+self-repair of both ports within a minute of the reprovision), and no native multicast-to-unicast option exists in the
+settings API or the 11.0.x release notes. Keep the watchdog. See the [TODO](../06-todo/unifi-os6-recheck.md).
+
 ## How we got here (the short history)
 
 1. **Start:** decoder on a plain passthrough VLAN to the Internet Box's LAN — worked, but the

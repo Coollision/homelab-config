@@ -9,10 +9,10 @@
 Before the fix: ~1,560 evictions in 7 days (~220/day), 98% from the 40-pod-cap Raspberry Pi node, which was
 "overutilized" on pod count only while at ~40% cpu/memory.
 
-- [ ] After a full day (incl. the ~03:00 spike), count evictions in Loki:
-  `{app="descheduler"} |= "Evicted pod"` — expect single digits/day, none driven by memory or pod count.
+- [x] After a full day (incl. the ~03:00 spike), count evictions in Loki:
+  `{app="descheduler"} |= "Evicted pod"` — expect single digits/day, none driven by memory or pod count. Done 2026-11-20: 0 evictions in the last 24 h, 0 overutilized nodes.
 - [ ] Check no node sits above the targets in the `Node has been classified` lines
   (`{app="descheduler"} |= "overutilized"`); the high-memory mini node (~75%) has ~10 points of headroom to the 85% target.
-- [ ] Spot-check the pods that were evicted most (music-intake, lidarr, bazarr, mosquitto, tautulli) are no longer restarting.
+- [x] Spot-check the pods that were evicted most (music-intake, lidarr, bazarr, mosquitto, tautulli) are no longer restarting. Done 2026-11-20: no restarts on music-intake, lidarr, bazarr or mosquitto; tautulli restarted twice, last 4 d ago.
 - [ ] Accepted risks, not todos: single-instance StatefulSets (mosquitto, vault) may restart on a rare eviction;
   `maxNoOfPodsToEvictPerNamespace` stays 6.

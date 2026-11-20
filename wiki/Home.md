@@ -103,12 +103,13 @@ Planned work that is not built yet. Pages move to their normal section once done
 | [UPS shutdown — one-page plan](06-todo/ups-shutdown-overview.md) | Readable summary with flow diagrams, tiers, triggers, recovery and the open decisions |
 | [UPS graceful shutdown](06-todo/ups-graceful-shutdown.md) | Reviewed design: staged load shedding, label tiers, data-safe shutdown, UPS cycle + auto-recovery |
 | [Bazarr subtitle gaps](06-todo/bazarr-subtitle-gaps.md) | Missing Dutch subtitles: investigate Lingarr, provider cleanup, optional Whisper |
-| [Descheduler follow-up](06-todo/descheduler-followup.md) | Verify the eviction-churn fix held over a full day (Loki queries, expectations) |
+| [Descheduler follow-up](06-todo/descheduler-followup.md) | Eviction-churn fix verified 2026-11-20 (0 evictions/day); only accepted risks left |
 | [Remote-access proxy](06-todo/remote-access-proxy.md) | Browser-only access to internal sites via an mTLS forward proxy + Slack approval; NAS real-client-IP experiment and the 443 question |
-| [Renovate batch follow-ups](06-todo/renovate-batch-2026-11-follow-ups.md) | Snapshot/dump cleanup, Matter 1.6.0 and cloudbeaver checks, n8n runner deprecation, slow monitoring sync |
+| [Renovate batch follow-ups](06-todo/renovate-batch-2026-11-follow-ups.md) | Snapshot/dump cleanup, n8n runner deprecation, slow monitoring sync |
 | [Future ideas](06-todo/future-ideas.md) | Vetted backlog: UniFi Poller, ntfy, Paperless, BLE presence; hardware-gated LLM + heating |
 | [UniFi OS 6 re-check](06-todo/unifi-os6-recheck.md) | After the console update: does UniFi's mDNS proxy still re-publish? Is `mcast_to_unicast` still needed / does the watchdog still run? |
 | [Windmill pilot](06-todo/windmill-pilot.md) | Possible n8n replacement (Go/Python): free-tier findings, RAM + isolation checks, pilot plan |
+| [Claude agent gateway](06-todo/claude-agent-gateway.md) | Subscription as a personal API in the cluster: profiles per URL path, sessions, files, HA voice agent with tool-call passthrough, Slack bot that edits config |
 
 ### 07 · Rejected
 Ideas that were looked at and deliberately not built, with the reasoning.

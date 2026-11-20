@@ -17,17 +17,13 @@
 - [ ] Rollback note while both exist: revert the tag and, only if that alone does not bring the nodes back,
       restore the snapshot. Whether 1.5.5 can read data written by 1.6.0 was never verified.
 
-## Second batch (2026-11-17): rolled out, Radarr held back
+## Second batch (2026-11-17): rolled out, including Radarr 7.0.3
 
 Rolled out and verified: Traefik chart 42.4.1 (both instances, Traefik v3.7.19, five GHSA fixes), Mosquitto 2.0.23,
 Alloy chart 1.16.0, code-server 4.145.2, Prowlarr 3.0.2 (forward Postgres migration ran on Postgres 18).
 
-- [ ] **Radarr 6.4.4 → 7.0.3** (open Renovate branch, deliberately not merged). 7.0.1 runs a one-way media-info
-      migration over every movie file. Before merging: `pg_dump` of `radarr_main` and `radarr_log` (database `service-db-pg`
-      in `arr-stack`), Longhorn snapshot of the `arr-stack-radarr-config` volume, and raise the memory limit (640Mi) and
-      the probe delay for the first start. Merge it a day or more after Prowlarr 3, and check the Prowlarr indexer sync,
-      the download client and the Homepage widget afterwards. Rollback means restoring the dump.
-- [ ] Radarr restarted several times in the days before the bump; look at why before adding a migration on top.
+- [x] **Radarr 6.4.4 → 7.0.3**: rolled out 2026-11-17 (commit `aaa8cea3`) with the `pg_dump` and Longhorn snapshot taken first; running healthy, 0 restarts.
+- [x] Radarr restarted several times in the days before the bump. Cause found 2026-11-20: Radarr exits when PostgreSQL (`service-db-pg-1`) is unreachable and has no startup retry. Restarts on 11-10 (~21:54 UTC, no commit; same minutes as the UniFi gateway update, link unproven) and 11-17 (~19:56 UTC, the CloudNativePG operator bump in the first batch restarted the DB instance). Not memory: peak ~507Mi of 640Mi.
 - [ ] Drop the second-batch safety copies after about a week: Longhorn snapshots `mosquitto-pre-batch2` and
       `arr-stack-prowlarr-config-pre-batch2` (namespace `storage`), the Prowlarr `pg_dump`s and the copy of
       `dynamic-security.json` in the local backup folder.
@@ -36,12 +32,11 @@ Alloy chart 1.16.0, code-server 4.145.2, Prowlarr 3.0.2 (forward Postgres migrat
 
 ## Verify
 
-- [ ] Matter: open a Thread device in Home Assistant and confirm it responds, then compare the unavailable-entity
+- [x] Matter: open a Thread device in Home Assistant and confirm it responds, then compare the unavailable-entity
       count against the 140 seen after the rollout (no pre-upgrade baseline exists; some of those were already
-      unavailable, e.g. the vacuum buttons and a camera sensor).
-- [ ] Cloudbeaver: no pod was running after the sync (scale to zero), so the 26.2.5 image was never seen live.
-      Wake it once and check the tag.
-- [ ] `aws-tunnels` showed Progressing in ArgoCD after the rollout. It was not part of the batch; find out why.
+      unavailable, e.g. the vacuum buttons and a camera sensor). Done 2026-11-20: 152 Matter entities across 12 devices in HA, 0 unavailable.
+- [x] `aws-tunnels` showed Progressing in ArgoCD after the rollout. It was not part of the batch; find out why.
+      Checked 2026-11-20: Healthy and Synced; the pod had 0 restarts. The operator logged an expired AWS SSO session (refresh parked until the next interactive login), which is the likely cause of a brief non-Healthy state. Not a chart problem.
 
 ## Open observations
 
@@ -49,8 +44,8 @@ Alloy chart 1.16.0, code-server 4.145.2, Prowlarr 3.0.2 (forward Postgres migrat
       per-resource progress, repo-server healthy). Cause not found. Note it if it repeats, together with the
       repo-server memory limits (see the CMP concurrency entry in known issues).
 - [ ] n8n logs a deprecation: `N8N_RUNNERS_MODE=internal` (internal task runner mode) will be removed in a future
-      version. Plan a switch to external runners before that release.
-- [ ] matterjs-server 1.6.0 no longer logs Thread/Wi-Fi credentials, passcodes or keys. The debug logs written by
-      earlier versions may still contain them.
+      version. Plan a switch to external runners before that release (`n8nio/runners` sidecar, version matching n8n; measure its RAM,
+      see [Windmill pilot](windmill-pilot.md#n8n-side-verified-2026-11-20-why-staying-is-the-default)).
+      Checked 2026-11-20: still logged at every start (internal mode; also 'Python 3 is missing' for the internal Python runner). Fix = `N8N_RUNNERS_MODE=external` + `N8N_RUNNERS_AUTH_TOKEN` (Vault) + `N8N_RUNNERS_BROKER_LISTEN_ADDRESS` on n8n, and an `n8nio/runners` sidecar whose tag must always equal the n8n tag (Renovate would need to bump both together). No NODE_FUNCTION_ALLOW_* vars are set today. Pod limit is 1Gi, so size the sidecar (and recheck n8n's OOM history) before rolling out.
 - [ ] Matter: new pairings are refused when the device's certification is not signed by the CSA (DIY/test devices);
       OTA upload through the server now needs `--enable-test-net-dcl`. Neither applies today.

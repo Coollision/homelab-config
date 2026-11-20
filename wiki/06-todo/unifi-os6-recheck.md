@@ -2,6 +2,9 @@
 
 [← Back to Home](../Home.md) · Related: [IPTV](../01-platform/iptv.md) · [Networking](../01-platform/networking.md#unifi-console-update) · [Known issues](../05-operations/known-issues.md)
 
+> **Re-check result (2026-11-20):** nothing changed in either area, so **both workarounds stay** (reflector and watchdog).
+> Details are in the ticked items below. Still open: whether the flag ever survives a reprovision on its own (no reprovision since 2026-11-10).
+>
 > **Status (2026-11-10):** the gateway console was updated from UniFi OS 5.1 to 6.0 with the Network app going 10.x → 11.
 > Two of our workarounds exist only because of UniFi behaviour that may have changed. Nothing here is urgent and
 > **nothing should be changed on the live network just to test it**: read first, decide second.
@@ -12,13 +15,15 @@
       VLAN that made the Thread border router see echoes of its own services and reject them as duplicates, so we run
       a verbatim L2 forwarder in the cluster instead (see [known issue](../05-operations/known-issues.md#mdns-reflector-must-not-re-publish)).
       UniFi's proxy stays limited to Cast/Android TV service types on the home and TV networks.
-- [ ] **Check (read-only first):** do the OS 6 / Network 11 release notes or the mDNS settings page show a new
+- [x] **Check (read-only first):** do the OS 6 / Network 11 release notes or the mDNS settings page show a new
       mode, such as a pure reflect-only option or per-service/per-VLAN filtering that does not re-publish?
-- [ ] **Only if a genuinely non-republishing mode exists:** test it on the `tests` branch stack or a throw-away
+      **Done 2026-11-20: no.** The mDNS setting still has only mode/custom services/enabled networks (custom mode, Cast + Android TV
+      Remote, home and TV networks only). Network 11.0.83 to 11.0.103 release notes mention mDNS only as a prerequisite for Thread monitoring.
+- [x] **Only if a genuinely non-republishing mode exists** (none found, skipped): test it on the `tests` branch stack or a throw-away
       network, never on the live Matter VLAN. Pass criteria: commissioning works, border-router logs show no
       `Duplicated` rejections, and Matter devices stay available in Home Assistant for a day.
-- [ ] **Payoff if it holds up:** drop the in-cluster mDNS reflector (one less moving part). **If nothing changed,
-      close this item and keep the reflector.**
+- [x] **Payoff if it holds up:** drop the in-cluster mDNS reflector (one less moving part). **Nothing changed (2026-11-20):
+      item closed, reflector stays.**
 - [ ] **Do not enable** the new Thread device monitoring feature: it needs mDNS and IPv6 on that network, which is
       exactly what must not be reflected.
 
@@ -51,14 +56,17 @@
 - [ ] **Background:** live TV on the bedroom decoder (behind a WiFi mesh hop) only works because the gateway's
       Linux bridge turns multicast into unicast per IGMP listener. UniFi resets that flag on every reprovision, so a
       small watchdog on the gateway re-applies it (see [IPTV](../01-platform/iptv.md#keeping-it-on-the-watchdog)).
-- [ ] **Check 1, does the watchdog still run?** After the update the timer must be active and the Home Assistant
+- [x] **Check 1, does the watchdog still run?** After the update the timer must be active and the Home Assistant
       heartbeat must be arriving. The update re-provisions devices, so one self-repair in the logbook is normal.
-- [ ] **Check 2, did UniFi add a native option?** Look for a multicast-to-unicast or IPTV/multicast-enhancement
+      **Done 2026-11-20: yes.** Timer active since the post-update reinstall, heartbeat current, flag on for both TV bridge ports.
+      The update reprovision was repaired once (2 ports, within a minute).
+- [x] **Check 2, did UniFi add a native option?** **No (2026-11-20):** no multicast-to-unicast or IPTV key in the settings API, and the 11.0.x notes only mention IGMP snooping validation. Look for a multicast-to-unicast or IPTV/multicast-enhancement
       setting for the TV network or the mesh radios in the new release. If it exists and is persistent, it can replace
       the watchdog (then run its `uninstall.sh`).
-- [ ] **Check 3, does the flag survive a reprovision by itself?** Compare the watchdog's re-apply counter before
+- [ ] **Check 3 (still open: no reprovision since 2026-11-10), does the flag survive a reprovision by itself?** Compare the watchdog's re-apply counter before
       and after the next natural reprovision. Do **not** disable the watchdog to test this: a stuttering TV is the
       failure mode.
 - [ ] **Pass criteria for removal:** native setting found, bedroom decoder holds live TV for a full evening, mesh
       5 GHz airtime stays near the post-fix level (about 22%, not the old ~89%).
-- [ ] **If nothing changed:** keep the watchdog and note the re-check date in the IPTV page.
+- [x] **If nothing changed:** keep the watchdog and note the re-check date in the IPTV page (done 2026-11-20).
+- [ ] **Nice to have:** the watchdog only logs re-applies to syslog, which rotates. Append timestamped lines to a file under its `/data/custom` dir so check 3 has a durable record.

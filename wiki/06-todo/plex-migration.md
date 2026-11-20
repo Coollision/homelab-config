@@ -43,7 +43,7 @@
    = 4000 kbps and `WanTotalMaxUploadRate` = 27000 kbps. A further ~36 plays only transcode the *audio*
    (EAC3/AC3 → AAC for Plex Web and mobile) with video copied, which is cheap. Only ~13 plays are 4K sources.
    `TranscodeCountLimit` is **3**, equal to the measured peak concurrency: a 4th simultaneous transcode would be
-   refused, and nothing here can show whether that ever happened.
+   refused, and nothing here can show whether that ever happened. (The limit was raised by hand on 2026-11-20; the new value is not recorded here.)
 3. **NAS iGPU benchmark** (same jellyfin-ffmpeg build in a container, VAAPI decode → scale → H.264 encode at 4 Mbps
    720p, 60 s clips, NAS also running its normal VM load): 1080p H.264 → 6.9x realtime, 1080p HEVC 10-bit → 5.6x,
    4K HEVC 10-bit → 3.8x. **Three concurrent 1080p HEVC streams: ~2.5x each**, still far above realtime. Software
@@ -95,7 +95,6 @@ What the data says per group:
       need raising too). Revisit if remote viewers complain about quality, if the uplink gets faster, or if remote
       transcodes ever start to strain whatever machine runs Plex. Re-check with the Tautulli queries in the
       measurements section (remote video transcodes and their client profiles) before changing it.
-- [ ] Consider raising `TranscodeCountLimit` from 3 to 4–5: the benchmark says the NAS can sustain 3 concurrent at ~2.5x.
 - [ ] Audio-only transcodes are expected for browsers; if a given client matters, an AAC/AC3 track on the title avoids
       them. Not worth bulk work.
 - [ ] Set the transcoder temp directory off the SSD volume only if I/O ever shows as the bottleneck: the NAS has
@@ -398,7 +397,6 @@ would give the realistic numbers; switching the mode to `hevc-sources` would kee
 
 - [x] Benchmark both minis (done 2026-11-02, see above). 4K HDR tone-mapping is 2.9x / 2.6x, below the 4x bar, so heavy
       4K HDR at 2x–3x is the one case where scale-out would still help; everything else fits on one iGPU.
-- [ ] Raise `TranscodeCountLimit` (3 → 5) based on the concurrency numbers; watch Tautulli for buffering.
 - [ ] Run one stock LSIO Plex pod on a GPU node (node-local transcode `emptyDir`, `gpu.intel.com/i915: 1`, Longhorn RWO config).
 - [ ] Build the canary + backup controller only if updates start to hurt; it is useful with or without workers.
 - [ ] Only if one iGPU saturates: verify the loopback-callback assumption, then consider the shim and warm-worker design.

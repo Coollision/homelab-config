@@ -268,7 +268,7 @@ helper), config on a Longhorn volume, internal ingress only.
     Remote path mapping: the NAS Downloads share to `/data/downloads`, exactly like Radarr.
   - Prowlarr application `Lidarr` (full sync, audio categories 3000-3050), which syncs the indexers into Lidarr: today
     **Knaben and The Pirate Bay**. Enabled in Prowlarr but not synced: `jackett-idope` (no music search), `BT.etree`
-    (disabled by Prowlarr after failures) and `Torrent Downloads` (failing since 2026-08-31), worth a look in Prowlarr.
+    and `Torrent Downloads` (failing since Oct and Aug 2026): both disabled in Prowlarr on 2026-11-20.
   - Verified end to end without downloading anything: the metadata server answers, and a temporary unmonitored artist
     returned 25 releases for one album from the two indexers (mostly FLAC), after which it was deleted again.
 - **First start gotcha.** On its very first start Lidarr (like the other arr apps) runs on **SQLite**, because
