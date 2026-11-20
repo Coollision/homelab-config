@@ -15,6 +15,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
@@ -210,6 +211,13 @@ func profileNeedsLogin(secret *corev1.Secret) bool {
 // setProfileAnnotations patches annotations on a creds Secret: non-nil values are set, nil values
 // removed. A missing Secret is ignored.
 func setProfileAnnotations(ctx context.Context, c client.Client, namespace, secretName string, set map[string]*string) error {
+	// The reconcile loop and the login flow both write this Secret; re-read and retry on conflict.
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		return setProfileAnnotationsOnce(ctx, c, namespace, secretName, set)
+	})
+}
+
+func setProfileAnnotationsOnce(ctx context.Context, c client.Client, namespace, secretName string, set map[string]*string) error {
 	secret := &corev1.Secret{}
 	if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: secretName}, secret); err != nil {
 		if apierrors.IsNotFound(err) {
