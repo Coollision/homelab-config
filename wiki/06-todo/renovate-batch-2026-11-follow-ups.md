@@ -43,6 +43,8 @@ Alloy chart 1.16.0, code-server 4.145.2, Prowlarr 3.0.2 (forward Postgres migrat
 - [ ] ArgoCD took about 13 minutes to start applying the new `monitoring` revision (operation Running with no
       per-resource progress, repo-server healthy). Cause not found. Note it if it repeats, together with the
       repo-server memory limits (see the CMP concurrency entry in known issues).
+- [ ] Delete the unused Opaque secret `monitoring-promstack-admission` (namespace `monitoring`, left by the old certgen job) once the
+      `monitoring` app has synced with `tls.enabled: false` and the operator target is up over HTTP. Needs an explicit OK.
 - [ ] n8n logs a deprecation: `N8N_RUNNERS_MODE=internal` (internal task runner mode) will be removed in a future
       version. Plan a switch to external runners before that release (`n8nio/runners` sidecar, version matching n8n; measure its RAM,
       see [Windmill pilot](windmill-pilot.md#n8n-side-verified-2026-11-20-why-staying-is-the-default)).

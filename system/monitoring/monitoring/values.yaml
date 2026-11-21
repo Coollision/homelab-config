@@ -10,6 +10,12 @@ promstack:
       enabled: false
       patch:
         enabled: false
+    # With the admission webhooks off nothing creates a certificate for the operator's HTTPS port, and
+    # chart >= 93.6 refuses to render "TLS on, nobody creating the secret". The only TLS client was
+    # Prometheus scraping the operator's own /metrics, so serve plain HTTP (8080) instead. Re-enabling
+    # the webhooks later means turning this back on (certgen job or cert-manager).
+    tls:
+      enabled: false
     serviceMonitor:
       interval: 60s
       metricRelabelings:

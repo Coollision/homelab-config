@@ -22,7 +22,7 @@ radio playing across all devices, legacy library scanned (116 albums, 31 album a
       sync was triggered afterwards. Only 3 files still carry an ID3v1 block (find them: `tail -c 128` starts with `TAG`).
 - [x] Spotify added (2026-10-09, librespot backend). Its first library sync imported the followed artists and
       saved albums (the album-artist list grew by ~60 entries and one album); not a tag problem.
-- [ ] Home Assistant integration connects (ClusterIP service on 8095); phone playback works.
+- [x] Home Assistant integration connects (ClusterIP service on 8095); phone playback works. Confirmed by hand 2026-11-21.
 - [x] Turn off Music Assistant's cloud remote access unless wanted. Done (checked by hand).
 - [x] Music Assistant version still matches the research (2.10.9 on 2026-11-09).
 - [ ] Optional: Picard on the ~40 single-artist albums for MusicBrainz IDs.
