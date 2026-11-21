@@ -29,8 +29,8 @@ anything that reaches Prometheus can write to it.
 **Operator HTTPS is off (2026-11-21):** the admission webhooks are disabled, so nothing creates a certificate
 for the operator's HTTPS port. kube-prometheus-stack 93.6.0 refuses to render in that state, so
 `promstack.prometheusOperator.tls.enabled: false` serves the operator's own `/metrics` over plain HTTP (8080).
-Turn it back on together with the webhooks (certgen job or cert-manager). A leftover self-signed secret
-`monitoring-promstack-admission` from the old certgen job is now unused.
+Turn it back on together with the webhooks (certgen job or cert-manager). The leftover self-signed secret
+`monitoring-promstack-admission` from the old certgen job was deleted on 2026-11-21.
 
 Prometheus is kept off the Raspberry Pi worker by a required `nodeAffinity` (`type NotIn rpi`):
 long-range queries plus scrape load are too much for it, and a drain of another node must not
