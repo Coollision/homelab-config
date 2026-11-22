@@ -79,6 +79,9 @@ spec:
       {{- end }}
       containers:
         - {{ include "shared-lib.container" . | indent 10 | trim }}
+        {{- with .Values.sidecars }}
+{{ toYaml . | indent 8 }}
+        {{- end }}
       {{- if .Values.storage }}
       volumes:
         {{- range .Values.storage }}
