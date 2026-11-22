@@ -51,6 +51,7 @@ Skills `/validate`, `/gitops-debug`, `/wiki-sync` and agents `chart-reviewer`, `
 - `/new-app <ns>/<name>`: scaffold a shared-lib app, validate render, add wiki stub
 - `/promote-test-app <name>`: move an app from `tests/` to `system/` or `workload/` without downtime
 - `/renovate-batch-verify`: check open Renovate bump branches for breaking changes + render, batch the safe ones
+- `/todo-list`: pool every open TODO (wiki, `.tmp`, memory, scratch, PRs), check what is already done, rank by quick gain; read-only
 
 Domain skills (zigbee, matter/thread, esphome) are local-only and trigger by description.
 
