@@ -108,6 +108,29 @@ scripts/         Operational scripts (scale-to-zero ignore-gen, sablier status, 
 ansible/         Node provisioning — see 00-setup/ansible.md
 ```
 
+## Git hooks {#git-hooks}
+
+`core.hooksPath` points at `.githooks` (set once per clone: `git config core.hooksPath .githooks`).
+
+| Hook | What it does | Blocks? |
+|---|---|---|
+| `pre-commit` | Claude checks whether the staged change makes `wiki/` stale and stages the fix | never |
+| `pre-push` | `scripts/identifier-scan.sh` scans every **added line and commit message** of the commits being pushed (history included, so add-then-remove still counts) for private identifiers | yes |
+
+The repo is public and a pushed branch is published before anyone reviews it, so the scan is a blocking guard rail:
+
+- **Patterns live in Vault**, `kv/shared/identifier-patterns` key `patterns` (one regular expression per line). The script
+  itself contains none. Each successful read refreshes a local cache (mode 600, outside the repo), so pushes keep working
+  while Vault is down; with neither Vault nor cache the push is blocked. Optional local extras: `.claude/private-patterns.txt`.
+- **Generic rules are built in:** RFC1918 addresses are blocked, the k3s default `10.42`/`10.43` ranges and CIDR ranges are allowed.
+- **Matches are printed masked** (`***`), so the block message never leaks the value.
+- **Rebuild or extend the list:** `scripts/identifier-scan.sh --seed-vault --write` merges the values of Vault `shared/domains`
+  and `shared/network` into the store; add one-off rules (node names, emails) with `vault kv patch`.
+- **Audit the whole tree:** `scripts/identifier-scan.sh --tree` reports what is already committed (existing hits do not block
+  pushes, only added lines do).
+- **Skip once:** `SKIP_IDENTIFIER_SCAN=1 git push`. It is a guard rail, not a lock. The same script is meant to run in the
+  Claude agent gateway pod ([plan](../06-todo/claude-agent-gateway.md)) with a read-only Vault policy.
+
 ## Workload revision history (old ReplicaSets)
 
 Every Deployment and StatefulSet in the cluster gets `spec.revisionHistoryLimit: 1`, enforced at

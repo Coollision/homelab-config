@@ -37,6 +37,7 @@ like `<internal-domain>`, `<node-name>` (docs). Details live in `wiki/` — grep
 - GitOps wins: ArgoCD `selfHeal` reverts live `kubectl patch`/`scale` in seconds. Change `values.yaml`, not the cluster (use `kubectl` for read/diagnose, or deliberate temporary maintenance mode in the ArgoCD UI).
 - Don't assume where a service runs (K3s vs NAS vs HA host): verify the backing host first.
 - Vault: never `kv delete/undelete/destroy` without asking. Secrets never go in git.
+- A pre-push hook (`scripts/identifier-scan.sh`, patterns in Vault `shared/identifier-patterns`) blocks pushes that add private identifiers, history included. Fix the commits; skip only with `SKIP_IDENTIFIER_SCAN=1` when the user says so.
 - Destructive cluster actions (`delete pvc|pv|ns`, Longhorn volumes, DB drops) need explicit user OK each time.
 - ArgoCD manifest cache can serve stale renders: if a synced change isn't live, see skill `gitops-debug`.
 - Changing apps/ports/paths/behaviour documented in `wiki/` → update the wiki page too (a pre-commit hook also tries).

@@ -35,7 +35,9 @@ for s in grep:
     refs.add(m.groups())
 
 for p, k in sorted(refs - have): print("MISSING", f"{p}~{k}")
-for p, k in sorted(have - refs): print("UNUSED ", f"{p}~{k}")
+SCRIPT_READ = {"shared/identifier-patterns"}      # read by scripts/identifier-scan.sh, no <secret:> placeholder
+for p, k in sorted(have - refs):
+    if p not in SCRIPT_READ: print("UNUSED ", f"{p}~{k}")
 for p, k in sorted(have):
     if not re.match(r"(shared|system|workload)/", p) or not re.fullmatch(r"[a-z0-9][a-z0-9.-]*", k):
         print("NAMING ", f"{p}~{k}")

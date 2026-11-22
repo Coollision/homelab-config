@@ -28,7 +28,7 @@ case "$rel" in
     ;;
   *.md)
     case "$rel" in .claude/*|CLAUDE.md) exit 0 ;; esac   # internal agent docs may use real names
-    extra=$(grep -v '^#' "$root/.claude/private-patterns.txt" 2>/dev/null | paste -sd'|' -)   # local, gitignored: one ERE per line (names, domains, emails)
+    extra=$(cat "$root/.claude/private-patterns.txt" "${XDG_CACHE_HOME:-$HOME/.cache}/homelab-identifier-scan/patterns" 2>/dev/null | grep -v '^#' | grep -v '^$' | paste -sd'|' -)   # local, gitignored: one ERE per line (names, domains, emails)
     hits=$(sed -E 's/10\.4[23]\.[0-9.]*(\/[0-9]+)?//g; s/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\/[0-9]+//g' "$root/$rel" | grep -nEi '\b((192\.168|172\.(1[6-9]|2[0-9]|3[01]))(\.[0-9]{1,3}){2}|10(\.[0-9]{1,3}){3})\b|\bfd[0-9a-f]{2}:[0-9a-f:]{6,}|\b2a02:[0-9a-f:]+|\b[a-z0-9-]+\.pi[0-9]?\b'"${extra:+|$extra}" | head -5)   # k3s default 10.42/43 and any x.x.x.x/NN network range are not host identifiers
     if [ -n "$hits" ]; then
       echo "Public repo: $rel contains private identifiers. Replace with placeholders (<internal-domain>, <node-name>, <vlan-ip>):" >&2

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Pre-push: block private identifiers (domains, IPs, node names, emails) before they reach the public repo.
+# Patterns live in Vault (kv/shared/identifier-patterns), not here: see scripts/identifier-scan.sh.
+# Scans every added line and commit message of the commits being pushed, history included.
+#
+# Enable once per clone:   git config core.hooksPath .githooks   (already set for this clone)
+# Skip once (guard rail):  SKIP_IDENTIFIER_SCAN=1 git push
+exec "$(git rev-parse --show-toplevel)/scripts/identifier-scan.sh" pre-push "$@"
