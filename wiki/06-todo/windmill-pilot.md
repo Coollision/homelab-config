@@ -74,7 +74,7 @@ TS only; Kestra: JVM, heavy; Hatchet/Temporal: code-first, no UI) lose on at lea
 - Data Tables are available on Community with a **200 MiB instance-wide cap** (`N8N_DATA_TABLES_MAX_SIZE_BYTES`): check the 8 tables against it.
 - Whichever tool runs the flows, copying the tables to plain Postgres helps Grafana/HA access.
 - **n8n internal task-runner mode is deprecated** (docs: removal planned, no version published; one page ties it to n8n 3.0; n8n logs the
-  warning, see [renovate follow-ups](renovate-batch-2026-11-follow-ups.md)). n8n recommends **external runners**: the `n8nio/runners`
+  warning; external runners were rolled out on 2026-11-22). n8n recommends **external runners**: the `n8nio/runners`
   image as a sidecar with a version matching n8n. This makes n8n **two containers with its own sidecar memory**, so "n8n is one app with
   no extras" is weaker than it looked, and the Windmill RAM comparison should be **n8n + runners sidecar vs Windmill server + worker**.
   Affected: the Code nodes (Denderkind, Energie/Water); **not** the custom `WebSocket Request` node (runs in the main process).

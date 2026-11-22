@@ -32,6 +32,21 @@ since the sidecar's render concurrency isn't bounded by ArgoCD's native parallel
 at all. **A cache would not have helped** — the cost is the CPU/memory of parsing the
 index every time, not the network cost of downloading it.
 
+### ArgoCD application-controller gets OOMKilled during big syncs {#argocd-application-controller-oom}
+
+**Symptom:** a sync of the big `monitoring` chart sits in *Running* for minutes with no per-resource progress
+(about 13 minutes was seen once after the 2026-11-17 batch; 381 s on 2026-11-22), and the
+`argocd-application-controller-0` pod restarts. On 2026-11-22 it was `OOMKilled` (exit 137) six minutes into that sync.
+
+**Evidence (2026-11-22):** about 8 controller restarts in the previous 14 days (Prometheus
+`kube_pod_container_status_restarts_total`). Working set peaks at roughly 1070 MB against a **1Gi limit** (it idles
+around 530 Mi). The repo-server and its rendering sidecar had 0 restarts, so this is not the
+[repo-server OOM](#argocd-repo-server-oom) above.
+
+**Status:** open, not fixed. Likely fix: raise the controller memory limit in the `argocd/` chart values (watch
+that the nodes with little free memory can take it, see [node memory asymmetry](#node-memory-asymmetry)). Re-check
+the restart counter after any change.
+
 ### ArgoCD's manifest cache doesn't always bust on `refresh=hard` {#argocd-manifest-cache-doesnt-bust}
 
 **Symptom:** you change a chart's `values.yaml`, push, ArgoCD reports "successfully
