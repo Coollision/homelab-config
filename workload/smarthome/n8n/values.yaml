@@ -45,6 +45,11 @@ config:
   # Renamed in 2.x: WEBHOOK_URL is deprecated in favour of N8N_WEBHOOK_URL, which sets
   # the base URL for both test and production webhooks.
   N8N_WEBHOOK_URL: https://n8n.<secret:kv/data/shared/domains~domain>/
+  # External task runners: the Code node runs in the n8nio/runners sidecar (see `sidecars` below) instead of inside
+  # this process; internal mode is deprecated. Broker listens on loopback only, the sidecar is in the same pod.
+  N8N_RUNNERS_MODE: external
+  N8N_RUNNERS_BROKER_LISTEN_ADDRESS: 127.0.0.1
+  N8N_RUNNERS_AUTH_TOKEN: <secret:kv/data/workload/smarthome/n8n~runners-auth-token>
   # N8N_RUNNERS_ENABLED removed — task runners are always on as of 2.x and n8n now
   # warns that the variable is no longer needed.
   # Opschonen van oude uitvoeringen (7 dagen)
@@ -84,6 +89,33 @@ config:
   # URLs that node may open (';' separated, exact match, empty = none). matter-server has no auth and also accepts
   # remove_node, so the node must not be usable against other in-cluster WebSockets.
   WS_REQUEST_ALLOWED_URLS: ws://matter-server-service:5580/ws
+
+# n8nio/runners must always run the same tag as n8nio/n8n (Renovate groups both, see renovate.json).
+sidecars:
+  - name: task-runners
+    image: n8nio/runners:2.49.3
+    env:
+      - name: N8N_RUNNERS_TASK_BROKER_URI
+        value: http://127.0.0.1:5679
+      - name: N8N_RUNNERS_AUTH_TOKEN
+        value: <secret:kv/data/workload/smarthome/n8n~runners-auth-token>
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      runAsNonRoot: true
+      runAsUser: 1000
+      runAsGroup: 1000
+      seccompProfile:
+        type: RuntimeDefault
+    resources:
+      requests:
+        cpu: 50m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 512Mi
 
 resources:
   requests:

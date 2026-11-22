@@ -27,6 +27,12 @@
       "labels": ["test-voice-bridge"]
     },
     {
+      "description": "n8n - the runners sidecar image must always carry the same tag as n8n itself",
+      "matchPackageNames": ["n8nio/n8n", "n8nio/runners"],
+      "groupName": "n8n",
+      "groupSlug": "n8n"
+    },
+    {
       "description": "Intel device plugins - operator and GPU plugin charts must stay on the same version",
       "matchBaseBranches": ["master"],
       "matchPackageNames": ["intel-device-plugins-operator", "intel-device-plugins-gpu"],

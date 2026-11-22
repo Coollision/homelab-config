@@ -43,9 +43,13 @@ Alloy chart 1.16.0, code-server 4.145.2, Prowlarr 3.0.2 (forward Postgres migrat
 - [ ] ArgoCD took about 13 minutes to start applying the new `monitoring` revision (operation Running with no
       per-resource progress, repo-server healthy). Cause not found. Note it if it repeats, together with the
       repo-server memory limits (see the CMP concurrency entry in known issues).
-- [ ] n8n logs a deprecation: `N8N_RUNNERS_MODE=internal` (internal task runner mode) will be removed in a future
-      version. Plan a switch to external runners before that release (`n8nio/runners` sidecar, version matching n8n; measure its RAM,
-      see [Windmill pilot](windmill-pilot.md#n8n-side-verified-2026-11-20-why-staying-is-the-default)).
-      Checked 2026-11-20: still logged at every start (internal mode; also 'Python 3 is missing' for the internal Python runner). Fix = `N8N_RUNNERS_MODE=external` + `N8N_RUNNERS_AUTH_TOKEN` (Vault) + `N8N_RUNNERS_BROKER_LISTEN_ADDRESS` on n8n, and an `n8nio/runners` sidecar whose tag must always equal the n8n tag (Renovate would need to bump both together). No NODE_FUNCTION_ALLOW_* vars are set today. Pod limit is 1Gi, so size the sidecar (and recheck n8n's OOM history) before rolling out.
+- [ ] n8n external task runners are configured (2026-11-22, not yet rolled out): `N8N_RUNNERS_MODE=external`, broker on loopback,
+      `n8nio/runners` as a `sidecars:` container (new optional shared-lib value) with the token in Vault (`runners-auth-token`).
+      Renovate groups `n8nio/n8n` + `n8nio/runners` so the tags stay equal. After the push: check the n8n pod is 2/2, the deprecation
+      and 'Python 3 is missing' lines are gone from the startup log, a Code-node workflow still runs, and the sidecar's real RAM
+      (`kubectl top pod --containers`) fits its 256Mi/512Mi sizing. Tick this box once that holds. Scaling runners independently
+      later = move the container into its own Deployment behind a Service on port 5679 (needs a non-loopback broker address).
+      Revisit scaling only if executions queue up or Code-node load grows; then go to n8n queue mode (main + Redis + workers,
+      one runners sidecar per worker), not just a separate runners Deployment.
 - [ ] Matter: new pairings are refused when the device's certification is not signed by the CSA (DIY/test devices);
       OTA upload through the server now needs `--enable-test-net-dcl`. Neither applies today.
