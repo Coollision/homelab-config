@@ -37,6 +37,9 @@ type Share struct {
 	NFSPath            string `json:"nfs_path"`
 	LonghornVolumeName string `json:"longhorn_volume_name"`
 	Attached           bool   `json:"attached"`
+	// WakeGroup is the Sablier group that owns the volume (the PVC's app.kubernetes.io/instance
+	// label, which shared-lib also uses as sablier.group). Empty when unknown.
+	WakeGroup string `json:"wake_group,omitempty"`
 }
 
 // New returns a share with the Python dataclass defaults (nfs, attached).

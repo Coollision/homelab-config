@@ -19,6 +19,7 @@ func TestDefaults(t *testing.T) {
 		SMBDeploymentName: "smb-server", SMBServiceName: "smb-server", SMBImage: "dperson/samba:latest",
 		SMBWorkgroup: "WORKGROUP", SMBServerString: "Homelab Storage", NFSMountOptions: DefaultNFSMountOptions,
 		MountReconcileInterval: 15, InitialMountWait: 30,
+		WakeSablierURL: "http://sablier.kube-system.svc.cluster.local:10000", WakeSessionDuration: "30m",
 		LonghornNamespace: "storage", LonghornGroup: "longhorn.io", LonghornVersion: "v1beta2", LonghornPlural: "volumes",
 		MaxRetries: 3, InitialDelay: 1, BackoffMultiplier: 2, RetryableStatusCodes: []int{409, 429, 500, 503, 504},
 		SMBResources: DefaultSMBResources(),

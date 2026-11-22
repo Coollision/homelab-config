@@ -27,6 +27,8 @@ const (
 	// startup script creates, so an updated smb.conf reaches the running smbd without a pod roll.
 	SMBConfDir  = "/etc/smb-conf"
 	SMBConfPath = SMBConfDir + "/" + SMBConfKey
+	// SMBWakePath is the `root preexec` hook installed when smb.wakeOnConnect is enabled.
+	SMBWakePath = "/usr/local/bin/smb-wake.sh"
 )
 
 const vetoFiles = "/.DS_Store/._*/.Spotlight-V100/.TemporaryItems/.Trashes/.fseventsd/Thumbs.db/desktop.ini/$RECYCLE.BIN/System Volume Information/lost+found/"
@@ -68,6 +70,10 @@ func SMBConf(cfg *config.Config, ss []shares.Share) string {
 		if s.ReadOnly() {
 			writable, readOnly, writeList = "no", "yes", ""
 		}
+		var wake []string
+		if cfg.WakeOnConnect && s.WakeGroup != "" && s.MountType == shares.MountNFS {
+			wake = []string{fmt.Sprintf("root preexec = %s %s %s", SMBWakePath, s.Name, s.WakeGroup)}
+		}
 		lines = append(lines,
 			"["+s.Name+"]",
 			"path = "+s.Path,
@@ -85,8 +91,9 @@ func SMBConf(cfg *config.Config, ss []shares.Share) string {
 			"delete veto files = yes",
 			"create mask = 0755",
 			"directory mask = 0755",
-			"",
 		)
+		lines = append(lines, wake...)
+		lines = append(lines, "")
 	}
 	return strings.Join(lines, "\n")
 }
@@ -119,9 +126,27 @@ func MountReconciler(cfg *config.Config) string {
 		"Conf":     SMBConfPath,
 		"Opts":     cfg.NFSMountOptions,
 		"Interval": cfg.MountReconcileInterval,
+		"Wake":     cfg.WakeOnConnect,
 	})
 	if err != nil {
 		panic(err) // template is static; only a programming error can fail here
+	}
+	return b.String()
+}
+
+//go:embed scripts/smb-wake.sh.tmpl
+var wakeTmpl string
+
+var wakeTemplate = template.Must(template.New("wake").Delims("<%", "%>").Parse(wakeTmpl))
+
+// WakeScript renders the Samba `root preexec` hook that asks Sablier to start a detached share's app.
+func WakeScript(cfg *config.Config) string {
+	var b bytes.Buffer
+	if err := wakeTemplate.Execute(&b, map[string]any{
+		"URL":      cfg.WakeSablierURL,
+		"Duration": cfg.WakeSessionDuration,
+	}); err != nil {
+		panic(err)
 	}
 	return b.String()
 }
@@ -160,6 +185,16 @@ func StartupScript(cfg *config.Config) string {
 		"echo ''",
 		"",
 	)
+	if cfg.WakeOnConnect {
+		lines = append(lines,
+			"# Wake-on-connect hook: a client opening a detached share asks Sablier to start its app",
+			fmt.Sprintf("cat > %s <<'SMB_OPERATOR_WAKE_EOF'", SMBWakePath),
+			strings.TrimRight(WakeScript(cfg), "\n"),
+			"SMB_OPERATOR_WAKE_EOF",
+			"chmod +x "+SMBWakePath,
+			"",
+		)
+	}
 	w := cfg.InitialMountWait
 	lines = append(lines,
 		fmt.Sprintf("echo 'Waiting up to %ds for initial mounts...'", w),

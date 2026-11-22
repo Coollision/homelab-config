@@ -43,8 +43,9 @@ pv-reclaimer is described in [its own section](#pv-reclaimer).
 | `smb.image` | `dperson/samba:latest` |
 | `smb.workgroup` | `WORKGROUP` |
 | `smb.serverString` | `Homelab Storage` |
-| `smb.nfsMountOptions` | `vers=4.2,noresvport,soft,timeo=50,retrans=2` (keep `soft`) |
-| `smb.mountReconcileInterval` | `15` |
+| `smb.nfsMountOptions` | `vers=4.2,noresvport,soft,timeo=50,retrans=2` (keep `soft`; the chart sets `timeo=20,retrans=1`) |
+| `smb.mountReconcileInterval` | `15` (the chart sets `2`) |
+| `smb.wakeOnConnect.enabled` | `false`. A client connecting to a detached share runs a Samba `root preexec` hook that asks Sablier (`sablierUrl`, `sessionDuration`) to start group = the PVC's `app.kubernetes.io/instance` label. Rate-limited to 1/min per group; never refuses the connection. |
 | `smb.initialMountWait` | `30` |
 | `longhorn.{namespace,group,version,plural}` | `storage`, `longhorn.io`, `v1beta2`, `volumes` |
 | `retry.{maxRetries,initialDelay,backoffMultiplier,retryableStatusCodes}` | `3`, `1`, `2`, `[409,429,500,503,504]` |

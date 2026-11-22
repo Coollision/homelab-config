@@ -1,0 +1,32 @@
+#!/bin/bash
+# Managed by smb-operator. Samba `root preexec` hook: $1 = share name, $2 = Sablier group.
+# A client connecting to a detached share (no NFS mount, the app is scaled to zero) asks Sablier
+# to start the app, so the volume attaches and the share fills in. Never exits non-zero: that
+# would refuse the client's connection.
+SABLIER='<% .URL %>'
+DURATION='<% .Duration %>'
+HOLD=60
+
+name="$1"; group="$2"
+[ -n "$name" ] && [ -n "$group" ] || exit 0
+
+# Attached shares need no wake-up (reads /proc/self/mounts, never touches the share).
+awk -v p="/shares/$name" '$2==p && $3 ~ /^nfs/ {f=1} END {exit !f}' /proc/self/mounts && exit 0
+
+# One request per group per HOLD seconds, however many clients and tcons connect.
+stamp="/run/smb-wake.$group"
+now=$(date +%s)
+last=$(cat "$stamp" 2>/dev/null || echo 0)
+[ $(( now - last )) -ge "$HOLD" ] || exit 0
+echo "$now" > "$stamp"
+
+hostport="${SABLIER#*://}"; hostport="${hostport%%/*}"
+host="${hostport%%:*}"; port="${hostport##*:}"
+[ "$port" != "$hostport" ] || port=80
+timeout 5 bash -c '
+  exec 3<>"/dev/tcp/$1/$2" || exit 1
+  printf "GET /api/strategies/dynamic?group=%s&session_duration=%s HTTP/1.0\r\nHost: %s\r\n\r\n" "$3" "$4" "$1" >&3
+  head -n 1 <&3
+' _ "$host" "$port" "$group" "$DURATION" >/dev/null 2>&1
+echo "[smb-wake] $name is detached; asked Sablier to start group $group" >&2
+exit 0

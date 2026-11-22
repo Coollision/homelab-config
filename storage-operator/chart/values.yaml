@@ -94,8 +94,17 @@ config:
       serverString: Homelab Storage Server
       # 'soft' is required: a hard NFS mount against a vanished Longhorn share-manager wedges smbd
       # in uninterruptible sleep and the pod hangs in Terminating.
-      nfsMountOptions: vers=4.2,noresvport,soft,timeo=50,retrans=2
-      mountReconcileInterval: 15
+      # timeo is in tenths of a second: a dead share-manager fails a call after ~4s (was ~15s), which
+      # is how long one client's smbd (all of its shares share one process) can freeze on it.
+      nfsMountOptions: vers=4.2,noresvport,soft,timeo=20,retrans=1
+      # Also bounds how fast a stale mount is noticed and swapped for the empty placeholder dir.
+      mountReconcileInterval: 2
+      # A client connecting to a detached share (app scaled to zero) asks Sablier to start the app
+      # (group = the PVC's app.kubernetes.io/instance label). Needs the pod to reach Sablier.
+      wakeOnConnect:
+        enabled: true
+        sablierUrl: http://sablier.kube-system.svc.cluster.local:10000
+        sessionDuration: 30m
       initialMountWait: 30
     longhorn:
       namespace: storage

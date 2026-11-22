@@ -44,6 +44,32 @@ detach() {
   [ -z "$(current_mount "$mp")" ]
 }
 
+# Is a mounted share still answering? A stale NFS mount (the share-manager is gone because Longhorn
+# detached the volume) makes every stat() block until the soft timeout, and smbd serves all of one
+# client's shares from a single process, so one dead share would freeze the client's other shares
+# too. The table only learns about a detach after the ConfigMap propagates (up to ~1 min), so the
+# reconciler checks the mount itself. The probe is bounded and runs on the mount point only.
+mount_alive() {
+  timeout 3 stat -t "$1" >/dev/null 2>&1
+}
+
+# Unix time a path was last found stale; remounting is held off for STALE_HOLD seconds so a
+# vanished endpoint that is still in the table is not retried on every pass.
+declare -A STALE_AT
+STALE_HOLD=20
+
+# Placeholder shown while a share has no NFS mount. It lives in the local directory underneath the
+# mount point, so the real mount hides it the moment the volume attaches and nothing has to clean up.
+PLACEHOLDER='_Volume offline - data will appear shortly.txt'
+write_placeholder() {
+  local f="$1/$PLACEHOLDER"
+  [ -e "$f" ] && return 0
+  printf '%s\n' \
+    'This volume is currently offline (its app is scaled to zero).' \
+    'It will be mounted here automatically once the app starts.' \
+    > "$f" 2>/dev/null || true
+}
+
 # Is this mount path listed in the table at all?
 in_table() {
   awk -F'\t' -v p="$1" '$1 !~ /^#/ && $2 == p { found = 1 } END { exit !found }' "$TABLE"
@@ -52,9 +78,21 @@ in_table() {
 # Bring one mount point in line with its desired endpoint ('' means keep it unmounted).
 reconcile_one() {
   local mpath="$1" want="$2" have
-  # Every share path is created here, not at pod start, so shares added later need no pod roll.
-  mkdir -p "$mpath"
   have="$(current_mount "$mpath")"
+  # Every share path is created here, not at pod start, so shares added later need no pod roll.
+  # Only when nothing is mounted there: mkdir -p stat()s the path, which blocks on a stale mount.
+  [ -n "$have" ] || mkdir -p "$mpath"
+
+  # A mount that no longer answers is dropped at once (lazy: it must not block), whatever the table
+  # says, so smbd falls back to the empty directory underneath instead of hanging on dead NFS.
+  if [ -n "$have" ] && ! mount_alive "$mpath"; then
+    umount -l "$mpath" 2>/dev/null
+    STALE_AT[$mpath]=$(date +%s)
+    log "stale mount $have at $mpath dropped; serving empty share"
+    have=""
+  fi
+
+  [ -n "$have" ] || write_placeholder "$mpath"
 
   [ "$want" = "$have" ] && return 0
 
@@ -69,6 +107,10 @@ reconcile_one() {
 
   if [ -z "$want" ]; then
     log "$mpath is detached (no endpoint); serving empty share"
+    return 0
+  fi
+
+  if [ $(( $(date +%s) - ${STALE_AT[$mpath]:-0} )) -lt "$STALE_HOLD" ]; then
     return 0
   fi
 

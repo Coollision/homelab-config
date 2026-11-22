@@ -312,3 +312,36 @@ func TestPodTemplateHasNoSubPathConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestWakeOnConnect(t *testing.T) {
+	cfg := *loadConfigs(t)["live"]
+	s := shares.New("esphome", "smarthome", "esphome", shares.AccessShared)
+	s.WakeGroup = "esphome"
+	bare := shares.New("nogroup", "x", "nogroup", shares.AccessShared)
+
+	if strings.Contains(SMBConf(&cfg, []shares.Share{s}), "root preexec") {
+		t.Fatal("wake hook rendered while wakeOnConnect is off")
+	}
+	if strings.Contains(StartupScript(&cfg), SMBWakePath) {
+		t.Fatal("wake script installed while wakeOnConnect is off")
+	}
+
+	cfg.WakeOnConnect = true
+	cfg.WakeSablierURL, cfg.WakeSessionDuration = "http://sablier.example:10000", "45m"
+	conf := SMBConf(&cfg, []shares.Share{s, bare})
+	if !strings.Contains(conf, "root preexec = "+SMBWakePath+" esphome esphome\n") {
+		t.Fatalf("missing preexec for share with a group:\n%s", conf)
+	}
+	if strings.Count(conf, "root preexec") != 1 {
+		t.Fatal("share without a Sablier group must not get a wake hook")
+	}
+	if !strings.Contains(MountReconciler(&cfg), "Opening this share asked for it to be started") {
+		t.Fatal("placeholder should mention the wake-up when wakeOnConnect is on")
+	}
+	start := StartupScript(&cfg)
+	for _, want := range []string{SMBWakePath, "SABLIER='http://sablier.example:10000'", "DURATION='45m'"} {
+		if !strings.Contains(start, want) {
+			t.Fatalf("startup script lacks %q", want)
+		}
+	}
+}

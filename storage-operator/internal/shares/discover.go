@@ -87,6 +87,7 @@ func ResolvePVC(p PVCInput, volume map[string]any, lbIP string) PVCResult {
 			return PVCResult{Status: StatusError, Log: "Failed to parse NFS endpoint: " + ep, Warn: true}
 		}
 		s := New(shareName, p.Namespace, p.Name, access)
+		s.WakeGroup = p.Labels["app.kubernetes.io/instance"]
 		s.NFSServer, s.NFSPath = server, path
 		return PVCResult{
 			Share:     &s,
@@ -98,6 +99,7 @@ func ResolvePVC(p PVCInput, volume map[string]any, lbIP string) PVCResult {
 
 	if nestedStr(nestedMap(volume, "spec"), "accessMode") == "rwx" {
 		s := New(shareName, p.Namespace, p.Name, access)
+		s.WakeGroup = p.Labels["app.kubernetes.io/instance"]
 		s.Attached = false
 		return PVCResult{
 			Share:  &s,

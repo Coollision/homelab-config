@@ -39,6 +39,12 @@ type Config struct {
 	MountReconcileInterval int
 	InitialMountWait       int
 
+	// WakeOnConnect (smb.wakeOnConnect): a client connecting to a detached share asks Sablier to
+	// start the owning app. Off by default (parity); see render.WakeScript.
+	WakeOnConnect       bool
+	WakeSablierURL      string
+	WakeSessionDuration string
+
 	LonghornNamespace string
 	LonghornGroup     string
 	LonghornVersion   string
@@ -126,6 +132,9 @@ func Parse(text string, env Env) (*Config, error) {
 		NFSMountOptions:        getStr(smb, "nfsMountOptions", DefaultNFSMountOptions),
 		MountReconcileInterval: getInt(smb, "mountReconcileInterval", 15),
 		InitialMountWait:       getInt(smb, "initialMountWait", 30),
+		WakeOnConnect:          getBool(section(smb, "wakeOnConnect"), "enabled", false),
+		WakeSablierURL:         getStr(section(smb, "wakeOnConnect"), "sablierUrl", "http://sablier.kube-system.svc.cluster.local:10000"),
+		WakeSessionDuration:    getStr(section(smb, "wakeOnConnect"), "sessionDuration", "30m"),
 
 		LonghornNamespace: getStr(lh, "namespace", "storage"),
 		LonghornGroup:     getStr(lh, "group", "longhorn.io"),
