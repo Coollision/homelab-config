@@ -1,6 +1,8 @@
 # Flannel IPAM lease leak after hard reboot
 
-**TODO: automate this or fix the root cause.**
+**Status (2026-11-22): root cause known, waiting on an upstream Multus fix; no automation on purpose.** After a reboot,
+check for stale leases and run the manual fix below if there are many. Last cleanup: 2026-11-22 (138 stale leases freed
+across four nodes, no pod affected).
 
 ## What happens
 
@@ -59,9 +61,24 @@ start getting assigned addresses within seconds.
 
 ## Root cause
 
-Flannel does not clean up IPAM leases if the CNI `DEL` call is skipped (hard
-reboot, OOMKill of the container runtime, etc.). The lease files persist on disk
-and flannel counts them as in-use on next startup.
+Found 2026-11-22. The leaks happen at **node boot**, not during normal operation: on all four nodes every stale lease
+was created before the node's last boot and none during the following weeks of uptime.
+
+The CNI chain is Multus in thick mode, whose shim calls a daemon (a pod) over `/run/multus/multus.sock`. At boot
+containerd tears down the pre-reboot pod sandboxes and sends CNI `DEL` for each, but the Multus daemon pod is not up yet,
+so the shim logs `CmdDel (shim): CheckAPIReadyNow: Daemon not reachable over socketfile` and still reports success. The
+runtime never retries, and the host-local IPAM lease (released only by a successful `DEL`) stays behind. The number of
+those errors in the containerd log at boot matches the number of stale leases. A drain before the reboot avoids most of it,
+but not DaemonSet pods, crashes or power loss.
+
+Upstream: the Multus shim can report a successful `DEL` when the daemon is unavailable (pull request #1571 in
+k8snetworkplumbingwg/multus-cni, open on 2026-11-22, makes the shim wait up to 60 s for the daemon and return the error so
+the runtime retries). It is not in a release yet (v4.3.2 does not have it). We run v4.3.1, now pinned as `v4.3.1-thick`
+(it was the floating `stable-thick` tag until 2026-11-22, which had silently moved on to 4.3.2 without being deployed and
+was invisible to Renovate), so Renovate will propose new Multus releases.
+
+**Follow-up:** when a Multus release contains that fix, bump the image (pin it), reboot one drained node and check that no
+stale leases appear. Until then, with about 40 pods per node and 254 addresses, the leak is harmless.
 
 ## Long-term fixes to consider
 
