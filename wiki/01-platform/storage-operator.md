@@ -94,6 +94,17 @@ with one deprecation log line. Full key list and defaults: `API.md`.
 - **Detach / Sablier.** When a volume detaches (last consumer scaled to zero), its share is
   **kept** in `smb.conf` but unmounted until the volume reattaches; the PVC shows `detached`
   and a `ShareDetached` event each reconcile. The pod is never rolled for this.
+- **Stale mounts, placeholder, wake-on-connect (v0.4.0).** smbd serves all of one client's shares
+  from one process, so a call blocked on a dead NFS mount freezes that client's *other* shares too.
+  The in-pod reconciler therefore probes every mounted share each pass (3 s `stat`) and lazily
+  drops one that stops answering, without waiting for the ConfigMap detach signal (up to ~1 min).
+  The chart sets `timeo=20,retrans=1` (a dead call fails in ~4 s) and `mountReconcileInterval: 2`.
+  While a share has no mount, the directory underneath holds
+  `_Volume offline - data will appear shortly.txt` (hidden by the real mount once it lands). With
+  `smb.wakeOnConnect.enabled`, connecting to such a share runs a Samba `root preexec` hook that asks
+  Sablier to start the owning app (group = the PVC's `app.kubernetes.io/instance` label; at most one
+  request per group per minute; never refuses the connection). Expect the data ~1-2 min later
+  (volume attach + ConfigMap propagation).
 - **Adding or removing a share does not restart smbd** (template version 2.2). The pod template
   is share-independent: `smb.conf` is a whole-directory ConfigMap mount symlinked to
   `/etc/samba/smb.conf` (a `subPath` mount is never refreshed by kubelet), the in-pod reconciler
