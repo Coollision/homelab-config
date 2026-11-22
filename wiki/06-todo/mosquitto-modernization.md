@@ -133,6 +133,9 @@ One variable at a time, one commit per phase, observe at least 24 h before the n
 - [ ] Vault cleanup (needs an explicit OK, never delete unasked): the old `credential-1..8` keys in `workload/smarthome/mosquitto` are unused since the `clients.conf` switch (values were copied to `<name>-password`); keep them until the new setup has run for a while as the rollback path.
 - Plaintext cannot be retired completely (Shelly Gen1, Moonraker); the end state is firewall-scoped plaintext plus TLS for the rest.
 
+- [ ] Shelly devices reconnect in bursts and the cause is still unexplained: correlate the reconnects (Loki, `log_type`
+      debug) with broker restarts, Wi-Fi roaming and the keepalive setting before touching ACLs.
+
 ## Metrics exporter (optional follow-up) {#metrics-exporter}
 
 The dashboard and the `MQTT unauthorised connection` alert are log-based. Broker health (clients connected, message

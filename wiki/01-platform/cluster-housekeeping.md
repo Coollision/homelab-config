@@ -72,6 +72,10 @@ Balancing also ignores **pod count**: the 40-pod-cap Raspberry Pi node sat at 83
 with ~40% CPU/memory, so it was a permanent eviction source (~220 evictions/day, 98% from
 that node, pods rescheduled straight back onto it). CPU target is 90% so short nightly
 spikes don't trigger evictions. Found via Loki (`{app="descheduler"}`, log level v3).
+Verified 2026-11-20: 0 evictions in 24 h and no overutilized node (before the fix: ~1,560 evictions in 7 days).
+
+**Accepted risks:** single-instance StatefulSets (Mosquitto, Vault) may restart on a rare eviction, and
+`maxNoOfPodsToEvictPerNamespace` stays at 6.
 
 ## Sablier — scale-to-zero for idle apps
 

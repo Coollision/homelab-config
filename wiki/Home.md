@@ -103,7 +103,6 @@ Planned work that is not built yet. Pages move to their normal section once done
 | [UPS shutdown — one-page plan](06-todo/ups-shutdown-overview.md) | Readable summary with flow diagrams, tiers, triggers, recovery and the open decisions |
 | [UPS graceful shutdown](06-todo/ups-graceful-shutdown.md) | Reviewed design: staged load shedding, label tiers, data-safe shutdown, UPS cycle + auto-recovery |
 | [Bazarr subtitle gaps](06-todo/bazarr-subtitle-gaps.md) | Missing Dutch subtitles: investigate Lingarr, provider cleanup, optional Whisper |
-| [Descheduler follow-up](06-todo/descheduler-followup.md) | Eviction-churn fix verified 2026-11-20 (0 evictions/day); only accepted risks left |
 | [Remote-access proxy](06-todo/remote-access-proxy.md) | Browser-only access to internal sites via an mTLS forward proxy + Slack approval; NAS real-client-IP experiment and the 443 question |
 | [Renovate batch follow-ups](06-todo/renovate-batch-2026-11-follow-ups.md) | Snapshot/dump cleanup, n8n runner deprecation, slow monitoring sync |
 | [Future ideas](06-todo/future-ideas.md) | Vetted backlog: UniFi Poller, ntfy, Paperless, BLE presence; hardware-gated LLM + heating |

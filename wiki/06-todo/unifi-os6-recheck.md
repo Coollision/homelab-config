@@ -51,6 +51,13 @@
 - Our situation: Home Assistant already shows the Thread role and channel per device, and the border router exposes its
   router table, so UniFi would mostly add a map. The risk side is the mDNS requirement on the Matter VLAN.
 
+## Other post-update follow-ups (from the 2026-11-10 console update)
+
+- [ ] Two devices in one room (an AP and a switch) were already offline before the update: find out why or retire them.
+- [ ] Take a fresh console backup in the UI (the last automatic one predates the update) and keep it with the other
+      backups.
+- [ ] The rack switch has its own pending firmware: update it separately, not together with the console.
+
 ## 2. Is `mcast_to_unicast` still needed, and does the watchdog still work?
 
 - [ ] **Background:** live TV on the bedroom decoder (behind a WiFi mesh hop) only works because the gateway's

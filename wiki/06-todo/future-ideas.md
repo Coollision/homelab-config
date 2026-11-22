@@ -38,6 +38,20 @@
       Decision 2026-11-20: alert via Prometheus + Alertmanager like every other cluster alert, not an HA automation (HA down = no alert).
       Blocker: nothing exports the bridge state (mosquitto-exporter only reads `$SYS`), and an extra exporter would not catch a hung Z2M that keeps its MQTT connection, so it is not worth a new component yet. Revisit if a real stuck-Z2M signal exists (e.g. a Z2M health or last-message-age metric).
 
+## Dated items and decisions
+
+- [ ] **Usenet (Eweka) + Spotweb for Dutch and kids content**, Black Friday **2026-11-27**: decide before buying whether
+      one account may serve the three arr locations. Eweka's terms say accounts are for individual use and monitor
+      multi-IP logins (50 simultaneous connections). Options: ask support first, or three separate accounts
+      (about EUR 112 for 15 months on the deal). Nothing is bought yet.
+- [ ] **ESPHome 2026.9.0 OTA migration: the Christmas-village device is still pending.** Only bring it up in the
+      weeks before Christmas.
+- [ ] **Storage operator leftovers** (from the 2026-10-31 build report; check each against the live chart first): pin the
+      `crazymax/samba` image (rolls the SMB pod), reconcile the Service in place instead of create-only, drop the
+      deprecated config keys and the polling mode, remove the unused reclaimer webhook value, and decide whether the
+      reclaimer should ever keep the claim name instead of clearing the whole `claimRef` (needs a check that nothing
+      relies on another PVC picking up a released PV).
+
 ## Waiting on hardware
 
 - [ ] **Local LLM stack** (Open WebUI plus a model, HA conversation agent, wiki Q&A, alert triage): waits for a Mac
