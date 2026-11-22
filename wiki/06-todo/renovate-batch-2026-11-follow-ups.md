@@ -43,7 +43,7 @@ Alloy chart 1.16.0, code-server 4.145.2, Prowlarr 3.0.2 (forward Postgres migrat
 - [ ] ArgoCD took about 13 minutes to start applying the new `monitoring` revision (operation Running with no
       per-resource progress, repo-server healthy). Cause not found. Note it if it repeats, together with the
       repo-server memory limits (see the CMP concurrency entry in known issues).
-- [ ] n8n external task runners are configured (2026-11-22, not yet rolled out): `N8N_RUNNERS_MODE=external`, broker on loopback,
+- [x] n8n external task runners are configured (2026-11-22, rolled out and verified: pod 2/2, Code-node run via the sidecar ok, ~135Mi under load): `N8N_RUNNERS_MODE=external`, broker on loopback,
       `n8nio/runners` as a `sidecars:` container (new optional shared-lib value) with the token in Vault (`runners-auth-token`).
       Renovate groups `n8nio/n8n` + `n8nio/runners` so the tags stay equal. After the push: check the n8n pod is 2/2, the deprecation
       and 'Python 3 is missing' lines are gone from the startup log, a Code-node workflow still runs, and the sidecar's real RAM
