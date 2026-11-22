@@ -220,7 +220,7 @@ in one place before a k3s upgrade. `k3s_setup` refuses to downgrade an installed
 
 ## `node_update_drain_timeout` needs to be generous too, not just the post-reboot heal wait
 
-Confirmed live on `master-green`: the eviction-request handling above is real and does
+Confirmed live on `<control-plane-node>`: the eviction-request handling above is real and does
 work, but Longhorn can take longer than a short window to actually finish evacuating an
 instance-manager — one node's drain hit the (then-)300s `--timeout` and rolled back
 cleanly via rescue, and a follow-up check maybe 30 seconds later showed that exact

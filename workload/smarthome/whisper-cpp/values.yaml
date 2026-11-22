@@ -118,7 +118,7 @@ affinity:
           - key: type
             operator: In
             values: ["mini"]
-    # master-green also runs etcd + the control plane: only land there if worker-blue is full
+    # The control-plane node also runs etcd + the control plane: only land there if the other GPU node is full
     preferred:
       - weight: 50
         matchExpressions:

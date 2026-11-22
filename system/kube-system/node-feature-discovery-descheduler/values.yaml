@@ -71,7 +71,7 @@ descheduler:
   deschedulerPolicy:
     # Feed LowNodeUtilization with ACTUAL usage from metrics-server instead of the
     # default (sum of pod *requests*). Requests-based balancing was pathological here:
-    # master-green sat at 94% CPU-requests from pinned/control-plane pods, so every
+    # The control-plane node sat at 94% CPU-requests from pinned/control-plane pods, so every
     # cycle the descheduler burned its eviction budget on 0-request BestEffort pods
     # that never moved the metric -> endless futile eviction loop.
     metricsProviders:

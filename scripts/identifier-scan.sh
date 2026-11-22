@@ -39,7 +39,7 @@ ZERO = "0" * 40
 
 # Generic, non-private rules. RFC1918 except the k3s default pod/service ranges (10.42/10.43); CIDR forms are allowed.
 GENERIC = [
-    r"(?<![\d.])(?:192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|10\.(?!4[23]\.)\d{1,3}\.\d{1,3}\.\d{1,3})(?!\d)(?!/\d)",
+    r"(?<![\d.])(?:192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|10\.(?!4[23]\.|255\.255\.255)\d{1,3}\.\d{1,3}\.\d{1,3})(?!\d)(?!/\d)",
 ]
 
 def run(*a, inp=None):
@@ -145,7 +145,7 @@ def seed(write):
         for k, v in data.items():
             for part in re.split(r"[,\s]+", str(v)):
                 part = part.strip()
-                if len(part) >= 4 and not part.startswith(("http", "-")):
+                if len(part) >= 4 and not part.startswith(("http", "-", "10.42.", "10.43.")):   # k3s defaults are allowed
                     pats.append(re.escape(part))
     if os.path.exists(EXTRAS): pats += parse(open(EXTRAS).read())
     existing = vault_get(VAULT_PATH, "patterns")        # merge, never drop hand-added rules (node names, emails)

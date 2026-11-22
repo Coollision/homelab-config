@@ -124,7 +124,7 @@ No node migration, no IP re-addressing, no routing complexity.
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│  K8s node (e.g. node-gn)   — VLAN 30: 192.168.30.10     │
+│  K8s node (e.g. node-gn)   — VLAN 30: <node-ip>          │
 │                                                          │
 │  Physical NIC: uplink0 (untagged, VLAN 30 native)        │
 │  VLAN sub-ifaces: vlan40 + vlan5 (NO IPs on node)│

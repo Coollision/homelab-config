@@ -498,7 +498,7 @@
       # on this minimal preseeded Debian (confirmed empty
       # /etc/kernel/postinst.d/ apart from initramfs-tools/update-grub) --
       # so that file NEVER appears here, even right after installing a
-      # brand-new kernel. Confirmed live: worker-blue had 6.1.0-52 fully
+      # brand-new kernel. Confirmed live: a worker had 6.1.0-52 fully
       # installed (dpkg ii) while still running 6.1.0-49, uptime 35+ days,
       # and this check kept reporting "no reboot needed" the whole time.
       # Compare the running kernel against the newest *installed* kernel

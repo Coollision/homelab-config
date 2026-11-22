@@ -8,7 +8,7 @@
 # what nothing else sees is "does it ANSWER", and the NAS tertiary has no Kubernetes object at all.
 # Alert rules live in the same chart (prometheusRule below). See wiki/01-platform/dns.md.
 prometheus-blackbox-exporter:
-  # worker-silver is the only `type: vm` node and Technitium pods are forbidden from it (see
+  # The VM worker is the only `type: vm` node and Technitium pods are forbidden from it (see
   # system/dns/technitium). That matters: a pod on the SAME node as a Technitium pod cannot reach
   # that pod's MACVLAN address (macvlan parent -> child is not routable), so a prober anywhere else
   # would false-alarm whenever a resolver reschedules onto its node.

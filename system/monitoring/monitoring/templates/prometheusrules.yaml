@@ -326,13 +326,13 @@ spec:
     # peak (Nov 2026: CPU 75 °C, NVMe 58 °C) on purpose: the rack is fan-controlled, so a
     # reading above that means a fan/airflow problem, not load. Hardware limits are far
     # higher (CPU 105 °C, NVMe 90 °C). `> 0` drops the bogus -273 °C placeholder sensors
-    # (master-green thermal_zone0) without naming the chip.
+    # (<control-plane-node> thermal_zone0) without naming the chip.
     # ─────────────────────────────────────────────────────────────────────────
     - name: node-temperature.alerts
       interval: 1m
       rules:
         # Replaces the stock kube-prometheus alert (disabled in values.yaml defaultRules). Same
-        # expression, `for` raised 15m -> 45m: the nightly ~04:02 disk-bound window on worker-silver
+        # expression, `for` raised 15m -> 45m: the nightly ~04:02 disk-bound window on the VM worker
         # lasts 10-30 min (peak 10-22 per core), so it no longer pages, while sustained saturation does.
         - alert: NodeSystemSaturation
           expr: >-

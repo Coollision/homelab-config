@@ -52,7 +52,7 @@ devnum changes) whenever USB hiccups. `usbhid-ups` then re-opens the device by s
 A scoped single-node approach (init container `mknod`-ing just the APC node into an `emptyDir`) was
 tried first and **fails**: the node is frozen at pod-start, so after the first re-enumeration the
 driver can't find the new node and the UPS is permanently `Data stale`. So we mount the host's live
-`/dev/bus/usb` directly (privileged hostPath). This exposes node-blue's other USB devices (Zigbee /
+`/dev/bus/usb` directly (privileged hostPath). This exposes that node's other USB devices (Zigbee /
 Thread) to the pod, which is an accepted trade-off for a trusted, in-repo pod. The udev rule (in
 [`../../ansible/roles/node-common/templates/50-usb.rules`](../../ansible/roles/node-common/templates/50-usb.rules))
 just sets perms on the host.

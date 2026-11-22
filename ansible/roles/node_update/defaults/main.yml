@@ -30,7 +30,7 @@ node_update_cnpg_maintenance_grace: 20  # seconds
 node_update_drain_timeout: 1200          # seconds -> up to 20 min
 node_update_node_ready_timeout: 300     # seconds
 node_update_reboot_timeout: 1200        # seconds -> up to 20 min, ansible.builtin.reboot ceiling.
-                             # Was 600 — confirmed live worker-blue's own reboot took
+                             # Was 600 — confirmed live a worker's own reboot took
                              # noticeably longer than that (timed out at 616s while
                              # the box was still mid-boot per pam_nologin; ended up
                              # taking several more minutes past that). Same "just be

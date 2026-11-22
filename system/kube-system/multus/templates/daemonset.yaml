@@ -73,7 +73,7 @@ spec:
               cpu: 25m
               memory: 64Mi
             limits:
-              # Was 256Mi. OOMKilled repeatedly on master-green during a
+              # Was 256Mi. OOMKilled repeatedly on the control-plane node during a
               # worker drain: evicting a full node's workloads reschedules a
               # burst of pods (several needing macvlan/vlan40/vlan5 attachments
               # each) onto the remaining nodes near-simultaneously, and that

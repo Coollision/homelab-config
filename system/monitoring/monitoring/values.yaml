@@ -506,7 +506,7 @@ promstack:
           # the real CPU/NVMe temps come from the coretemp/nvme chips. The Pi's
           # thermal_thermal_zone0 is its real CPU sensor, hence the instance match.
           - sourceLabels: [__name__, chip, instance]
-            regex: "node_hwmon_.*;thermal_thermal_zone0;(master-green|worker-blue)"
+            regex: "node_hwmon_.*;thermal_thermal_zone0;(<secret:kv/data/system/monitoring/monitoring~bogus-thermal-nodes>)"
             action: drop
           - sourceLabels: [__name__, type]
             regex: "node_thermal_zone_temp;acpitz"
@@ -523,7 +523,7 @@ promstack:
         # k3s runs the apiserver, etcd, scheduler and controller-manager inside the
         # SAME process as the kubelet, so scraping :10250/metrics on a server node
         # returns that whole registry — not just kubelet metrics. This made job=kubelet
-        # 106,840 of 265,237 series (40% of the TSDB), with master-green's kubelet alone
+        # 106,840 of 265,237 series (40% of the TSDB), with the control-plane node's kubelet alone
         # returning 83,099 series against ~8,885 on a worker.
         #
         # These families are unambiguously NOT kubelet metrics; they are already scraped
@@ -597,7 +597,7 @@ promstack:
     disabled:
       CPUThrottlingHigh: true
       # Replaced by NodeSystemSaturation in templates/prometheusrules.yaml (for: 45m). The stock
-      # 15m version fired nightly: the 04:02 backup/snapshot window saturates worker-silver's disk
+      # 15m version fired nightly: the 04:02 backup/snapshot window saturates the VM worker's disk
       # for 10-30 min (load 10-22 per core, iowait ~25%).
       NodeSystemSaturation: true
     rules:

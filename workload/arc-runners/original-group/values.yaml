@@ -16,7 +16,7 @@ gha-runner-scale-set:
     namespace: arc-systems
     name: arc-controller
 
-  # Scale to zero when idle; cluster RAM is tight (worker-silver ~6Gi), so keep the cap low.
+  # Scale to zero when idle; cluster RAM is tight (smallest worker ~6Gi), so keep the cap low.
   minRunners: 0
   maxRunners: 3
 

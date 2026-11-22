@@ -16,7 +16,7 @@ config:
   TZ: Europe/Brussels
   MEDIA_SERVER_TYPE: plex
   # Jellyfin/Emby/Plex baseurl
-  MEDIA_SERVER_URL: https://plex.declerck.dev
+  MEDIA_SERVER_URL: https://plex.<secret:kv/data/shared/domains~domain>
   # Jellyfin/Emby API key or plex server token
   MEDIA_SERVER_API_KEY: <secret:kv/data/workload/arr-stack/prefetcharr~plex-token>
   # Sonarr baseurl (in-cluster service — avoids an external Traefik round-trip)
