@@ -515,7 +515,7 @@
 
     - name: "Reboot and wait for the node to come back up (also starts k3s fresh on the new binary) [{{ k3s_node_name }}]"
       ansible.builtin.reboot:
-        node_update_reboot_timeout: "{{ node_update_reboot_timeout }}"
+        reboot_timeout: "{{ node_update_reboot_timeout }}"
         post_reboot_delay: 15
         test_command: uptime
       become: true
