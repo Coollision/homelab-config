@@ -1,0 +1,40 @@
+{{- /* One PV+PVC per NFS mount-option variant, all on a subfolder of the arr Downloads share (throwaway data).
+       The pod mounts exactly one of them (see storage: nfs claimName in values). */ -}}
+{{- range $name, $opts := .Values.nfsVariants }}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: opencloud-pilot-nfs-{{ $name }}
+  labels:
+    app.kubernetes.io/name: opencloud
+spec:
+  capacity:
+    storage: 100Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  claimRef:
+    namespace: {{ $.Release.Namespace }}
+    name: opencloud-pilot-nfs-{{ $name }}
+  nfs:
+    server: <secret:kv/data/shared/nfs~server-ip>
+    path: "<secret:kv/data/shared/nfs~downloads-path>"
+  mountOptions:
+    {{- toYaml $opts | nindent 4 }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: opencloud-pilot-nfs-{{ $name }}
+  labels:
+    app.kubernetes.io/name: opencloud
+spec:
+  resources:
+    requests:
+      storage: 100Gi
+  volumeName: opencloud-pilot-nfs-{{ $name }}
+  storageClassName: ""
+  accessModes:
+    - ReadWriteMany
+{{- end }}
