@@ -46,5 +46,7 @@ data:
     http_access allow CONNECT allowed_dst
     http_access deny all
     cache deny all
+    # Container reports ~1M fds and Squid sizes memory off that: without this it is OOMKilled at 128Mi.
+    max_filedescriptors 4096
     access_log stdio:/tmp/access.log
     pid_filename /tmp/squid.pid

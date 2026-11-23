@@ -13,7 +13,7 @@ spec:
         app: rp-spike
       annotations:
         # No reloader in this scratch app: bump when the ConfigMap changes.
-        spike-config-rev: "1"
+        spike-config-rev: "2"
     spec:
       containers:
         - name: nginx-mtls
@@ -34,7 +34,7 @@ spec:
             - { name: conf, mountPath: /etc/squid/squid.conf, subPath: squid.conf }
           resources:
             requests: { cpu: 10m, memory: 64Mi }
-            limits: { cpu: 300m, memory: 128Mi }
+            limits: { cpu: 300m, memory: 256Mi }
       volumes:
         - name: conf
           configMap:
