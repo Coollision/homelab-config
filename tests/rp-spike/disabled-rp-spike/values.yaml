@@ -1,0 +1,5 @@
+# DISABLED: spike rejected (see wiki 07-rejected/remote-access-proxy). Kept as a reference only.
+# Spike for wiki/06-todo/remote-access-proxy.md: can the target device use an HTTPS proxy + client cert?
+# DISABLED: spike rejected (see wiki 07-rejected/remote-access-proxy). Kept as a reference only.
+# Delete (or rename to disabled-rp-spike) when the question is answered.
+# IP/port live in Vault kv/tests/rp-spike/rp-spike; hostname is rp.<shared domain>.
