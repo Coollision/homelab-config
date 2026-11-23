@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: rp-spike
+spec:
+  type: LoadBalancer
+  loadBalancerIP: <secret:kv/data/tests/rp-spike/rp-spike~ip>
+  # Local keeps the real client IP in nginx's log (the audit trail for the spike).
+  externalTrafficPolicy: Local
+  selector:
+    app: rp-spike
+  ports:
+    - name: proxy
+      port: 8443
+      targetPort: 8443

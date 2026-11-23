@@ -1,0 +1,6 @@
+apiVersion: v2
+name: rp-spike
+description: Throwaway spike - mTLS-fronted forward proxy (nginx stream + Squid) to prove a locked-down device can use an HTTPS proxy with a client cert
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

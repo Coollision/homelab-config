@@ -1,0 +1,3 @@
+# Spike for wiki/06-todo/remote-access-proxy.md: can the target device use an HTTPS proxy + client cert?
+# Delete (or rename to disabled-rp-spike) when the question is answered.
+# IP/port live in Vault kv/tests/rp-spike/rp-spike; hostname is rp.<shared domain>.
