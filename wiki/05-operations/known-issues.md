@@ -741,3 +741,119 @@ Three separate causes surfaced while moving the nodes to systemd-networkd ([Netw
   upgrades and anything that touches iscsid/network. Before relying on it, check `systemctl show k3s-node -p KillMode`
   (`k3s` on servers); if it says `control-group`, the unit has drifted and a restart kills every pod. Restart one node at a
   time and wait for Ready plus healthy Longhorn volumes before the next.
+
+### A VM worker node hangs with root-disk I/O errors: ping works, SSH resets {#vm-node-disk-io-hang}
+
+One of the workers is a KVM guest on the NAS (Synology Virtual Machine Manager), not a physical box. Its virtual disks are
+file-backed LUNs on a single NVMe volume on the NAS, exported to the guest over vhost-scsi. **Seen once, 2026-11-23, first time in
+years. Trigger not proven; this entry records what was found and what to check next.**
+
+**Symptom**
+- Node `NotReady`, kubelet silent since ~04:00. Alerts: `KubeNodeNotReady`, `KubeNodeUnreachable`, `KubeletInstanceUnreachable`,
+  `TargetDown`.
+- The node still answers ping and accepts a TCP connection on port 22, but sshd resets the connection during key exchange
+  (`kex_exchange_identification: Connection reset by peer`). The guest cannot read its own files, so sshd cannot start a session.
+- Node-exporter metrics were healthy right up to the stop (memory, load, iowait 0, disk space free). Nothing trended.
+
+**How to confirm it is this and not a dead VM**
+- Take the guest console screenshot from the NAS (`virsh screenshot <guest-uuid>`; the output is a PNG). It showed
+  `systemd-journald: Failed to write entry ... Input/output error` repeating. Loki shows the kubelet failing to open
+  `/var/log/pods/...` with `input/output error` right after its last healthy line.
+- `virsh domblkerror` and `virsh domstate` look clean (`running`, no errors) because the disks are vhost-scsi LUNs, not libvirt
+  block devices. A clean answer there does not rule this out.
+- NAS kernel log: a burst of `vhost_scsi_get_tag failed -12` (about ten lines in ~200 ms), ~7 minutes before the guest's last
+  healthy log. The wall-clock mapping of dmesg time can drift by minutes.
+
+**Fix (the recovery that worked)**
+- Force power-cycle the guest through VMM's own API rather than `virsh destroy` (which can hang on the vhost fd):
+  `synowebapi --exec api=SYNO.Virtualization.API.Guest.Action version=1 method=poweroff guest_id=\"<uuid>\"`, then `method=poweron`.
+  Quote the UUID as a JSON string or it is parsed as a number and the call fails with error 401.
+- The node was `Ready` ~30 seconds after power-on, no disk errors since boot, all pods `Running`. Longhorn then rebuilt the
+  replicas that lived on the node for roughly 15+ minutes (`degraded` -> `healthy`).
+
+**What the cluster did (as designed)**
+- Pods on the dead node sat in `Terminating` until it returned (a dead node cannot confirm deletion). Replacements started on
+  the other nodes after the default 5-minute not-ready toleration, with no manual action.
+- Single-replica workloads were down roughly 6-7 minutes in total. The monitoring stack (Prometheus, Loki, Grafana) lived on the
+  node too: Loki was back after ~18 minutes, Grafana ~25, and there is a ~20 minute gap in the metrics. Alertmanager ran
+  elsewhere, so alerts still fired.
+- Afterwards the Longhorn recurring-snapshot job reported one failure (`KubeJobFailed`) from the outage; expect that.
+
+**Root cause: leading theory, medium confidence (independent review agreed)**
+The NVMe volume stalled on writes. Commands piled up in the backend until the vhost-scsi per-session **tag pool** ran out
+(`-12` is "no tag", not "no memory"). vhost answers each refused command with `BAD_TARGET`, which the guest does not retry, so
+about ten failed writes were enough for ext4 to abort its journal. From then on every write returned EIO and the node died.
+
+Supporting: right after the reboot, with only Longhorn rebuild traffic (~50 MB/s), the NVMe showed ~850 ms average write
+latency with hundreds of I/Os in flight. That points at a weak sustained-write ceiling on a consumer DRAM-less drive on a
+volume that is 75% full.
+
+**Ruled out or unlikely**
+- NAS RAID / volume health (all arrays clean), kernel storage errors (none), NVMe SMART (0 media errors, 0 error-log entries,
+  no thermal time, 35 °C).
+- The scheduled HDD SMART long tests at 03:00: the HDDs are a different block path from the VM volume.
+- btrfs snapshot pruning on the VM volume: 2 snapshot drops in the kernel ring vs. 131 and 66 on the other volumes. The LUN files
+  are also NOCOW (`C` attribute), so CoW fragmentation is not the story.
+- Plain RAM shortage: the guest's RAM is pinned (~6.3 GB) and swap was in use on the NAS, but that does not produce `-12`.
+- No NAS job could be tied to the exact minute; the only log line near the time is the 03:00 SMART scheduler. HyperBackup was
+  not in the Nov 23 window.
+
+**Is the drive worn out?** No. Drive health is fine; this is a performance question, not an end-of-life one.
+- `Percentage Used: 23%` is endurance consumed, so ~77% is left. Lifetime writes are ~88 TB against a 300 TBW rating; at the
+  recent rate of roughly 90 GB/day that is on the order of six years of headroom. Spare 100%, media errors 0.
+- The 75% is *filesystem fullness* on the volume, not wear. It matters because a DRAM-less drive leans on free space for its
+  write cache and garbage collection, so a fuller drive stalls sooner under sustained writes.
+- TRIM does not reach the drive: the volume is mounted without `discard`, and the VM's vdisks have `unmap` off, so deletions inside
+  the guest never tell the SSD which blocks are free. This is a plausible contributor, not a proven one.
+- **The other NVMe in the NAS is the more worn one** (DSM remaining life 36%, ~244 TB written, vs. 77% and ~88 TB for the VM
+  drive). Both were installed together (36,118 power-on hours, ~4.1 years). It is not the VM volume and showed no errors. Its
+  lifetime write rate averages ~160 GB/day but only ~40 GB/day since the NAS last booted, so projected end of rated life is
+  anywhere from ~1 year (if the 300 TBW rating is the limit and the old rate returns) to ~9 years (recent rate, drive's own
+  scale). Plan a replacement within 1-3 years and re-check every 4 months
+  ([Recurring checks](../06-todo/recurring-checks.md#nas-nvme-check)). The VM drive is ~7-14 years out.
+- **Why the other drive's write rate fell (likely, not proven):** its volume used to hold the cluster's old NFS storage
+  (a `k3s-volumes` share, ~115 GB still there, untouched since April-August 2026) and an iSCSI LUN directory that is now
+  empty. Git shows the move to Longhorn ran from 2026-03-15 (monitoring first, a heavy writer) through the app migrations
+  of 2026-04-02/03 and the databases in June. If the ~40 GB/day since the last NAS boot held since mid-March, the earlier
+  average was ~185 GB/day. The NAS cannot attribute writes per volume, so this is inferred from timing, not measured. The
+  same writes now land, doubled by two replicas, on the VM drive.
+- **Measured latency, 2026-11-23 (30 s sample, quiet system):** VM drive 22 MB/s writes at ~41 ms average write latency; the other
+  drive 2 MB/s of tiny writes at ~72 ms. Lifetime average write latency since NAS boot is ~3.8 ms and ~5.2 ms, which is high
+  for NVMe and the same on both drives, so treat it as a platform trait as much as a drive fault.
+
+**Next steps (nothing is changed yet; prevention is deliberately held back until it happens a second time)**
+1. Record an NVMe baseline (done 2026-11-23, see [Recurring checks](../06-todo/recurring-checks.md#nas-nvme-check)) and
+   re-check every 4 months: the NAS's `synonvme --smart-info` for both drives (Percentage Used, media
+   errors, error-log entries, unsafe shutdowns).
+2. Sample `/proc/diskstats` on the NAS for a few minutes during a quiet period and compute average write latency. Normal at idle
+   but ~850 ms under rebuild means a load-dependent ceiling; high at idle means the drive or its link is the problem.
+3. ~~Check the PCIe link.~~ Done: both drives are capable of 8 GT/s x4 but run at 5 GT/s x1. It is identical on both, so it is the
+   slot's limit, not a fault. It caps throughput at roughly 400-500 MB/s, which is not what stalled here (~50 MB/s load).
+4. In a maintenance window with the VM stopped, write a large scratch file to the volume with `dd oflag=direct` and watch for
+   the throughput cliff when the SLC cache is exhausted. Do not run this while the VM is up.
+5. Reclaim space. The guest uses only ~89 GB of its 300 GB disk, but the NAS-side file for it has ~283 GiB allocated, because the
+   vdisks have `unmap` off and the guest reports no discard support (`lsblk -D` shows 0B), so freed blocks are never returned. That
+   is ~190 GB reclaimable, which would take the VM volume from 75% to ~30% full. Plan: wait until Longhorn is fully healthy, drain
+   and gracefully shut down the node (see the node-drain entry above), enable **Unmap** on the VM's virtual disks in VMM (VM >
+   Edit > Virtual Disk > edit the big disk > Unmap; the checkbox is greyed out while the VM runs, so it must be off. Do it in
+   the UI: the API `set` replaces the whole VM definition and is easy to get wrong), power on, confirm `lsblk -D` shows a discard granularity,
+   then run `fstrim -v` on `/` and on the Longhorn data mount, one at a time, in a quiet window (not ~03:00). The guest's weekly
+   `fstrim.timer` has never run a useful trim yet, so the first run is large; a big discard burst on a stressed DRAM-less SSD can
+   itself stall, so do not skip the quiet window. Afterwards re-check the volume's free space and the drive's latency.
+
+   **Done 2026-11-23.** Unmap enabled, node drained and shut down gracefully, trimmed after Longhorn was healthy. The VM volume
+   went from 324 GB (74%) to 121 GB (28%) used, about 200 GB returned. The first trim (33 GiB on the root filesystem, in one go)
+   reproduced the stall signature on the NAS drive: write latency 272 ms, then 624 ms, then 1.5 s, with up to ~2,100 I/Os queued,
+   recovering within ~40 s with no tag exhaustion and no guest errors. So the Longhorn disk was trimmed in 6 GiB chunks (~8 minutes,
+   ~173 GiB). Caveat: the NAS-side latency monitor for the chunked run produced no data (its abort thresholds were not active), so
+   the chunk latencies are unknown; afterwards the guest and NAS logs were clean, no new `vhost_scsi` errors, Longhorn healthy.
+   **Keep in mind:** the guest's weekly `fstrim.timer` (Mondays, shortly after midnight) now actually discards. If a week's
+   deletions are large it can cause the same kind of stall, so watch the first runs and, if needed, replace the timer with a
+   chunked, throttled trim.
+
+**If it happens again, capture before power-cycling**
+- Guest console screenshot; NAS `dmesg | grep vhost_scsi`; two `/proc/diskstats` samples 10 s apart (write latency per drive);
+  the NAS memory (`free`) and any `D`-state threads (`ps -eo stat,comm,wchan | awk '$1 ~ /^D/'`).
+- Then power-cycle through the VMM API, and only then consider the prevention options: raise the guest SCSI disk timeout from 30 s
+  to 120-180 s via a udev rule (so a short stall does not offline the disk), lower the guest's RAM, move heavy NAS jobs away from
+  the early hours, and alert on `vhost_scsi` lines in the NAS kernel log.
