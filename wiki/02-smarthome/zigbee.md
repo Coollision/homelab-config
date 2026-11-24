@@ -7,10 +7,12 @@ it publishes to, which Home Assistant's MQTT integration then subscribes to).
 
 ## Zigbee2MQTT — `workload/smarthome/zigbee2mqtt`
 
-Runs pinned to whichever node has the USB Zigbee coordinator stick attached (via the same
-[Node Feature Discovery](../01-platform/cluster-housekeeping.md#node-feature-discovery--descheduler)
-pattern used for the Thread border router and UPS). No Multus/VLAN legs — it only needs
-the USB device and a path to the MQTT broker.
+The coordinator is a PoE adapter reached over TCP, so the pod is no longer pinned to a node
+with a USB stick (no hostPath/privileged patch, no kustomization). It only has a soft
+node-affinity preference for the mini nodes (`type=mini`), because the VM node has known
+disk-I/O hangs, and carries `preventDeschedule: "true"` so the descheduler does not bounce
+this singleton between mini nodes. No Multus/VLAN legs — it only needs the coordinator and
+a path to the MQTT broker.
 
 **Z2M has no REST API.** Everything — config, device list, network map — goes over its
 WebSocket endpoint. If you're scripting against it, that's the only door in; see the
