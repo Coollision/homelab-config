@@ -196,6 +196,79 @@ must use `soft`, never `hard`. Two related traps: never put a timestamp in the p
 that ConfigMap with `subPath` (a `subPath`-mounted ConfigMap is snapshotted once at pod
 start and never updates again).
 
+### Longhorn RWX mounts hang when the share-manager runs on the MTU-9000 node {#rwx-share-manager-mtu-blackhole}
+
+**Symptom:** a pod on a Longhorn RWX volume (seen with `zigbee2mqtt`) sits in
+`ContainerCreating` with `MountVolume.MountDevice failed ... DeadlineExceeded`, or starts
+and then blocks reading its data. The Longhorn volume is `attached`/`healthy`, the
+`share-manager-<volume>` pod is `Running`, `nc` to the Service port works, and ganesha logs
+no new client activity. Per node: `mount.nfs` / app processes stuck in `D` state with
+`rpc_wait_bit_killable` in `/proc/<pid>/stack`, `ls` on the mount times out, and
+`ss -tni` shows `advmss:1448 pmtu:1500` for the socket to the Service IP.
+
+**Root cause (high confidence, reproduced with DF pings):** the VM node's virtual NIC
+reports MTU 9000, so flannel there runs at 8950 (`FLANNEL_MTU` in `/run/flannel/subnet.env`),
+while every other node runs 1500/1450. Packets larger than 1450 bytes between that node and
+the others are **dropped silently** (no ICMP "fragmentation needed"). Host-network clients
+(kubelet/CSI NFS mounts) advertise a 1448-byte segment size, so small RPCs
+(connect, session setup, first mount call) work, but the first large reply from a
+share-manager that runs on the VM node is lost and retransmitted forever. TCP stays
+`ESTABLISHED` and every later RPC waits behind it. Pod-network clients advertise a smaller
+segment size and are not affected.
+
+**Trigger:** the RWX share-manager was scheduled on the VM node (it follows whichever
+workload attaches the volume first; an app that mounts the RWX volumes there, such as the
+`vscode-server` pod, decides this). The restart of the share-manager at the time of the
+incident was a side event, not the cause: mounts were already failing before it. The exact
+deleter of that pod is unknown (k3s has no API audit log).
+
+**Diagnosis, in this order:**
+
+1. Where does the share-manager run? `kubectl -n storage get pod share-manager-<volume> -o wide`.
+2. Compare MTUs: `ip -o link | grep -E 'uplink0|flannel.1|cni0'` on every node.
+3. DF-ping from the suspect node to a pod on another node: sizes up to 1422 pass, `-s 1472`
+   gets 100% loss with no error when the MTU is wrong (`ping -M do -s <size> <pod-ip>`).
+4. Check mounts and stuck processes per node (`ps -eo pid,stat,args | awk '$2 ~ /^D/'`,
+   `sudo timeout 6 ls <mount>`).
+
+**Symptom relief (does not fix the cause):** moving the share-manager off the VM node cured
+it here. Scale the app to 0 (pause ArgoCD auto-sync first, selfHeal undoes the scale), let
+Longhorn stop the share-manager, then on every node lazy-unmount all mounts of the Service IP
+(`sudo umount -f -l <path>`), `kill -9` the hung `D`-state processes, run
+`sudo ss -K dst <service-ip> dport = 2049`, confirm `/proc/fs/nfsfs/servers` no longer lists
+the server, and scale back up. Per-mount patching without moving the share-manager only
+works until the next large reply.
+
+**Permanent fix (applied 2026-11-24):**
+
+- Ansible: `networkd_migrate_mtu` (default 1500) is rendered as `MTUBytes=` into the uplink
+  `.network` file, so every node set up with the role gets the same MTU
+  (`ansible/roles/networkd_migrate`). The Pi node is managed by NetworkManager and
+  already runs 1500 (no change needed).
+- Applied by hand to avoid a drain/reboot: `MTUBytes=1500` added to the uplink `.network`
+  file on the networkd nodes (no reload, takes effect at next boot, backup kept as
+  `10-uplink.network.bak-mtu`), and on the VM node live with
+  `ip link set dev uplink0 mtu 1500`, `flannel.1` and `cni0` to 1450.
+- Check afterwards: DF pings from the VM node to a pod on another node now pass up to 1422
+  and fail locally with `Message too long` above that, instead of vanishing silently.
+- The k3s service on that node (`k3s-node`) was restarted without downtime: flannel now
+  reports `FLANNEL_MTU=1450` by itself and all pods kept running.
+- Alert `NodeMtuMismatch` (`system/monitoring/monitoring/templates/prometheusrules.yaml`,
+  group `network-mtu.alerts`): fires after 10 min when `flannel.1`, `cni0` or `uplink0` has a
+  different MTU on different nodes (`max` vs `min` of `node_network_mtu_bytes` per device),
+  no hard-coded value. Check it is quiet with that query in Prometheus.
+- **Still open:** pod `veth` interfaces on the VM node stay at 8950 until their pods are
+  recreated. Pods there now get proper "too big" feedback, so it is no longer a black hole,
+  but recreate them at the next maintenance window. Also worth doing: keep workloads that
+  mount RWX volumes off the node that should not host share-managers.
+
+**Related hazard seen the same evening:** with a node cordoned, the descheduler's
+`RemovePodsViolatingNodeTaints` keeps evicting 3 pods per 2 min from it, including Longhorn
+CSI/manager pods and share-managers (`storage` is only excluded under `LowNodeUtilization`).
+
+Do **not** debug this with in-tree `nfs:` volumes in a probe pod: they fall back to the
+portmapper (port 111, not exposed by the Service) and hang for an unrelated reason.
+
 ### Node memory asymmetry and Longhorn's per-node cost {#node-memory-asymmetry}
 
 The cluster's nodes are not identical in available RAM, and the smallest one fills up
