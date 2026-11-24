@@ -857,3 +857,35 @@ volume that is 75% full.
 - Then power-cycle through the VMM API, and only then consider the prevention options: raise the guest SCSI disk timeout from 30 s
   to 120-180 s via a udev rule (so a short stall does not offline the disk), lower the guest's RAM, move heavy NAS jobs away from
   the early hours, and alert on `vhost_scsi` lines in the NAS kernel log.
+
+## Smart home / Zigbee
+
+### Ember rejects a Z-Stack backup with more link keys than the NCP's key table {#ember-key-table-too-small}
+
+**Symptom:** Zigbee2MQTT exits at start with `[BACKUP] Current key table of 20 is too small to import backup of 58!` right
+after `[INIT TC] Forming from backup`. No network is formed on the adapter; the pod restarts in a loop.
+
+**Root cause:** herdsman's `importLinkKeys` requires every per-device link key in `coordinator_backup.json` to fit the NCP's key
+table. The size is a firmware build setting (20 on the Sonoff Dongle Max with EmberZNet 9.1.0.0; community MG24 builds use 12) and
+cannot be raised from Z2M (`stack_config.json` has no such key). A Z-Stack backup carries one derived link key per paired device,
+so a converted backup of a large network easily exceeds the table. This is about stored per-device keys, not the number of devices
+on the network.
+
+**Fix:** trim `devices` in the *converted* backup to at most the table size (keep the devices that are hardest to re-pair, and leave
+at least one slot free), then restart. The log then shows `Imported N keys` and the restore continues. Devices without a key entry
+kept working on the network key; of 58 devices, 2 needed a manual re-pair afterwards. Keep the full converted backup. No
+larger-table firmware for this adapter was found (Sonoff's firmware repo only covers the ZBDongle-E, the community builder has no
+Dongle Max target).
+
+### Z2M loses the Dongle Max seconds after the first start (ASH ack timeout) {#z2m-max-ack-timeout}
+
+**Symptom:** about 2 s after a successful start, the log shows `Received ERROR from adapter, with code=ERROR_EXCEEDED_MAXIMUM_ACK_TIMEOUT_COUNT`,
+`ASH_NCP_FATAL_ERROR`, `Adapter disconnected, stopping`, and the pod restarts. The NCP retransmits the same frames (`frmTx` repeated).
+
+**Root cause (not proven):** the host's ACKs do not reach the NCP over the Max's TCP serial bridge. Similar reports upstream:
+[Z2M #33574](https://github.com/Koenkk/zigbee2mqtt/issues/33574) (Dongle Max over TCP, disconnects on 2.14.3, stable on 2.14.2) and
+the open Sonoff firmware repo issue about the serial-over-TCP bridge dropping downlink to sleepy end devices. It happened once, on
+the first start after the network restore; the pod has been stable since.
+
+**Fix / watch:** the pod restart cleared it. If it recurs: pin Z2M to 2.14.2, check the Max serial-over-network settings, and fall back
+to the USB stick if needed (rollback steps in the Zigbee coordinator TODO).

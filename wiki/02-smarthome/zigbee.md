@@ -14,6 +14,13 @@ disk-I/O hangs, and carries `preventDeschedule: "true"` so the descheduler does 
 this singleton between mini nodes. No Multus/VLAN legs — it only needs the coordinator and
 a path to the MQTT broker.
 
+**Coordinator:** a PoE Sonoff Dongle Max (EFR32MG24) in TCP server mode on the server VLAN, with WiFi off and a static lease.
+Z2M uses `adapter: ember` and `serial.port: tcp://<coordinator-ip>:6638` in the `configuration.yaml` on the PVC, firmware
+EmberZNet 9.1.0.0 (EZSP v19). The network (PAN, key, channel 25, coordinator IEEE) is the one the old zstack USB stick had,
+restored from a converted backup. The Max's key table holds 20 per-device link keys, so only the 19 chosen devices' keys were
+restored (see [Known Issues](../05-operations/known-issues.md#ember-key-table-too-small)); keep that in mind before replacing
+the coordinator again. Migration log and rollback steps are in the [Zigbee coordinator TODO](../06-todo/zigbee-poe-coordinator.md).
+
 **Z2M has no REST API.** Everything — config, device list, network map — goes over its
 WebSocket endpoint. If you're scripting against it, that's the only door in; see the
 `zigbee-mesh-debug` skill for ready-made WebSocket tooling. Its `configuration.yaml`
