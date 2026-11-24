@@ -19,7 +19,20 @@ Z2M uses `adapter: ember` and `serial.port: tcp://<coordinator-ip>:6638` in the 
 EmberZNet 9.1.0.0 (EZSP v19). The network (PAN, key, channel 25, coordinator IEEE) is the one the old zstack USB stick had,
 restored from a converted backup. The Max's key table holds 20 per-device link keys, so only the 19 chosen devices' keys were
 restored (see [Known Issues](../05-operations/known-issues.md#ember-key-table-too-small)); keep that in mind before replacing
-the coordinator again. Migration log and rollback steps are in the [Zigbee coordinator TODO](../06-todo/zigbee-poe-coordinator.md).
+the coordinator again. The old zstack USB stick is kept off the cluster as a cold spare.
+
+**Rolling back to the USB stick** (the Max now holds the live network, so its frame counter advances; never power both
+coordinators on the same network):
+
+1. Disable ArgoCD auto-sync for `zigbee2mqtt` (the AppSets ignore `.spec.syncPolicy`, so it stays off until patched back) and scale
+   the StatefulSet to 0. Take a fresh backup from the Max first (frame counter).
+2. PoE-disable the Max's switch port before the stick starts.
+3. Build the rollback backup from the *original zstack backup* (kept off-cluster): set `network_key.frame_counter` well above
+   the Max's current counter plus a large margin (an ember-written backup has no `stack_specific.zstack`).
+4. The stick's NVRAM still holds the network with a stale frame counter and Z2M would skip the restore: wipe the stick's NV.
+5. On the PVC set `serial.port: /dev/ttyUSB0`, `adapter: zstack` and put the rollback backup in place (Z2M still stopped).
+6. Plug the stick into a node, `git revert` the chart part of the pin-removal commit (affinity + hostPath patch; the NFD label and
+   udev rule still exist), push, re-enable auto-sync; Z2M starts. Then check that mains devices reconnect within minutes.
 
 **Z2M has no REST API.** Everything — config, device list, network map — goes over its
 WebSocket endpoint. If you're scripting against it, that's the only door in; see the

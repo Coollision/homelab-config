@@ -961,4 +961,4 @@ the open Sonoff firmware repo issue about the serial-over-TCP bridge dropping do
 the first start after the network restore; the pod has been stable since.
 
 **Fix / watch:** the pod restart cleared it. If it recurs: pin Z2M to 2.14.2, check the Max serial-over-network settings, and fall back
-to the USB stick if needed (rollback steps in the Zigbee coordinator TODO).
+to the USB stick if needed (rollback steps on the [Zigbee page](../02-smarthome/zigbee.md)).
