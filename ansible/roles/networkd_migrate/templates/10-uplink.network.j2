@@ -19,6 +19,9 @@ DNS={{ dns }}
 # address alone, k3s then picks the IPv6 and an existing etcd member (registered on the IPv4) refuses it.
 RequiredForOnline=routable
 RequiredFamilyForOnline=ipv4
+# Pin the MTU. A hypervisor vNIC can report 9000 (virtio); flannel copies it (8950) and traffic above
+# 1450 bytes to the other nodes is then dropped silently (RWX/NFS mounts hang, see known-issues).
+MTUBytes={{ networkd_migrate_mtu }}
 
 [DHCPv4]
 ClientIdentifier={{ networkd_migrate_client_identifier }}
