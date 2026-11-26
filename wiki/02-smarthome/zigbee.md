@@ -57,7 +57,7 @@ over time and isn't worth freezing into this wiki page.
 
 ## Mosquitto — `workload/smarthome/mosquitto`
 
-The MQTT broker Zigbee2MQTT, Home Assistant, Shelly Gen1, EMS-ESP, the Moonraker printer and the Sonoff Dongle Max (its HA discovery + status under `dongle-m/`, no internet access by UniFi policy) talk to. Anonymous
+The MQTT broker Zigbee2MQTT, Home Assistant, Shelly Gen1, EMS-ESP, the Moonraker printer and the Sonoff Dongle Max (its HA discovery + status under `dongle-m/`, sub-device entities under `dongle-m-subdevice/`, no internet access by UniFi policy) talk to. Anonymous
 access is off. Auth and ACLs come from Mosquitto's **dynamic-security plugin**. Who may log in and which topics they may touch
 is one data file, `workload/smarthome/mosquitto/clients.conf`: an init container (`reconcile.sh`) reapplies the deny-by-default
 policy, one role per client (`r-<user>`) with exactly the listed grants, and the users with their Vault passwords on every
