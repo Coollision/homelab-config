@@ -257,6 +257,9 @@ works until the next large reply.
   group `network-mtu.alerts`): fires after 10 min when `flannel.1`, `cni0` or `uplink0` has a
   different MTU on different nodes (`max` vs `min` of `node_network_mtu_bytes` per device),
   no hard-coded value. Check it is quiet with that query in Prometheus.
+- **Also caused:** the `cert-push` job failed on 2026-11-20 and 2026-11-24, only when scheduled on the VM node (TLS handshake to the
+  gateway dies with `unexpected eof`, NAS logged `dropped over-mtu packet` at the same second). See
+  [cert-push troubleshooting](../01-platform/cert-push.md#cert-push-mtu). The VM's tap interface on the NAS must also stay at 1500.
 - **Still open:** pod `veth` interfaces on the VM node stay at 8950 until their pods are
   recreated. Pods there now get proper "too big" feedback, so it is no longer a black hole,
   but recreate them at the next maintenance window. Also worth doing: keep workloads that
