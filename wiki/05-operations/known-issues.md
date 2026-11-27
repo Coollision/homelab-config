@@ -155,13 +155,30 @@ kubectl -n storage get snapshots.longhorn.io -o json | jq -r '.items[].spec.volu
 
 **Fix:** delete that one replica CR (`kubectl -n storage delete replicas.longhorn.io <name>`; needs
 another healthy replica, check first). Longhorn rebuilds it clean and cleanup catches up on its
-own. To purge immediately instead of waiting for 04:00, POST `snapshotPurge` to the volume via the
+own. To purge immediately instead of waiting for 04:30, POST `snapshotPurge` to the volume via the
 Longhorn API from inside a `longhorn-manager` pod
 (`/v1/volumes/<vol>?action=snapshotPurge`). Right after a rebuild you will see a few
 `Failed to get change time and checksum ... .checksum: no such file` warnings; they are harmless.
 
 **Alerts:** `LonghornVolumeTooManySnapshots` (>40 snapshots for 1h) and
 `LonghornInstanceManagerHighCPU` (>0.8 cores for 1h) in `templates/prometheusrules.yaml`.
+
+### `snapshot-2h` job fails for a day after racing `snapshot-cleanup` {#longhorn-snapshot-2h-cleanup-race}
+
+**Symptom:** `KubeJobFailed` for a `storage/snapshot-2h-<id>` Job. The Job's pod log (in Loki, the pod is gone
+from the cluster) says `timeouted waiting for the the snapshot snapshot-<uuid> of volume <vol> to be ready`,
+repeated by every run for ~24 h (3 retries × ~33 min each), always naming the **same** snapshot UUID. All other
+volumes snapshot fine and nothing looks wrong in the Longhorn UI.
+
+**Root cause:** `snapshot-2h` (every even hour) and `snapshot-cleanup` (`snapshot-delete`, retain 0) fired in the
+same second. `snapshot-2h` created a snapshot for the volume 1.3 s before the cleanup job started deleting
+snapshots on that volume, and the new snapshot never became ready. Every later `snapshot-2h` run then waited on
+that stuck snapshot first and timed out, until the next `snapshot-cleanup` run deleted it ("Cleaned up snapshot
+CR ..."), after which snapshots resumed. The race itself is shown by timestamps; why the snapshot stays unready is
+not proven. The alert lingered because the CronJob keeps one failed Job (`failedJobsHistoryLimit: 1`).
+
+**Fix:** `snapshot-cleanup` now runs at :30 so it never overlaps the :00 `snapshot-2h` run. To recover sooner,
+delete the stuck snapshot CR (`kubectl -n storage delete snapshots.longhorn.io <name>`) and then the failed Job.
 
 ### Resizing a Longhorn PVC {#resizing-a-longhorn-pvc}
 

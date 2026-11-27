@@ -165,7 +165,10 @@ recurringJobs:
   snapshotCleanup:
     enabled: true
     name: snapshot-cleanup
-    cron: "0 4 * * *"
+    # Off the :00 mark on purpose: snapshot-2h fires at every even hour, and when this
+    # ran at the same second a fresh snapshot got stuck "not ready" and blocked every
+    # snapshot-2h run on that volume for ~24h (see wiki Known Issues).
+    cron: "30 4 * * *"
     task: snapshot-delete
     retain: 0
     concurrency: 2
