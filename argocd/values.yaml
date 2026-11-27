@@ -337,8 +337,13 @@ argo-cd:
         # CMP sidecar (steady-state ~90Mi); the heavy lifting is in the avp sidecar.
         # No CPU limit so git/tar streaming isn't throttled.
         memory: 512Mi
+    # The avp (lovely vault-replacer) sidecar authenticates to Vault with the
+    # Kubernetes auth method using this pod's SA token. Chart >=10.20 stopped
+    # mounting the token by default, so opt back in.
+    automountServiceAccountToken: true
     serviceAccount:
       name: argocd-role
+      automountServiceAccountToken: true
     env:
       # Increase timeout for Helm/Kustomize execution (default 90s)
       - name: ARGOCD_EXEC_TIMEOUT
