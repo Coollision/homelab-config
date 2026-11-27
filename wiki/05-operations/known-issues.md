@@ -511,6 +511,16 @@ topology). Home Assistant identifies some devices as `serial_<n>`, which equals 
 (`setup_manual_code` in the result); matter-server serves only a WebSocket on its port, no REST. UniFi monitors Thread devices only.
 **Enrolments are queued by UniFi**: two `POST`s in a row both return `202` with status `QUEUED`, and the second device is not a Matter node yet (a `PUT` on it returns `404 MatterNodeNotFound`) until the first has finished, so enrol strictly one device at a time and name it only after its own commissioning (about 40 s for a sleepy sensor). Pilot result: one door sensor enrolled cleanly (fabric count 2 to 3 of 5, no border-router or matter-server warnings).
 
+**UniFi enrolment fails with `COMMISSIONING_REJECTED` after a gateway restart / prefix change** (seen 2026-11-27). The gateway's Matter
+controller then sends its pairing traffic (UDP `18615` -> device `5540`) from the VLAN's ULA address with interface id `0`
+(`<ula-prefix>::`, the **subnet-router anycast** address). With per-interface `forwarding=1` Linux joins that anycast address on the
+border router's infra interface (`net1`), so the device's reply is delivered locally in the border-router pod instead of being forwarded to the
+gateway; UniFi never sees it and gives up after about 48 s ("device didn't accept the pairing code"). Symptoms: matter-server opens the window fine,
+OTBR logs show request and reply, a capture on the gateway shows requests but no reply, and no ICMPv6 error. Fix: the border router's init
+container sets `net.ipv6.conf.net1.forwarding=0` **after** `all.forwarding=1` (forwarding itself stays on via `all`); check with
+`grep net1 /proc/net/anycast6` in the pod (expect nothing). Matter devices stay reachable. Also: a stale "UniFi Network" fabric stays on a device
+after its UniFi node is deleted (read it unfiltered with `read_attribute 0/62/1`); it did not cause this failure but can be removed with `RemoveFabric`.
+
 ### IPTV multicast never crosses the ISP box's internet bridge {#iptv-multicast-never-crosses-the-isp-box-bridge}
 
 With VDSL and the ISP's Internet Box bridging the internet session to the UDM, the UDM's IGMP
