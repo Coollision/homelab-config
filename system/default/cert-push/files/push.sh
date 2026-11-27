@@ -74,7 +74,7 @@ prepare_source() {
   if [ "$now" -gt $((due + OVERDUE_GRACE_DAYS * 86400)) ]; then
     fail "renewal overdue: planned $SRC_RENEW, more than ${OVERDUE_GRACE_DAYS}d ago (cert-manager is not renewing)"
   fi
-  log "source: sha256=${FP256:0:16} expires=$SRC_EXP renewal_planned=$SRC_RENEW"
+  log "source: sha256=${FP256:0:16} expires=$SRC_EXP renewal_planned=$SRC_RENEW node=${NODE_NAME:-unknown}"
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -88,7 +88,7 @@ probe_to_file() { # ip port sni outfile
 
 # verify_probes <label> <ip> <"name:port ..."> <wait-seconds>; sets SERVED_FP / SERVED_EXP from the first probe
 verify_probes() {
-  local label=$1 ip=$2 probes=$3 wait=$4 deadline bad p host port fp
+  local label=$1 ip=$2 probes=$3 wait=$4 deadline bad p host port fp t0
   case "$probes" in "" | "-" | none) log "$label: no probes configured, served certificate not verified"; return 0 ;; esac
   deadline=$(($(date +%s) + wait))
   while :; do
@@ -97,8 +97,9 @@ verify_probes() {
       host=${p%:*}
       port=${p##*:}
       rm -f "$WORK/served.pem"
+      t0=$SECONDS
       if ! probe_to_file "$ip" "$port" "$host" "$WORK/served.pem"; then
-        bad="$bad $p(unreachable)"
+        bad="$bad $p(unreachable,$((SECONDS - t0))s)"
         continue
       fi
       fp=$(fp_of "$WORK/served.pem" sha256)
@@ -249,14 +250,17 @@ ucall() {
   [ -n "${3:-}" ] && args+=(--data-binary "@$3")
   # Only retry when no HTTP exchange happened (DNS/connect/TLS handshake failure: curl exit 6, 7, 35): nothing reached the
   # console, so a retry cannot double-submit or count as a failed login. Any HTTP status, even 5xx, is never retried.
-  local try=1 rc
+  local try=1 rc t0
   while :; do
+    t0=$SECONDS
     HTTP=$("${args[@]}" "$UNIFI_BASE$2")
     rc=$?
+    LAST_RC=$rc
+    LAST_SECS=$((SECONDS - t0)) # how long the attempt took: a handshake that dies after ~60 s is a black hole, not a refusal
     [ "$rc" -eq 0 ] || HTTP=000
     case "$rc" in 6 | 7 | 35) ;; *) break ;; esac
     [ "$try" -lt "$CONN_RETRIES" ] || break
-    log "unifi: $1 $2 could not connect (curl exit $rc), retry $try/$((CONN_RETRIES - 1)) in $((RETRY_BASE * try))s"
+    log "unifi: $1 $2 could not connect (curl exit $rc after ${LAST_SECS}s), retry $try/$((CONN_RETRIES - 1)) in $((RETRY_BASE * try))s"
     sleep $((RETRY_BASE * try))
     try=$((try + 1))
   done
@@ -266,6 +270,18 @@ ucall() {
 }
 
 body_hint() { head -c 300 "$WORK/u.body" 2>/dev/null | tr '\n\r' '  '; }
+
+# Appended to a failed UniFi call. TCP connects at once but the TLS handshake dies only after the console's own timeout
+# (about 60 s): the first big packet (the ~1.6 KB ClientHello) never arrived, i.e. a path-MTU black hole between this node
+# and the console, not a console fault. Seen 2026-11-20 and 2026-11-24 on the VM node when its NIC ran MTU 9000 on a 1500 path.
+net_hint() {
+  [ "${HTTP:-}" = "000" ] || return 0
+  printf ' [curl exit %s after %ss, node=%s' "${LAST_RC:-?}" "${LAST_SECS:-?}" "${NODE_NAME:-unknown}"
+  if [ "${LAST_RC:-0}" = "35" ] && [ "${LAST_SECS:-0}" -ge 30 ]; then
+    printf '; handshake died after a long wait while TCP connects: suspect an MTU black hole on this node, see wiki cert-push#cert-push-mtu'
+  fi
+  printf ']'
+}
 
 # normalise the list response (array or wrapped) into [{id,name,active,exp}] with exp as epoch seconds or null
 UNIFI_NORMALISE='
@@ -315,7 +331,7 @@ run_unifi() {
     '{username: ($u | rtrimstr("\n")), password: ($p | rtrimstr("\n")), rememberMe: false}' >"$WORK/login.json"
   ucall POST /api/auth/login "$WORK/login.json"
   rm -f "$WORK/login.json"
-  [ "$HTTP" = "200" ] || { fail "unifi: login refused or failed (HTTP $HTTP): $(body_hint)"; summary unifi "login-failed"; return 1; }
+  [ "$HTTP" = "200" ] || { fail "unifi: login refused or failed (HTTP $HTTP): $(body_hint)$(net_hint)"; summary unifi "login-failed"; return 1; }
 
   unifi_list || { fail "unifi: listing user certificates failed (HTTP $HTTP, 403 = account lacks the certificate permission, 404 = endpoint changed): $(body_hint)"; summary unifi "list-failed"; return 1; }
   prev=$(jq -r '[.[] | select(.active)][0].id // empty' <<<"$LIST")
