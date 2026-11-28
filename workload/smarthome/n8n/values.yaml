@@ -3,7 +3,7 @@ fullnameOverride: n8n
 statefulset:
   image:
     repository: n8nio/n8n
-    tag: "3.4.0"
+    tag: "3.4.1"
   ports:
     web: 5678
 
@@ -93,7 +93,7 @@ config:
 # n8nio/runners must always run the same tag as n8nio/n8n (Renovate groups both, see renovate.json).
 sidecars:
   - name: task-runners
-    image: n8nio/runners:3.4.0
+    image: n8nio/runners:3.4.1
     env:
       - name: N8N_RUNNERS_TASK_BROKER_URI
         value: http://127.0.0.1:5679
