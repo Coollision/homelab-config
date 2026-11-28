@@ -1,7 +1,7 @@
 ---
 # Single source of the k3s version (no default in the roles; k3s_setup refuses
 # to downgrade unless -e k3s_allow_downgrade=true).
-k3s_version: v1.36.3+k3s1
+k3s_version: v1.36.6+k3s1
 
 # Private registry mirrors; {} (or leave unset) for none. Example:
 # k3s_registries:

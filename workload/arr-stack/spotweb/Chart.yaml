@@ -1,0 +1,11 @@
+apiVersion: v2
+name: spotweb
+description: Spotweb, a Spotnet (Usenet) indexer with a Newznab API
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies:
+  - name: shared-lib
+    version: 0.1.0
+    repository: file://../../../lib/shared-lib

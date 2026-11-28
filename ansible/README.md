@@ -37,7 +37,7 @@ ansible-playbook playbooks/dns_teardown.yml --limit <node>
 
 | Var | Where | Notes |
 |---|---|---|
-| `k3s_version` | `group_vars/k3scluster.yml` | e.g. `v1.36.3+k3s1`; no default. `k3s_setup` refuses a downgrade unless `-e k3s_allow_downgrade=true` |
+| `k3s_version` | `group_vars/k3scluster.yml` | e.g. `v1.36.6+k3s1`; no default. `k3s_setup` refuses a downgrade unless `-e k3s_allow_downgrade=true` |
 | `k3s_primary_master`, `k3s_master_domain_name`, `k3s_cluster_name` | `group_vars/k3smaster.yml` | |
 | `host_ip_address` (+ optional `host_ipv6_address`), `k3s_node_name` | `host_vars/<host>.yml` | node IP is also the metrics bind address |
 | `longhorn_disk_device` | `host_vars` (masters with a Longhorn disk) | use `/dev/disk/by-id/...` or `/dev/disk/by-partuuid/...`; mounted by UUID |

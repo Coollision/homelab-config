@@ -7,10 +7,32 @@ it publishes to, which Home Assistant's MQTT integration then subscribes to).
 
 ## Zigbee2MQTT — `workload/smarthome/zigbee2mqtt`
 
-Runs pinned to whichever node has the USB Zigbee coordinator stick attached (via the same
-[Node Feature Discovery](../01-platform/cluster-housekeeping.md#node-feature-discovery--descheduler)
-pattern used for the Thread border router and UPS). No Multus/VLAN legs — it only needs
-the USB device and a path to the MQTT broker.
+The coordinator is a PoE adapter reached over TCP, so the pod is no longer pinned to a node
+with a USB stick (no hostPath/privileged patch, no kustomization). It only has a soft
+node-affinity preference for the mini nodes (`type=mini`), because the VM node has known
+disk-I/O hangs, and carries `preventDeschedule: "true"` so the descheduler does not bounce
+this singleton between mini nodes. No Multus/VLAN legs — it only needs the coordinator and
+a path to the MQTT broker.
+
+**Coordinator:** a PoE Sonoff Dongle Max (EFR32MG24) in TCP server mode on the server VLAN, with WiFi off and a static lease.
+Z2M uses `adapter: ember` and `serial.port: tcp://<coordinator-ip>:6638` in the `configuration.yaml` on the PVC, firmware
+EmberZNet 9.1.0.0 (EZSP v19). The network (PAN, key, channel 25, coordinator IEEE) is the one the old zstack USB stick had,
+restored from a converted backup. The Max's key table holds 20 per-device link keys, so only the 19 chosen devices' keys were
+restored (see [Known Issues](../05-operations/known-issues.md#ember-key-table-too-small)); keep that in mind before replacing
+the coordinator again. The old zstack USB stick is kept off the cluster as a cold spare.
+
+**Rolling back to the USB stick** (the Max now holds the live network, so its frame counter advances; never power both
+coordinators on the same network):
+
+1. Disable ArgoCD auto-sync for `zigbee2mqtt` (the AppSets ignore `.spec.syncPolicy`, so it stays off until patched back) and scale
+   the StatefulSet to 0. Take a fresh backup from the Max first (frame counter).
+2. PoE-disable the Max's switch port before the stick starts.
+3. Build the rollback backup from the *original zstack backup* (kept off-cluster): set `network_key.frame_counter` well above
+   the Max's current counter plus a large margin (an ember-written backup has no `stack_specific.zstack`).
+4. The stick's NVRAM still holds the network with a stale frame counter and Z2M would skip the restore: wipe the stick's NV.
+5. On the PVC set `serial.port: /dev/ttyUSB0`, `adapter: zstack` and put the rollback backup in place (Z2M still stopped).
+6. Plug the stick into a node, `git revert` the chart part of the pin-removal commit (affinity + hostPath patch; the NFD label and
+   udev rule still exist), push, re-enable auto-sync; Z2M starts. Then check that mains devices reconnect within minutes.
 
 **Z2M has no REST API.** Everything — config, device list, network map — goes over its
 WebSocket endpoint. If you're scripting against it, that's the only door in; see the
@@ -35,7 +57,7 @@ over time and isn't worth freezing into this wiki page.
 
 ## Mosquitto — `workload/smarthome/mosquitto`
 
-The MQTT broker Zigbee2MQTT, Home Assistant, Shelly Gen1, EMS-ESP and the Moonraker printer talk to. Anonymous
+The MQTT broker Zigbee2MQTT, Home Assistant, Shelly Gen1, EMS-ESP, the Moonraker printer and the Sonoff Dongle Max (its HA discovery + status under `dongle-m/`, sub-device entities under `dongle-m-subdevice/`, no internet access by UniFi policy) talk to. Anonymous
 access is off. Auth and ACLs come from Mosquitto's **dynamic-security plugin**. Who may log in and which topics they may touch
 is one data file, `workload/smarthome/mosquitto/clients.conf`: an init container (`reconcile.sh`) reapplies the deny-by-default
 policy, one role per client (`r-<user>`) with exactly the listed grants, and the users with their Vault passwords on every

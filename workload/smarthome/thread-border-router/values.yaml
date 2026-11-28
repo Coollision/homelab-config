@@ -63,6 +63,16 @@ initContainers:
         done
         sysctl -w net.ipv6.conf.all.forwarding=1
         sysctl -w net.ipv6.conf.default.forwarding=1
+        # Writing all.forwarding=1 flips every existing interface to 1, so this
+        # MUST come after it. With per-interface forwarding=1, Linux joins the
+        # subnet-router anycast address (<prefix>::) of net1's prefixes. UniFi's
+        # Matter controller (gateway) now uses the VLAN's ULA <prefix>:: as the
+        # SOURCE of its pairing traffic; the device's reply is then delivered
+        # locally in this pod (anycast) instead of being forwarded to the
+        # gateway, so UniFi enrolment fails with COMMISSIONING_REJECTED.
+        # forwarding is still enabled via all.forwarding; only the anycast
+        # membership on the infra interface goes away.
+        sysctl -w net.ipv6.conf.net1.forwarding=0
     securityContext:
       runAsUser: 0
       privileged: true

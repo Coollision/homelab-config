@@ -22,7 +22,7 @@ spec:
   dataLocality: best-effort
   frontend: blockdev
   numberOfReplicas: 3
-  size: "2147483648"
+  size: "6442450944"
   diskSelector: []
   nodeSelector: []
   replicaAutoBalance: ignored
@@ -30,7 +30,8 @@ spec:
   snapshotDataIntegrity: ignored
   Standby: false
   migratable: false
-  # NOTE: sized 2Gi (was 10Gi) — trimmed 2026-07-20 to ~2x actual DB usage (~870M).
+  # NOTE: sized 2Gi (was 10Gi) — trimmed 2026-07-20 to ~2x actual DB usage (~870M); grown to 6Gi on 2026-11-28 for
+  # the Spotweb database (6 months of spots). Grow in this order: Volume size, PV capacity, PVC request (cluster.yaml).
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -41,7 +42,7 @@ metadata:
     argocd.argoproj.io/sync-options: Delete=false,Prune=false
 spec:
   capacity:
-    storage: 2Gi
+    storage: 6Gi
   volumeMode: Filesystem
   accessModes:
     - ReadWriteOnce

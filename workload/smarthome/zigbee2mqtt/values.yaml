@@ -36,10 +36,16 @@ resources:
     cpu: 200m
     memory: 224Mi
 
+# The coordinator is a PoE adapter over TCP now, so the pod can run anywhere. Soft preference for the mini nodes:
+# the VM node has known disk-I/O hangs.
 affinity:
   node:
-    required:
-      - matchExpressions:
-          - key: feature.node.kubernetes.io/iot-zigbee-coordinator
+    preferred:
+      - weight: 100
+        matchExpressions:
+          - key: type
             operator: In
-            values: ["true"]
+            values: ["mini"]
+# Singleton coordinator: keep the descheduler from bouncing it between mini nodes (it honours this label).
+podLabels:
+  preventDeschedule: "true"

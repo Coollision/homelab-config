@@ -15,6 +15,9 @@ networkd_migrate_uplink_iface: "{{ uplink_name_iface | default('uplink0') }}"
 
 # DHCP=ipv4 mirrors today (IPv6 comes from router adverts only; DHCPv6 would be a new lease).
 networkd_migrate_dhcp: ipv4
+# Uplink MTU for every node (flannel derives its 1450 from this). Keep all nodes identical; see
+# wiki/05-operations/known-issues.md#rwx-share-manager-mtu-blackhole.
+networkd_migrate_mtu: 1500
 # The reservation is keyed on the MAC (dhclient sent no client identifier); keep it that way.
 networkd_migrate_client_identifier: mac
 # Optional extra resolvers appended to the DHCP ones (none needed: one resolver lives off-cluster).

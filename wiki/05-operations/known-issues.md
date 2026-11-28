@@ -155,13 +155,30 @@ kubectl -n storage get snapshots.longhorn.io -o json | jq -r '.items[].spec.volu
 
 **Fix:** delete that one replica CR (`kubectl -n storage delete replicas.longhorn.io <name>`; needs
 another healthy replica, check first). Longhorn rebuilds it clean and cleanup catches up on its
-own. To purge immediately instead of waiting for 04:00, POST `snapshotPurge` to the volume via the
+own. To purge immediately instead of waiting for 04:30, POST `snapshotPurge` to the volume via the
 Longhorn API from inside a `longhorn-manager` pod
 (`/v1/volumes/<vol>?action=snapshotPurge`). Right after a rebuild you will see a few
 `Failed to get change time and checksum ... .checksum: no such file` warnings; they are harmless.
 
 **Alerts:** `LonghornVolumeTooManySnapshots` (>40 snapshots for 1h) and
 `LonghornInstanceManagerHighCPU` (>0.8 cores for 1h) in `templates/prometheusrules.yaml`.
+
+### `snapshot-2h` job fails for a day after racing `snapshot-cleanup` {#longhorn-snapshot-2h-cleanup-race}
+
+**Symptom:** `KubeJobFailed` for a `storage/snapshot-2h-<id>` Job. The Job's pod log (in Loki, the pod is gone
+from the cluster) says `timeouted waiting for the the snapshot snapshot-<uuid> of volume <vol> to be ready`,
+repeated by every run for ~24 h (3 retries × ~33 min each), always naming the **same** snapshot UUID. All other
+volumes snapshot fine and nothing looks wrong in the Longhorn UI.
+
+**Root cause:** `snapshot-2h` (every even hour) and `snapshot-cleanup` (`snapshot-delete`, retain 0) fired in the
+same second. `snapshot-2h` created a snapshot for the volume 1.3 s before the cleanup job started deleting
+snapshots on that volume, and the new snapshot never became ready. Every later `snapshot-2h` run then waited on
+that stuck snapshot first and timed out, until the next `snapshot-cleanup` run deleted it ("Cleaned up snapshot
+CR ..."), after which snapshots resumed. The race itself is shown by timestamps; why the snapshot stays unready is
+not proven. The alert lingered because the CronJob keeps one failed Job (`failedJobsHistoryLimit: 1`).
+
+**Fix:** `snapshot-cleanup` now runs at :30 so it never overlaps the :00 `snapshot-2h` run. To recover sooner,
+delete the stuck snapshot CR (`kubectl -n storage delete snapshots.longhorn.io <name>`) and then the failed Job.
 
 ### Resizing a Longhorn PVC {#resizing-a-longhorn-pvc}
 
@@ -195,6 +212,82 @@ must use `soft`, never `hard`. Two related traps: never put a timestamp in the p
 *template's* annotations (it rolls the pod on every single reconcile), and never mount
 that ConfigMap with `subPath` (a `subPath`-mounted ConfigMap is snapshotted once at pod
 start and never updates again).
+
+### Longhorn RWX mounts hang when the share-manager runs on the MTU-9000 node {#rwx-share-manager-mtu-blackhole}
+
+**Symptom:** a pod on a Longhorn RWX volume (seen with `zigbee2mqtt`) sits in
+`ContainerCreating` with `MountVolume.MountDevice failed ... DeadlineExceeded`, or starts
+and then blocks reading its data. The Longhorn volume is `attached`/`healthy`, the
+`share-manager-<volume>` pod is `Running`, `nc` to the Service port works, and ganesha logs
+no new client activity. Per node: `mount.nfs` / app processes stuck in `D` state with
+`rpc_wait_bit_killable` in `/proc/<pid>/stack`, `ls` on the mount times out, and
+`ss -tni` shows `advmss:1448 pmtu:1500` for the socket to the Service IP.
+
+**Root cause (high confidence, reproduced with DF pings):** the VM node's virtual NIC
+reports MTU 9000, so flannel there runs at 8950 (`FLANNEL_MTU` in `/run/flannel/subnet.env`),
+while every other node runs 1500/1450. Packets larger than 1450 bytes between that node and
+the others are **dropped silently** (no ICMP "fragmentation needed"). Host-network clients
+(kubelet/CSI NFS mounts) advertise a 1448-byte segment size, so small RPCs
+(connect, session setup, first mount call) work, but the first large reply from a
+share-manager that runs on the VM node is lost and retransmitted forever. TCP stays
+`ESTABLISHED` and every later RPC waits behind it. Pod-network clients advertise a smaller
+segment size and are not affected.
+
+**Trigger:** the RWX share-manager was scheduled on the VM node (it follows whichever
+workload attaches the volume first; an app that mounts the RWX volumes there, such as the
+`vscode-server` pod, decides this). The restart of the share-manager at the time of the
+incident was a side event, not the cause: mounts were already failing before it. The exact
+deleter of that pod is unknown (k3s has no API audit log).
+
+**Diagnosis, in this order:**
+
+1. Where does the share-manager run? `kubectl -n storage get pod share-manager-<volume> -o wide`.
+2. Compare MTUs: `ip -o link | grep -E 'uplink0|flannel.1|cni0'` on every node.
+3. DF-ping from the suspect node to a pod on another node: sizes up to 1422 pass, `-s 1472`
+   gets 100% loss with no error when the MTU is wrong (`ping -M do -s <size> <pod-ip>`).
+4. Check mounts and stuck processes per node (`ps -eo pid,stat,args | awk '$2 ~ /^D/'`,
+   `sudo timeout 6 ls <mount>`).
+
+**Symptom relief (does not fix the cause):** moving the share-manager off the VM node cured
+it here. Scale the app to 0 (pause ArgoCD auto-sync first, selfHeal undoes the scale), let
+Longhorn stop the share-manager, then on every node lazy-unmount all mounts of the Service IP
+(`sudo umount -f -l <path>`), `kill -9` the hung `D`-state processes, run
+`sudo ss -K dst <service-ip> dport = 2049`, confirm `/proc/fs/nfsfs/servers` no longer lists
+the server, and scale back up. Per-mount patching without moving the share-manager only
+works until the next large reply.
+
+**Permanent fix (applied 2026-11-24):**
+
+- Ansible: `networkd_migrate_mtu` (default 1500) is rendered as `MTUBytes=` into the uplink
+  `.network` file, so every node set up with the role gets the same MTU
+  (`ansible/roles/networkd_migrate`). The Pi node is managed by NetworkManager and
+  already runs 1500 (no change needed).
+- Applied by hand to avoid a drain/reboot: `MTUBytes=1500` added to the uplink `.network`
+  file on the networkd nodes (no reload, takes effect at next boot, backup kept as
+  `10-uplink.network.bak-mtu`), and on the VM node live with
+  `ip link set dev uplink0 mtu 1500`, `flannel.1` and `cni0` to 1450.
+- Check afterwards: DF pings from the VM node to a pod on another node now pass up to 1422
+  and fail locally with `Message too long` above that, instead of vanishing silently.
+- The k3s service on that node (`k3s-node`) was restarted without downtime: flannel now
+  reports `FLANNEL_MTU=1450` by itself and all pods kept running.
+- Alert `NodeMtuMismatch` (`system/monitoring/monitoring/templates/prometheusrules.yaml`,
+  group `network-mtu.alerts`): fires after 10 min when `flannel.1`, `cni0` or `uplink0` has a
+  different MTU on different nodes (`max` vs `min` of `node_network_mtu_bytes` per device),
+  no hard-coded value. Check it is quiet with that query in Prometheus.
+- **Also caused:** the `cert-push` job failed on 2026-11-20 and 2026-11-24, only when scheduled on the VM node (TLS handshake to the
+  gateway dies with `unexpected eof`, NAS logged `dropped over-mtu packet` at the same second). See
+  [cert-push troubleshooting](../01-platform/cert-push.md#cert-push-mtu). The VM's tap interface on the NAS must also stay at 1500.
+- **Still open:** pod `veth` interfaces on the VM node stay at 8950 until their pods are
+  recreated. Pods there now get proper "too big" feedback, so it is no longer a black hole,
+  but recreate them at the next maintenance window. Also worth doing: keep workloads that
+  mount RWX volumes off the node that should not host share-managers.
+
+**Related hazard seen the same evening:** with a node cordoned, the descheduler's
+`RemovePodsViolatingNodeTaints` keeps evicting 3 pods per 2 min from it, including Longhorn
+CSI/manager pods and share-managers (`storage` is only excluded under `LowNodeUtilization`).
+
+Do **not** debug this with in-tree `nfs:` volumes in a probe pod: they fall back to the
+portmapper (port 111, not exposed by the Service) and hang for an unrelated reason.
 
 ### Node memory asymmetry and Longhorn's per-node cost {#node-memory-asymmetry}
 
@@ -418,6 +511,16 @@ topology). Home Assistant identifies some devices as `serial_<n>`, which equals 
 (`setup_manual_code` in the result); matter-server serves only a WebSocket on its port, no REST. UniFi monitors Thread devices only.
 **Enrolments are queued by UniFi**: two `POST`s in a row both return `202` with status `QUEUED`, and the second device is not a Matter node yet (a `PUT` on it returns `404 MatterNodeNotFound`) until the first has finished, so enrol strictly one device at a time and name it only after its own commissioning (about 40 s for a sleepy sensor). Pilot result: one door sensor enrolled cleanly (fabric count 2 to 3 of 5, no border-router or matter-server warnings).
 
+**UniFi enrolment fails with `COMMISSIONING_REJECTED` after a gateway restart / prefix change** (seen 2026-11-27). The gateway's Matter
+controller then sends its pairing traffic (UDP `18615` -> device `5540`) from the VLAN's ULA address with interface id `0`
+(`<ula-prefix>::`, the **subnet-router anycast** address). With per-interface `forwarding=1` Linux joins that anycast address on the
+border router's infra interface (`net1`), so the device's reply is delivered locally in the border-router pod instead of being forwarded to the
+gateway; UniFi never sees it and gives up after about 48 s ("device didn't accept the pairing code"). Symptoms: matter-server opens the window fine,
+OTBR logs show request and reply, a capture on the gateway shows requests but no reply, and no ICMPv6 error. Fix: the border router's init
+container sets `net.ipv6.conf.net1.forwarding=0` **after** `all.forwarding=1` (forwarding itself stays on via `all`); check with
+`grep net1 /proc/net/anycast6` in the pod (expect nothing). Matter devices stay reachable. Also: a stale "UniFi Network" fabric stays on a device
+after its UniFi node is deleted (read it unfiltered with `read_attribute 0/62/1`); it did not cause this failure but can be removed with `RemoveFabric`.
+
 ### IPTV multicast never crosses the ISP box's internet bridge {#iptv-multicast-never-crosses-the-isp-box-bridge}
 
 With VDSL and the ISP's Internet Box bridging the internet session to the UDM, the UDM's IGMP
@@ -540,6 +643,18 @@ Thanos-related custom resources before assuming otherwise, but by default, ignor
 notes.
 
 ---
+
+### Prowlarr cannot add an indexer: duplicate key `PK_Indexers` {#prowlarr-indexer-id-sequence}
+
+**Symptom:** adding an indexer in Prowlarr (UI or API) fails with HTTP 500 and a Postgres error
+`duplicate key value violates unique constraint "PK_Indexers"`.
+
+**Root cause:** the `Indexers_Id_seq` sequence in `prowlarr_main` was behind the highest existing id (sequence at 9, ids up
+to 35), a leftover of the move from SQLite to Postgres, so every new row collided with an existing id.
+
+**Fix:** set the sequence to the current maximum, then add the indexer again:
+`select setval('"Indexers_Id_seq"', (select max("Id") from "Indexers"));` (as the postgres superuser in the
+`prowlarr_main` database). Other arr apps imported the same way may have the same gap in their own tables.
 
 ## Monitoring / Grafana
 
@@ -857,3 +972,35 @@ volume that is 75% full.
 - Then power-cycle through the VMM API, and only then consider the prevention options: raise the guest SCSI disk timeout from 30 s
   to 120-180 s via a udev rule (so a short stall does not offline the disk), lower the guest's RAM, move heavy NAS jobs away from
   the early hours, and alert on `vhost_scsi` lines in the NAS kernel log.
+
+## Smart home / Zigbee
+
+### Ember rejects a Z-Stack backup with more link keys than the NCP's key table {#ember-key-table-too-small}
+
+**Symptom:** Zigbee2MQTT exits at start with `[BACKUP] Current key table of 20 is too small to import backup of 58!` right
+after `[INIT TC] Forming from backup`. No network is formed on the adapter; the pod restarts in a loop.
+
+**Root cause:** herdsman's `importLinkKeys` requires every per-device link key in `coordinator_backup.json` to fit the NCP's key
+table. The size is a firmware build setting (20 on the Sonoff Dongle Max with EmberZNet 9.1.0.0; community MG24 builds use 12) and
+cannot be raised from Z2M (`stack_config.json` has no such key). A Z-Stack backup carries one derived link key per paired device,
+so a converted backup of a large network easily exceeds the table. This is about stored per-device keys, not the number of devices
+on the network.
+
+**Fix:** trim `devices` in the *converted* backup to at most the table size (keep the devices that are hardest to re-pair, and leave
+at least one slot free), then restart. The log then shows `Imported N keys` and the restore continues. Devices without a key entry
+kept working on the network key; of 58 devices, 2 needed a manual re-pair afterwards. Keep the full converted backup. No
+larger-table firmware for this adapter was found (Sonoff's firmware repo only covers the ZBDongle-E, the community builder has no
+Dongle Max target).
+
+### Z2M loses the Dongle Max seconds after the first start (ASH ack timeout) {#z2m-max-ack-timeout}
+
+**Symptom:** about 2 s after a successful start, the log shows `Received ERROR from adapter, with code=ERROR_EXCEEDED_MAXIMUM_ACK_TIMEOUT_COUNT`,
+`ASH_NCP_FATAL_ERROR`, `Adapter disconnected, stopping`, and the pod restarts. The NCP retransmits the same frames (`frmTx` repeated).
+
+**Root cause (not proven):** the host's ACKs do not reach the NCP over the Max's TCP serial bridge. Similar reports upstream:
+[Z2M #33574](https://github.com/Koenkk/zigbee2mqtt/issues/33574) (Dongle Max over TCP, disconnects on 2.14.3, stable on 2.14.2) and
+the open Sonoff firmware repo issue about the serial-over-TCP bridge dropping downlink to sleepy end devices. It happened once, on
+the first start after the network restore; the pod has been stable since.
+
+**Fix / watch:** the pod restart cleared it. If it recurs: pin Z2M to 2.14.2, check the Max serial-over-network settings, and fall back
+to the USB stick if needed (rollback steps on the [Zigbee page](../02-smarthome/zigbee.md)).

@@ -504,6 +504,28 @@ spec:
             description: "{{`{{ $labels.raidName }}`}} on {{`{{ $labels.instance }}`}} is below 5% free space. Writes may start failing."
 
     # ─────────────────────────────────────────────────────────────────────────
+    # Network MTU consistency. A node whose NIC reports a different MTU (a hypervisor vNIC can
+    # report 9000, flannel then copies it as 8950) silently drops packets above 1450 bytes to the
+    # other nodes: RWX/NFS mounts hang while small requests still work. Compares each device
+    # across all nodes (same device name = same expected MTU), so it needs no hard-coded value.
+    # See wiki/05-operations/known-issues.md#rwx-share-manager-mtu-blackhole
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: network-mtu.alerts
+      interval: 1m
+      rules:
+        - alert: NodeMtuMismatch
+          expr: >-
+            max by (device) (node_network_mtu_bytes{device=~"flannel.1|cni0|uplink0"})
+            != min by (device) (node_network_mtu_bytes{device=~"flannel.1|cni0|uplink0"})
+          for: 10m
+          labels:
+            severity: warning
+            category: hardware
+          annotations:
+            summary: "MTU of {{`{{ $labels.device }}`}} differs between nodes (max {{`{{ $value }}`}})"
+            description: "The nodes do not agree on the MTU of {{`{{ $labels.device }}`}} (expected 1500 on uplink0, 1450 on flannel.1/cni0). Packets above the smaller MTU are dropped silently between those nodes, which hangs Longhorn RWX/NFS mounts. Compare with `ip -o link` on every node; see wiki known-issues, anchor rwx-share-manager-mtu-blackhole."
+
+    # ─────────────────────────────────────────────────────────────────────────
     # cert-manager certificate alerts. Renewal normally happens ~30 days before expiry,
     # so "expires within 14d" means automatic renewal is stuck.
     # ─────────────────────────────────────────────────────────────────────────

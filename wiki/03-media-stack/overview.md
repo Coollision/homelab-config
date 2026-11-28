@@ -62,11 +62,12 @@ their own config; the Vault copy is only for Homepage and must be updated by han
 | **slskd** | Soulseek client (music inbox) | config PVC + downloads subPaths | — |
 | **music-intake** | Tags and files finished slskd downloads into the music library | job-state PVC + downloads/music NFS | SQLite |
 | **Prefetcharr** | Pre-fetches upcoming episodes based on viewing progress | — (no Service, outbound-only) | — |
+| **Spotweb** | Spotnet index (Dutch and Flemish Usenet releases), exposes a Newznab API | none (stateless) | native Postgres (own DB and role) |
 
 ## The shared Postgres — `service-db-cnpg` {#the-shared-postgres-service-db-cnpg}
 
 A single CloudNativePG cluster (`service-db-pg`) backs Radarr, Sonarr, Prowlarr, Lidarr,
-Bazarr, and Jellyseerr, following the same declarative pattern described in
+Bazarr, Jellyseerr and Spotweb, following the same declarative pattern described in
 [Platform → Databases](../01-platform/databases.md). Radarr/Sonarr/Prowlarr/Lidarr don't support
 Postgres natively, so `lib/arr-lib` (a thin wrapper around `lib/shared-lib`) injects an
 init container per pod that waits for Postgres, then rewrites the app's XML config file
@@ -97,3 +98,29 @@ careful pause-then-cutover sequence rather than a simple git mv — the full mec
 (and the runtime config each app needed hand-repointing afterward, since inter-app
 hostnames aren't GitOps-managed) are written up in
 [Known Issues → moving a workload between namespaces](../05-operations/known-issues.md#moving-a-workload-between-namespaces).
+
+## Spotweb (Spotnet index) {#spotweb}
+
+`workload/arr-stack/spotweb` runs the upstream Spotweb PHP app (image `erikdevries/spotweb`, pinned to a `sha-` tag
+because the image publishes no semver tags). It reads the `free.pt` Spotnet group from the Usenet provider, builds
+its own index and exposes a Newznab API that Prowlarr adds as a generic Newznab indexer (URL
+`http://spotweb-service.arr-stack.svc.cluster.local`, API path `/api`, per-user API key from Spotweb). It is the
+free route to Dutch and Flemish content that general indexers rarely carry.
+
+- **Internal only.** Internal ingress routes only, no external route. The web UI ships with a default admin login:
+  change it on first use.
+- **Database.** Own database `spotweb` and role `spotweb_user` on the shared Postgres (password in Vault under
+  `kv/workload/arr-stack/spotweb`). The shared volume was grown from 2Gi to 6Gi for this; keep an eye on it
+  (`df` in the Postgres pod) because every arr app shares it.
+- **Usenet login.** Entered once in Spotweb's settings UI and stored in its database, never in git. Retention is a
+  UI setting too; the first sync is deliberately limited to recent spots (the group holds millions of articles).
+- **Settings live in the Spotweb database, not in this repo**, so a rebuilt database needs them again:
+  - Usenet server (header and NZB servers) with the provider login, TLS on port 563.
+  - Retention 180 days, type `everything`, and `retrieve_newer_than` set to six months back so the first sync skips
+    the millions of older articles. The first sync still walks the whole group once (about 45 minutes).
+  - **Category filter:** a `BEFORE INSERT` trigger on `spots` (`spots_keep_only_wanted`) drops everything except
+    movies, series, books and music (Spotnet category 0 with subcategory z0, z1 or z2, and category 1), so erotica,
+    games, apps and pictures are never stored. Spotweb has no setting for this.
+  - A dedicated API user `prowlarr`: Spotweb refuses the API for its built-in admin user, and a new user needs the
+    anonymous/authenticated/trusted groups (2, 3 and 4) for search to work. Prowlarr uses it as a generic Newznab
+    indexer (URL `http://spotweb-service.arr-stack.svc.cluster.local`, API path `/api`).

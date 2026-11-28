@@ -52,8 +52,8 @@ the descheduler's placement logic:
 - **NFD** runs custom USB-device detection rules that label nodes:
   `feature.node.kubernetes.io/iot-zigbee-coordinator`,
   `feature.node.kubernetes.io/iot-thread-border-router`,
-  `feature.node.kubernetes.io/nut-ups-apc` — these are what let the Zigbee coordinator,
-  Thread border router, and UPS server pods pin themselves to whichever physical node
+  `feature.node.kubernetes.io/nut-ups-apc` — these are what let the Thread border router and UPS server pods
+  (and formerly Zigbee2MQTT, now on a PoE coordinator over TCP) pin themselves to whichever physical node
   actually has that USB device plugged in, via required `nodeAffinity`.
 - **Descheduler** runs three profiles (`mini-nodes`, `vm-nodes`, `hw-enforcement`) —
   the last one actively evicts any pod violating a required node affinity, which is the

@@ -50,6 +50,10 @@ spec:
                   value: {{ if .force }}"1"{{ else }}"0"{{ end }}
                 - name: NAS_API_PORT
                   value: {{ $.Values.nasApiPort | quote }}
+                - name: NODE_NAME # logged with every run: failures once correlated with one VM node only
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: spec.nodeName
               resources:
                 {{- toYaml $.Values.resources | nindent 16 }}
               securityContext:

@@ -15,7 +15,7 @@ spec:
         - ReadWriteOnce
       resources:
         requests:
-          storage: 2Gi
+          storage: 6Gi
       storageClassName: longhorn
       volumeName: arr-stack-service-db-pg-data
 
@@ -73,3 +73,8 @@ spec:
         login: true
         passwordSecret:
           name: pgrole-jellyseerr
+      - name: spotweb_user
+        ensure: present
+        login: true
+        passwordSecret:
+          name: pgrole-spotweb

@@ -103,7 +103,6 @@ Planned work that is not built yet. Pages move to their normal section once done
 | [UPS shutdown — one-page plan](06-todo/ups-shutdown-overview.md) | Readable summary with flow diagrams, tiers, triggers, recovery and the open decisions |
 | [UPS graceful shutdown](06-todo/ups-graceful-shutdown.md) | Reviewed design: staged load shedding, label tiers, data-safe shutdown, UPS cycle + auto-recovery |
 | [Bazarr subtitle gaps](06-todo/bazarr-subtitle-gaps.md) | Missing Dutch subtitles: investigate Lingarr, provider cleanup, optional Whisper |
-| [Remote-access proxy](06-todo/remote-access-proxy.md) | Browser-only access to internal sites via an mTLS forward proxy + Slack approval; NAS real-client-IP experiment and the 443 question |
 | [Recurring checks](06-todo/recurring-checks.md) | Things to look at from time to time with a due date: NAS NVMe wear and latency every 4 months (next 2027-03-23) |
 | [Future ideas](06-todo/future-ideas.md) | Vetted backlog: UniFi Poller, ntfy, Paperless, BLE presence; hardware-gated LLM + heating |
 | [UniFi OS 6 re-check](06-todo/unifi-os6-recheck.md) | After the console update: does UniFi's mDNS proxy still re-publish? Is `mcast_to_unicast` still needed / does the watchdog still run? |
@@ -115,6 +114,7 @@ Ideas that were looked at and deliberately not built, with the reasoning.
 
 | Page | Covers |
 |---|---|
+| [Remote-access proxy](07-rejected/remote-access-proxy.md) | Why a browser-only mTLS forward proxy lost (locked-down corporate client); spike findings and the parked NAS real-IP idea |
 | [Spegel embedded registry](07-rejected/spegel-embedded-registry.md) | Why k3s' peer-to-peer image mirror lost to a local NAS mirror |
 | [Single sign-on](07-rejected/sso.md) | Why full SSO isn't worth it, and why an external-only auth gate is parked |
 

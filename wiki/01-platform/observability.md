@@ -62,6 +62,10 @@ in-pod logs — the matter-server/thread-border-router pods get restarted often 
 during mesh troubleshooting that in-pod logs are frequently already gone; see
 [Known Issues → the Matter mesh](../05-operations/known-issues.md#the-matter-thread-mesh-is-fragile-by-design).
 
+From the laptop, `scripts/loki-logs.sh` queries Loki without Grafana (port-forward, tenant header `1`, compact
+de-duplicated output); it also reaches the logs of finished Job pods that `kubectl logs` no longer can. The
+`/loki-logs` skill and `log-fetcher` agent wrap it.
+
 ## Grafana
 
 Grafana lives inside the `monitoring` chart, wired to both Prometheus and Loki

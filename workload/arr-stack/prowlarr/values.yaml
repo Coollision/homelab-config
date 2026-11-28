@@ -2,7 +2,7 @@ fullnameOverride: prowlarr
 statefulset:
   image:
     repository: linuxserver/prowlarr
-    tag: 3.0.2
+    tag: 3.1.0
     imagePullPolicy: IfNotPresent
   ports:
     web: 9696

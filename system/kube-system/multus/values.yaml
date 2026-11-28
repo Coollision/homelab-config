@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/k8snetworkplumbingwg/multus-cni
-  tag: v4.3.1-thick
+  tag: v4.3.2-thick
 
 pluginsImage:
   repository: docker.io/library/busybox

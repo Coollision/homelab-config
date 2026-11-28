@@ -90,8 +90,9 @@ Design choices that look odd but are deliberate:
   30s/60s back-off. No request reached the console, so it cannot double-submit or count as a failed login. Any HTTP status is
   never retried, and the NAS has no retry at all. Added after the 2026-11-20 run failed on `unexpected eof` during the console's
   TLS handshake (the next day was fine).
-- **A failed probe is logged** (`probe says not up to date: <name:port>(unreachable|serves-other:<fp>)`) before the job falls
-  through to a login, so the log says why it pushed.
+- **A failed probe is logged** (`probe says not up to date: <name:port>(unreachable,<seconds>s|serves-other:<fp>)`) before the job falls
+  through to a login, so the log says why it pushed. Every run also logs the node it ran on (`node=<node>`), and a failed UniFi call
+  adds the curl exit code, how long it took and, for a long handshake wait, an MTU hint ([troubleshooting](#cert-push-mtu)).
 - **Retention:** 1 successful Job (about a day on the daily schedule); failed Jobs are kept up to 3 days. `ttlSecondsAfterFinished`
   (3 days) cannot differ per outcome, so the success history limit does the pruning.
 - **Failed Job history is 1.** The stock `KubeJobFailed` rule fires while a failed Job exists, so a stale failure must not linger.
@@ -153,6 +154,34 @@ As services move to the new NAS certificate:
   with only `network.management` the certificate list returns **403**, adding `system.management.user` did not help, and it worked
   once the role also carried the other Control Plane permissions (access, protect, drive, talk and so on, plus
   `system.management.location`). There is no certificate-only role, so treat the account as admin-equivalent.
+
+## Troubleshooting: TLS to the console dies with `unexpected eof` {#cert-push-mtu}
+
+**Seen 2026-11-20 and 2026-11-24, both times on the VM node.** The NAS step passed, the UniFi probe and every login attempt failed
+with `curl: (35) ... unexpected eof while reading`; the next day on another node it was fine. Each log line now carries `node=<node>`
+and how long a failed call took.
+
+**Cause (likely, about 85% by independent review, not proven by a packet capture):** the VM node's NIC ran MTU 9000 on a 1500 path
+(see [known issues](../05-operations/known-issues.md#rwx-share-manager-mtu-blackhole)). The gateway's bridge is jumbo, so its
+SYN-ACK allows a big segment size and the guest sent the ~1.6 KB TLS ClientHello (the post-quantum key share makes it bigger than one
+1500-byte frame) as one packet. Open vSwitch on the NAS dropped it silently, with no "fragmentation needed" reply, so the handshake
+never completed and the gateway closed the idle connection after its own timeout (about 60 s). Why it points at the network and not
+the console: TCP connects instantly, the 5 minute job time is four connections that each wait about a minute plus the retry back-off,
+and the gateway logs nothing for that node. Disk stalls, gateway memory pressure and DNS were ruled out (the job dials by IP and has
+no DNS egress).
+
+**Recognise it:** the log says `curl exit 35 after ~60s` with a `node=` that is the VM node, and the NAS kernel log has
+`<uplink>: dropped over-mtu packet: <size> > 1500` at the same second as the job started. On any node, check
+`node_network_mtu_bytes` (`uplink0`, `flannel.1`, `cni0`): they must be 1500/1450 everywhere. Alert `NodeMtuMismatch` covers the nodes;
+nothing watches the NAS kernel log yet.
+
+**Fix and prevention:**
+
+- Guest uplink pinned to 1500 (ansible `networkd_migrate_mtu`, applied live on the VM node 2026-11-24) and the NAS tap/OVS port pinned
+  to 1500 (done by hand 2026-11-26, re-check after a VMM or DSM update or a VM restart: the tap is recreated and defaults to 9000).
+- Retrying the same handshake cannot help, so a long-wait failure now prints a hint instead of looking like a console outage.
+- Open: gateway bridge MTU 9216 on a 1500 LAN stays a trap for any host that ends up with a large MTU; a lower bridge MTU or an MSS
+  clamp on the gateway would close it, deliberately not changed here.
 
 ## Verified live (2026-11-15) {#cert-push-verified}
 

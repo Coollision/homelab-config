@@ -123,3 +123,16 @@ spec:
   cluster:
     name: service-db-pg
   databaseReclaimPolicy: retain
+---
+# Spotweb is a new app: its database is owned by its own role (see the Lidarr note above).
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: db-spotweb
+  namespace: arr-stack
+spec:
+  name: spotweb
+  owner: spotweb_user
+  cluster:
+    name: service-db-pg
+  databaseReclaimPolicy: retain

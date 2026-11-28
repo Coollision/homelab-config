@@ -53,6 +53,8 @@ Skills `/validate`, `/gitops-debug`, `/wiki-sync` and agents `chart-reviewer`, `
 - `/renovate-batch-verify`: check open Renovate bump branches for breaking changes + render, batch the safe ones
 - `/todo-list`: pool every open TODO (wiki, `.tmp`, memory, scratch, PRs), check what is already done, rank by quick gain; read-only
 
+- `/loki-logs` + agent `log-fetcher` (Haiku): pull logs, incl. pods that are gone, via `scripts/loki-logs.sh`; delegate log reading to it
+
 Domain skills (zigbee, matter/thread, esphome) are local-only and trigger by description.
 
 ## Token hygiene

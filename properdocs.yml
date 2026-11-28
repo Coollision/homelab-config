@@ -60,13 +60,13 @@ nav:
       - 06-todo/ups-graceful-shutdown.md
       - 06-todo/bazarr-subtitle-gaps.md
       - 06-todo/unifi-os6-recheck.md
-      - 06-todo/remote-access-proxy.md
       - 06-todo/windmill-pilot.md
       - 06-todo/claude-agent-gateway.md
       - 06-todo/recurring-checks.md
       - 06-todo/future-ideas.md
   - Rejected:
       - 07-rejected/README.md
+      - 07-rejected/remote-access-proxy.md
       - 07-rejected/spegel-embedded-registry.md
       - 07-rejected/sso.md
       - 07-rejected/technitium-secondary-headless.md
