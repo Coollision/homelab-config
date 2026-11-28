@@ -52,6 +52,7 @@ configMaps:
         import os
         import re
         import urllib.error
+        import urllib.parse
         import urllib.request
         from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -72,9 +73,11 @@ configMaps:
             with open(path, encoding="utf-8") as fh:
                 raw = json.load(fh)
             rules = []
-            for canonical, aliases in raw.items():
+            for canonical, spec in raw.items():
+                aliases = spec.get("aliases", []) if isinstance(spec, dict) else spec
+                search = spec.get("search", canonical) if isinstance(spec, dict) else canonical
                 for alias in {canonical, *aliases}:
-                    rules.append((_alias_regex(alias), canonical, len(alias)))
+                    rules.append((_alias_regex(alias), canonical, len(alias), search))
             rules.sort(key=lambda r: -r[2])  # longest alias first
             return rules
 
@@ -88,7 +91,7 @@ configMaps:
 
         def normalise(title, rules):
             out = title
-            for regex, canonical, _ in rules:
+            for regex, canonical, _, _search in rules:
                 new, n = regex.subn(lambda m: m.group(1) + canonical, out, count=1)
                 if n:
                     out = new
@@ -101,6 +104,33 @@ configMaps:
             if DUTCH.search(out) and not HAS_LANG.search(out):
                 out += " DUTCH"
             return out
+
+
+        TV_ONLY_PARAMS = ("season", "ep", "tvdbid", "tvmazeid", "rid", "imdbid", "tmdbid", "traktid", "doubanid")
+
+
+        def rewrite_query(path, rules):
+            """Spotweb's t=tvsearch finds nothing for Spotnet releases, but t=search does. Convert the request, drop the
+            season/episode/id filters (Sonarr's decision engine filters on the parsed title anyway) and replace the show
+            name in q with a term Spotnet titles contain ("and" vs "en", "&", ...)."""
+            parts = urllib.parse.urlsplit(path)
+            params = urllib.parse.parse_qsl(parts.query, keep_blank_values=True)
+            if dict(params).get("t") != "tvsearch":
+                return path
+            out = []
+            for k, v in params:
+                if k == "t":
+                    v = "search"
+                elif k in TV_ONLY_PARAMS:
+                    continue
+                elif k == "q":
+                    for regex, _canonical, _, search in rules:
+                        m = regex.match(v)
+                        if m:
+                            v = search + v[m.end():]
+                            break
+                out.append((k, v))
+            return urllib.parse.urlunsplit(("", "", parts.path, urllib.parse.urlencode(out), ""))
 
 
         ITEM = re.compile(r"<item\b.*?</item>", re.DOTALL)
@@ -140,8 +170,9 @@ configMaps:
             def do_GET(self):
                 if self.path == "/healthz":
                     return self._send(200, [("Content-Type", "text/plain")], b"ok")
-                LOG.info("GET %s", re.sub(r"apikey=[^&]*", "apikey=***", self.path)[:300])
-                req = urllib.request.Request(UPSTREAM + self.path)
+                path = rewrite_query(self.path, self.rules)
+                LOG.info("GET %s%s", re.sub(r"apikey=[^&]*", "apikey=***", path)[:300], " (rewritten)" if path != self.path else "")
+                req = urllib.request.Request(UPSTREAM + path)
                 for h in ("Host", "User-Agent", "Accept"):
                     if self.headers.get(h):
                         req.add_header(h, self.headers[h])
@@ -180,9 +211,12 @@ configMaps:
             ThreadingHTTPServer(("0.0.0.0", LISTEN), Handler).serve_forever()
       aliases.json: |
         {
-          "Woezel & Pip Vriendjesclub": ["Woezel en Pip Vriendjesclub", "Woezel Pip Vriendjesclub", "Woezel en Pip"],
-          "Bumba": ["Bumba"],
-          "Camping Coppens": ["Camping Coppens"]
+          "Woezel & Pip Vriendjesclub": {
+            "aliases": ["Woezel en Pip Vriendjesclub", "Woezel and Pip Vriendjesclub", "Woezel Pip Vriendjesclub", "Woezel en Pip"],
+            "search": "Woezel Pip Vriendjesclub"
+          },
+          "Bumba": {"aliases": [], "search": "Bumba"},
+          "Camping Coppens": {"aliases": [], "search": "Camping Coppens"}
         }
 
 storage:

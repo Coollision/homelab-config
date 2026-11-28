@@ -130,11 +130,13 @@ free route to Dutch and Flemish content that general indexers rarely carry.
 
 `tests/arr-stack/spotnet-proxy` (test deployment) is a small stateless Python proxy placed between Prowlarr and
 Spotweb. Spotnet release names don't follow scene naming, so Sonarr/Radarr can't match them. The proxy forwards every
-request to Spotweb unchanged and only rewrites the `<title>` of search results: alias to canonical series title,
-"Seizoen N" to `SNN`, "E01t/mE07" to `E01-E07`, and "NL Gesproken" to `DUTCH`. Downloads and everything else pass
+request to Spotweb and rewrites the `<title>` of search results: alias to canonical series title,
+"Seizoen N" to `SNN`, "E01t/mE07" to `E01-E07`, and "NL Gesproken" to `DUTCH`. On the request side it converts
+`t=tvsearch` to `t=search` (Spotweb finds nothing for Spotnet releases with `tvsearch`), drops the season/episode/id
+filters and swaps the show name in `q` for the show's `search` term. Downloads and everything else pass
 through, and if Spotweb is down the proxy answers 502 rather than partial data.
 
 - **No image to build.** The script runs on the stock `python` alpine image and lives in a ConfigMap together with
   `aliases.json`.
 - **Adding a show.** When Sonarr cannot match a show's Spotnet releases, add it to `aliases.json` in the chart's
-  `values.yaml` (canonical title plus alias spellings).
+  `values.yaml` (canonical title, its alias spellings and a `search` term that Spotnet titles contain).
