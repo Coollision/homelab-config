@@ -140,6 +140,7 @@ configMaps:
             def do_GET(self):
                 if self.path == "/healthz":
                     return self._send(200, [("Content-Type", "text/plain")], b"ok")
+                LOG.info("GET %s", re.sub(r"apikey=[^&]*", "apikey=***", self.path)[:300])
                 req = urllib.request.Request(UPSTREAM + self.path)
                 for h in ("Host", "User-Agent", "Accept"):
                     if self.headers.get(h):
