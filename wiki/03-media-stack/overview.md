@@ -114,4 +114,13 @@ free route to Dutch and Flemish content that general indexers rarely carry.
   (`df` in the Postgres pod) because every arr app shares it.
 - **Usenet login.** Entered once in Spotweb's settings UI and stored in its database, never in git. Retention is a
   UI setting too; the first sync is deliberately limited to recent spots (the group holds millions of articles).
-- **Settings live in the Spotweb database, not in this repo**, so a rebuilt database needs them again.
+- **Settings live in the Spotweb database, not in this repo**, so a rebuilt database needs them again:
+  - Usenet server (header and NZB servers) with the provider login, TLS on port 563.
+  - Retention 180 days, type `everything`, and `retrieve_newer_than` set to six months back so the first sync skips
+    the millions of older articles. The first sync still walks the whole group once (about 45 minutes).
+  - **Category filter:** a `BEFORE INSERT` trigger on `spots` (`spots_keep_only_wanted`) drops everything except
+    movies, series, books and music (Spotnet category 0 with subcategory z0, z1 or z2, and category 1), so erotica,
+    games, apps and pictures are never stored. Spotweb has no setting for this.
+  - A dedicated API user `prowlarr`: Spotweb refuses the API for its built-in admin user, and a new user needs the
+    anonymous/authenticated/trusted groups (2, 3 and 4) for search to work. Prowlarr uses it as a generic Newznab
+    indexer (URL `http://spotweb-service.arr-stack.svc.cluster.local`, API path `/api`).

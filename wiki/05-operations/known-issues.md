@@ -644,6 +644,18 @@ notes.
 
 ---
 
+### Prowlarr cannot add an indexer: duplicate key `PK_Indexers` {#prowlarr-indexer-id-sequence}
+
+**Symptom:** adding an indexer in Prowlarr (UI or API) fails with HTTP 500 and a Postgres error
+`duplicate key value violates unique constraint "PK_Indexers"`.
+
+**Root cause:** the `Indexers_Id_seq` sequence in `prowlarr_main` was behind the highest existing id (sequence at 9, ids up
+to 35), a leftover of the move from SQLite to Postgres, so every new row collided with an existing id.
+
+**Fix:** set the sequence to the current maximum, then add the indexer again:
+`select setval('"Indexers_Id_seq"', (select max("Id") from "Indexers"));` (as the postgres superuser in the
+`prowlarr_main` database). Other arr apps imported the same way may have the same gap in their own tables.
+
 ## Monitoring / Grafana
 
 ### Grafana dashboards silently don't render {#grafana-dashboards-silently-dont-render}
