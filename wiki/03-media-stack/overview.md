@@ -138,5 +138,9 @@ through, and if Spotweb is down the proxy answers 502 rather than partial data.
 
 - **No image to build.** The script runs on the stock `python` alpine image and lives in a ConfigMap together with
   `aliases.json`.
-- **Adding a show.** When Sonarr cannot match a show's Spotnet releases, add it to `aliases.json` in the chart's
-  `values.yaml` (canonical title, its alias spellings and a `search` term that Spotnet titles contain).
+- **Automatic aliases.** The proxy reads Sonarr's series list (title and alternate titles, through the Sonarr API
+  key from Vault) every 10 minutes and builds the alias rules from it. Connector words (and/en/&/+), punctuation and
+  a trailing year are ignored when matching. If Sonarr is unreachable it keeps the last rules.
+- **Adding a show.** New shows in Sonarr are picked up automatically. `aliases.json` in the chart's `values.yaml`
+  only holds manual overrides (canonical title, its alias spellings and a `search` term that Spotnet titles
+  contain) and is checked before the automatic rules.

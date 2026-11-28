@@ -1,8 +1,9 @@
 fullnameOverride: spotnet-proxy
 
-# Stateless Newznab proxy between Prowlarr and Spotweb: rewrites Spotnet release titles into names Sonarr/Radarr can
-# match (alias -> canonical series title, "Seizoen N" -> "SNN", "NL Gesproken" -> "DUTCH"). Everything else passes
-# through unchanged. Add a show to aliases.json when Sonarr cannot match its Spotnet releases.
+# Stateless Newznab proxy between Prowlarr and Spotweb: rewrites Spotnet release titles into names Sonarr can match
+# (show name -> Sonarr's title, "Seizoen N" -> "SNN", "NL Gesproken" -> "DUTCH"), turns Spotweb-unfriendly tvsearch
+# requests into plain searches. Everything else passes through. The show aliases are built automatically from
+# Sonarr's series list (title + alternate titles, refreshed every 10 minutes); aliases.json only holds manual overrides.
 # See wiki/03-media-stack/overview.md#spotnet-proxy. The script runs on the stock python image, nothing to build.
 deployment:
   image:
@@ -12,9 +13,16 @@ deployment:
   ports:
     http: 8080
 
+secrets:
+  - name: spotnet-proxy-sonarr
+    secret_kv:
+      api_key: <secret:kv/data/workload/arr-stack/sonarr~api-key>
+
 config:
   TZ: Europe/Brussels
   UPSTREAM: http://spotweb-service.arr-stack.svc.cluster.local:80
+  SONARR_URL: http://sonarr-service.arr-stack.svc.cluster.local:8989
+  SONARR_API_KEY: {secretKeyRef: {name: spotnet-proxy-sonarr, key: api_key}}
 
 resources:
   requests:
@@ -51,6 +59,8 @@ configMaps:
         import logging
         import os
         import re
+        import threading
+        import time
         import urllib.error
         import urllib.parse
         import urllib.request
@@ -80,6 +90,77 @@ configMaps:
                     rules.append((_alias_regex(alias), canonical, len(alias), search))
             rules.sort(key=lambda r: -r[2])  # longest alias first
             return rules
+
+
+        CONNECTORS = {"and", "en", "&", "+"}
+        STOP_FOR_SEARCH = {"and", "en", "&"}
+        SONARR_URL = os.environ.get("SONARR_URL", "").rstrip("/")
+        SONARR_API_KEY = os.environ.get("SONARR_API_KEY", "")
+        REFRESH_SECONDS = int(os.environ.get("REFRESH_SECONDS", "600"))
+        MANUAL_RULES = []
+        AUTO_RULES = []
+        _LOCK = threading.Lock()
+
+
+        def _tokens(title):
+            t = re.sub(r"\(\s*(?:19|20)\d\d\s*\)\s*$", "", title.strip())  # trailing "(2021)"
+            t = t.lower().replace("&", " and ").replace("+", " and ")
+            t = re.sub(r"['\u2019`]", "", t)
+            return [x for x in re.split(SEP, t) if x]
+
+
+        def auto_rule(title):
+            """Flexible start-anchored regex for a series title: connector words (and/en/&/+) are interchangeable and
+            optional, punctuation and a trailing year are ignored. Returns (regex, canonical, weight, search term)."""
+            toks = _tokens(title)
+            if len(toks) < 1 or sum(len(x) for x in toks) < 4:
+                return None
+            parts = []
+            for i, tok in enumerate(toks):
+                if tok in CONNECTORS and 0 < i < len(toks) - 1:
+                    parts.append(r"(?:(?:and|en|&|\+)" + SEP + r")?")
+                else:
+                    parts.append(re.escape(tok) + (SEP if i < len(toks) - 1 else ""))
+            rx = re.compile(r"^(\W*)" + "".join(parts).rstrip() + r"(?=$|[\W_])", re.IGNORECASE)
+            search = " ".join(x for x in toks if x not in STOP_FOR_SEARCH)
+            return (rx, title, len(title), search)
+
+
+        def fetch_sonarr_rules():
+            req = urllib.request.Request(SONARR_URL + "/api/v3/series", headers={"X-Api-Key": SONARR_API_KEY})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                series = json.load(resp)
+            rules, seen = [], set()
+            for s in series:
+                canonical = re.sub(r"\s*\((?:19|20)\d\d\)\s*$", "", s["title"])
+                canonical = re.sub(r"\s*:\s*", " ", canonical)  # Sonarr/indexers drop colons in release names
+                for name in [s["title"]] + [a["title"] for a in s.get("alternateTitles", [])]:
+                    key = (name.lower(), canonical)
+                    rule = auto_rule(name)
+                    if rule and key not in seen:
+                        seen.add(key)
+                        rules.append((rule[0], canonical, rule[2], rule[3]))
+            return rules
+
+
+        def refresh_loop():
+            global AUTO_RULES
+            while True:
+                try:
+                    rules = fetch_sonarr_rules()
+                    rules.sort(key=lambda r: -r[2])
+                    with _LOCK:
+                        AUTO_RULES = rules
+                    LOG.info("auto aliases: %d rules from %s", len(rules), SONARR_URL)
+                except Exception as err:
+                    LOG.warning("could not refresh aliases from Sonarr (%s); keeping %d rules", err, len(AUTO_RULES))
+                time.sleep(REFRESH_SECONDS)
+
+
+        def current_rules():
+            with _LOCK:
+                auto = AUTO_RULES
+            return MANUAL_RULES + auto  # manual overrides are checked first; auto rules are pre-sorted longest first
 
 
         DUTCH = re.compile(r"\b(?:nl|nederlands)[\W_]*gespr\w*|\bnederlands\b", re.IGNORECASE)
@@ -161,7 +242,6 @@ configMaps:
 
 
         class Handler(BaseHTTPRequestHandler):
-            rules = []
             protocol_version = "HTTP/1.1"
 
             def log_message(self, fmt, *args):  # quiet access log
@@ -170,7 +250,7 @@ configMaps:
             def do_GET(self):
                 if self.path == "/healthz":
                     return self._send(200, [("Content-Type", "text/plain")], b"ok")
-                path = rewrite_query(self.path, self.rules)
+                path = rewrite_query(self.path, current_rules())
                 LOG.info("GET %s%s", re.sub(r"apikey=[^&]*", "apikey=***", path)[:300], " (rewritten)" if path != self.path else "")
                 req = urllib.request.Request(UPSTREAM + path)
                 for h in ("Host", "User-Agent", "Accept"):
@@ -188,7 +268,7 @@ configMaps:
                 ctype = next((v for k, v in headers if k.lower() == "content-type"), "")
                 if status == 200 and ("xml" in ctype or body[:5] == b"<?xml") and b"<item" in body:
                     try:
-                        text, n = rewrite_xml(body.decode("utf-8", "replace"), self.rules)
+                        text, n = rewrite_xml(body.decode("utf-8", "replace"), current_rules())
                         body = text.encode("utf-8")
                     except Exception as err:  # on any rewrite bug serve the original
                         LOG.error("rewrite failed: %s", err)
@@ -206,18 +286,15 @@ configMaps:
 
         if __name__ == "__main__":
             logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-            Handler.rules = load_aliases()
-            LOG.info("%d alias rules, upstream %s", len(Handler.rules), UPSTREAM)
+            MANUAL_RULES = load_aliases()
+            LOG.info("%d manual alias rules, upstream %s", len(MANUAL_RULES), UPSTREAM)
+            if SONARR_URL and SONARR_API_KEY:
+                threading.Thread(target=refresh_loop, daemon=True).start()
+            else:
+                LOG.warning("SONARR_URL/SONARR_API_KEY not set: only manual aliases")
             ThreadingHTTPServer(("0.0.0.0", LISTEN), Handler).serve_forever()
       aliases.json: |
-        {
-          "Woezel & Pip Vriendjesclub": {
-            "aliases": ["Woezel en Pip Vriendjesclub", "Woezel and Pip Vriendjesclub", "Woezel Pip Vriendjesclub", "Woezel en Pip"],
-            "search": "Woezel Pip Vriendjesclub"
-          },
-          "Bumba": {"aliases": [], "search": "Bumba"},
-          "Camping Coppens": {"aliases": [], "search": "Camping Coppens"}
-        }
+        {}
 
 storage:
   - mountPath: /app
