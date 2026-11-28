@@ -1,0 +1,70 @@
+fullnameOverride: sabnzbd
+
+# Usenet client (Eweka) replacing Synology Download Station. StatefulSet: /config (sabnzbd.ini, history DB) is RWO.
+# First-boot bootstrap (host_whitelist, UI login, Eweka server, categories, safety settings) is done in
+# wiki/03-media-stack/overview.md#download-clients, via kubectl exec: credentials never live in git.
+statefulset:
+  image:
+    repository: linuxserver/sabnzbd
+    tag: 5.1.3
+  ports:
+    web: 8080
+
+# linuxserver image: starts as root under s6 and drops to PUID/PGID itself, so NO securityContext here.
+# Same ids as the arrs; the NFS share squashes every write from the cluster to one user anyway.
+config:
+  TZ: Europe/Brussels
+  PUID: 1000
+  PGID: 1000
+  UMASK: "002"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 1Gi
+
+# Internal only (no external ingress).
+ingress_internal_secure:
+  host: sabnzbd.<secret:kv/data/shared/domains~domain>
+  port: web
+
+homepage:
+  group: Media
+  icon: sabnzbd
+  description: Usenet downloader
+
+storage:
+  - type: longhorn
+    mountPath: /config
+    size: 1Gi
+    nameSuffix: config
+    volumeName: arr-stack-sabnzbd-config
+    protect: true
+  # Same path as in the arrs (/data/downloads), so no remote path mappings are needed.
+  # SABnzbd works in usenet/incomplete and usenet/complete/<tv|movies|music> on this share.
+  - type: existingClaim
+    mountPath: /data/downloads
+    claimName: arr-stack-downloads
+    nameSuffix: downloads
+
+probes:
+  # Needs no API key; the kubelet calls by pod IP, which passes SABnzbd's hostname check.
+  startup:
+    httpGet:
+      path: /api?mode=version
+      port: web
+    periodSeconds: 5
+    failureThreshold: 60
+  readiness:
+    httpGet:
+      path: /api?mode=version
+      port: web
+    periodSeconds: 10
+  liveness:
+    httpGet:
+      path: /api?mode=version
+      port: web
+    periodSeconds: 30
+    failureThreshold: 5

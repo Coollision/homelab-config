@@ -1,0 +1,65 @@
+fullnameOverride: qbittorrent
+
+# Torrent client replacing Synology Download Station's torrent side. StatefulSet: /config is RWO.
+# Kept as its own pod/Service so it can later get its own network interface or a VPN sidecar.
+# First-boot bootstrap (random WebUI password, categories, limits) is documented in the wiki and done via kubectl exec.
+statefulset:
+  image:
+    repository: linuxserver/qbittorrent
+    tag: 5.3.1
+  ports:
+    web: 8080
+
+# linuxserver image: no securityContext (s6 drops to PUID/PGID).
+config:
+  TZ: Europe/Brussels
+  PUID: 1000
+  PGID: 1000
+  UMASK: "002"
+  WEBUI_PORT: "8080"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 1Gi
+
+# Internal only (no external ingress). The torrent listen port is not forwarded: passive-only for the trial.
+ingress_internal_secure:
+  host: qbittorrent.<secret:kv/data/shared/domains~domain>
+  port: web
+
+homepage:
+  group: Media
+  icon: qbittorrent
+  description: Torrent downloader
+
+storage:
+  - type: longhorn
+    mountPath: /config
+    size: 1Gi
+    nameSuffix: config
+    volumeName: arr-stack-qbittorrent-config
+    protect: true
+  - type: existingClaim
+    mountPath: /data/downloads
+    claimName: arr-stack-downloads
+    nameSuffix: downloads
+
+probes:
+  # The WebUI API needs auth, so only check that the port accepts connections.
+  startup:
+    tcpSocket:
+      port: web
+    periodSeconds: 5
+    failureThreshold: 60
+  readiness:
+    tcpSocket:
+      port: web
+    periodSeconds: 10
+  liveness:
+    tcpSocket:
+      port: web
+    periodSeconds: 30
+    failureThreshold: 5
