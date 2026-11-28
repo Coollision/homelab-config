@@ -1,0 +1,191 @@
+fullnameOverride: spotnet-proxy
+
+# Stateless Newznab proxy between Prowlarr and Spotweb: rewrites Spotnet release titles into names Sonarr/Radarr can
+# match (alias -> canonical series title, "Seizoen N" -> "SNN", "NL Gesproken" -> "DUTCH"). Everything else passes
+# through unchanged. Add a show to aliases.json when Sonarr cannot match its Spotnet releases.
+# See wiki/03-media-stack/overview.md#spotnet-proxy. The script runs on the stock python image, nothing to build.
+deployment:
+  image:
+    repository: python
+    tag: 3.13.18-alpine
+  command: ["python3", "-u", "/app/proxy.py"]
+  ports:
+    http: 8080
+
+config:
+  TZ: Europe/Brussels
+  UPSTREAM: http://spotweb-service.arr-stack.svc.cluster.local:80
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 128Mi
+
+probes:
+  readiness:
+    httpGet:
+      path: /healthz
+      port: http
+    periodSeconds: 10
+  liveness:
+    httpGet:
+      path: /healthz
+      port: http
+    periodSeconds: 30
+
+configMaps:
+  - name: spotnet-proxy
+    data:
+      proxy.py: |
+        """Newznab title normaliser in front of Spotweb (Spotnet).
+
+        Spotnet release names do not follow scene naming ("Woezel En Pip Vriendjesclub (2021) Seizoen 1 ... NL Gesproken"),
+        so Sonarr/Radarr cannot match them to a series or detect the language. This stateless proxy forwards every request to
+        Spotweb unchanged and only rewrites the <title> of search results: alias -> canonical series title, "Seizoen N" ->
+        "SNN", "E01t/mE07" -> "E01-E07", "NL Gesproken" -> "DUTCH". Downloads (t=get) and everything else pass through.
+        """
+        import html
+        import json
+        import logging
+        import os
+        import re
+        import urllib.error
+        import urllib.request
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        UPSTREAM = os.environ.get("UPSTREAM", "http://spotweb-service.arr-stack.svc.cluster.local:80").rstrip("/")
+        ALIASES_FILE = os.environ.get("ALIASES_FILE", "/app/aliases.json")
+        LISTEN = int(os.environ.get("LISTEN_PORT", "8080"))
+        LOG = logging.getLogger("spotnet-proxy")
+
+        SEP = r"[\W_]+"
+
+
+        def _alias_regex(alias):
+            tokens = [re.escape(t) for t in re.split(SEP, alias.strip()) if t]
+            return re.compile(r"^(\W*)" + SEP.join(tokens) + r"(?=$|[\W_])", re.IGNORECASE)
+
+
+        def load_aliases(path=ALIASES_FILE):
+            with open(path, encoding="utf-8") as fh:
+                raw = json.load(fh)
+            rules = []
+            for canonical, aliases in raw.items():
+                for alias in {canonical, *aliases}:
+                    rules.append((_alias_regex(alias), canonical, len(alias)))
+            rules.sort(key=lambda r: -r[2])  # longest alias first
+            return rules
+
+
+        DUTCH = re.compile(r"\b(?:nl|nederlands)[\W_]*gespr\w*|\bnederlands\b", re.IGNORECASE)
+        HAS_LANG = re.compile(r"\b(?:dutch|flemish|vlaams)\b", re.IGNORECASE)
+        SEIZOEN = re.compile(r"\bseizoen[\W_]*(\d{1,2})\b", re.IGNORECASE)
+        EP_RANGE = re.compile(r"\bE(\d{1,3})[\W_]*t[\W_]*/?[\W_]*m[\W_]*E?(\d{1,3})\b", re.IGNORECASE)
+        S_THEN_E = re.compile(r"\b(S\d{1,2})[\W_]+(E\d{1,3})", re.IGNORECASE)
+
+
+        def normalise(title, rules):
+            out = title
+            for regex, canonical, _ in rules:
+                new, n = regex.subn(lambda m: m.group(1) + canonical, out, count=1)
+                if n:
+                    out = new
+                    break
+            out = SEIZOEN.sub(lambda m: "S%02d" % int(m.group(1)), out)
+            # multi-season packs ("S01 S02 S03 E01tmE07") are ambiguous: leave their episode markers alone
+            if len(re.findall(r"\bS\d{1,2}\b", out, re.IGNORECASE)) <= 1:
+                out = EP_RANGE.sub(lambda m: "E%02d-E%02d" % (int(m.group(1)), int(m.group(2))), out)
+                out = S_THEN_E.sub(lambda m: m.group(1).upper() + m.group(2).upper(), out)
+            if DUTCH.search(out) and not HAS_LANG.search(out):
+                out += " DUTCH"
+            return out
+
+
+        ITEM = re.compile(r"<item\b.*?</item>", re.DOTALL)
+        TITLE = re.compile(r"(<title>)(.*?)(</title>)", re.DOTALL)
+
+
+        def rewrite_xml(body, rules):
+            changed = 0
+
+            def fix_item(m):
+                nonlocal changed
+
+                def fix_title(t):
+                    nonlocal changed
+                    raw = t.group(2)
+                    cdata = raw.strip().startswith("<![CDATA[")
+                    text = raw.strip()[9:-3] if cdata else html.unescape(raw)
+                    new = normalise(text, rules)
+                    if new == text:
+                        return t.group(0)
+                    changed += 1
+                    LOG.info("title: %r -> %r", text, new)
+                    return t.group(1) + ("<![CDATA[%s]]>" % new if cdata else html.escape(new, quote=False)) + t.group(3)
+
+                return TITLE.sub(fix_title, m.group(0), count=1)
+
+            return ITEM.sub(fix_item, body), changed
+
+
+        class Handler(BaseHTTPRequestHandler):
+            rules = []
+            protocol_version = "HTTP/1.1"
+
+            def log_message(self, fmt, *args):  # quiet access log
+                LOG.debug(fmt, *args)
+
+            def do_GET(self):
+                if self.path == "/healthz":
+                    return self._send(200, [("Content-Type", "text/plain")], b"ok")
+                req = urllib.request.Request(UPSTREAM + self.path)
+                for h in ("Host", "User-Agent", "Accept"):
+                    if self.headers.get(h):
+                        req.add_header(h, self.headers[h])
+                req.add_header("Accept-Encoding", "identity")
+                try:
+                    with urllib.request.urlopen(req, timeout=120) as resp:
+                        status, headers, body = resp.status, resp.getheaders(), resp.read()
+                except urllib.error.HTTPError as err:
+                    status, headers, body = err.code, err.headers.items(), err.read()
+                except Exception as err:  # upstream down: fail visibly, never pass partial data
+                    LOG.error("upstream error: %s", err)
+                    return self._send(502, [("Content-Type", "text/plain")], b"upstream error")
+                ctype = next((v for k, v in headers if k.lower() == "content-type"), "")
+                if status == 200 and ("xml" in ctype or body[:5] == b"<?xml") and b"<item" in body:
+                    try:
+                        text, n = rewrite_xml(body.decode("utf-8", "replace"), self.rules)
+                        body = text.encode("utf-8")
+                    except Exception as err:  # on any rewrite bug serve the original
+                        LOG.error("rewrite failed: %s", err)
+                skip = {"transfer-encoding", "content-length", "connection", "content-encoding"}
+                self._send(status, [(k, v) for k, v in headers if k.lower() not in skip], body)
+
+            def _send(self, status, headers, body):
+                self.send_response(status)
+                for k, v in headers:
+                    self.send_header(k, v)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+
+        if __name__ == "__main__":
+            logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+            Handler.rules = load_aliases()
+            LOG.info("%d alias rules, upstream %s", len(Handler.rules), UPSTREAM)
+            ThreadingHTTPServer(("0.0.0.0", LISTEN), Handler).serve_forever()
+      aliases.json: |
+        {
+          "Woezel & Pip Vriendjesclub": ["Woezel en Pip Vriendjesclub", "Woezel Pip Vriendjesclub", "Woezel en Pip"],
+          "Bumba": ["Bumba"],
+          "Camping Coppens": ["Camping Coppens"]
+        }
+
+storage:
+  - mountPath: /app
+    type: configMap
+    configMapName: spotnet-proxy
+    nameSuffix: app

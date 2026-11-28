@@ -63,6 +63,7 @@ their own config; the Vault copy is only for Homepage and must be updated by han
 | **music-intake** | Tags and files finished slskd downloads into the music library | job-state PVC + downloads/music NFS | SQLite |
 | **Prefetcharr** | Pre-fetches upcoming episodes based on viewing progress | — (no Service, outbound-only) | — |
 | **Spotweb** | Spotnet index (Dutch and Flemish Usenet releases), exposes a Newznab API | none (stateless) | native Postgres (own DB and role) |
+| **spotnet-proxy** | Newznab title normaliser between Prowlarr and Spotweb (test deployment) | none (stateless, script in a ConfigMap) | — |
 
 ## The shared Postgres — `service-db-cnpg` {#the-shared-postgres-service-db-cnpg}
 
@@ -124,3 +125,16 @@ free route to Dutch and Flemish content that general indexers rarely carry.
   - A dedicated API user `prowlarr`: Spotweb refuses the API for its built-in admin user, and a new user needs the
     anonymous/authenticated/trusted groups (2, 3 and 4) for search to work. Prowlarr uses it as a generic Newznab
     indexer (URL `http://spotweb-service.arr-stack.svc.cluster.local`, API path `/api`).
+
+## Spotnet proxy (title normaliser) {#spotnet-proxy}
+
+`tests/arr-stack/spotnet-proxy` (test deployment) is a small stateless Python proxy placed between Prowlarr and
+Spotweb. Spotnet release names don't follow scene naming, so Sonarr/Radarr can't match them. The proxy forwards every
+request to Spotweb unchanged and only rewrites the `<title>` of search results: alias to canonical series title,
+"Seizoen N" to `SNN`, "E01t/mE07" to `E01-E07`, and "NL Gesproken" to `DUTCH`. Downloads and everything else pass
+through, and if Spotweb is down the proxy answers 502 rather than partial data.
+
+- **No image to build.** The script runs on the stock `python` alpine image and lives in a ConfigMap together with
+  `aliases.json`.
+- **Adding a show.** When Sonarr cannot match a show's Spotnet releases, add it to `aliases.json` in the chart's
+  `values.yaml` (canonical title plus alias spellings).
