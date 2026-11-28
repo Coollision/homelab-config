@@ -1,0 +1,59 @@
+fullnameOverride: spotweb
+
+# Stateless: all state lives in the shared Postgres (database `spotweb`, own role). The Usenet server login is
+# entered once in Spotweb's web UI (Settings), where it is stored in that database: it is NOT in git or Vault.
+deployment:
+  image:
+    repository: erikdevries/spotweb
+    # The image only publishes `latest` and `sha-<commit>` tags (no semver); pin a sha so a rollout is deliberate.
+    tag: sha-feca761
+  ports:
+    ingress: 80
+
+resources:
+  # First guess (PHP + cron, no published figures): measure after the first full header sync, then tune.
+  requests:
+    cpu: 50m
+    memory: 192Mi
+  limits:
+    memory: 512Mi
+
+config:
+  TZ: Europe/Brussels
+  DB_ENGINE: pdo_pgsql
+  DB_HOST:
+    configMapKeyRef:
+      name: service-db
+      key: host
+  DB_PORT:
+    configMapKeyRef:
+      name: service-db
+      key: port
+  DB_NAME:
+    configMapKeyRef:
+      name: service-db
+      key: spotweb_database
+  DB_USER:
+    secretKeyRef:
+      name: services-db
+      key: spotweb_user
+  DB_PASS:
+    secretKeyRef:
+      name: services-db
+      key: spotweb_password
+  # Fetch new spots every 15 minutes (image default is every 5), gentler on Eweka and the shared database.
+  CRON_INTERVAL: "*/15 * * * *"
+
+# Internal only: the web UI ships with a default admin login that must be changed on first use.
+ingress_internal:
+  host: spotweb.<secret:kv/data/shared/domains~local>
+  port: ingress
+
+ingress_internal_secure:
+  host: spotweb.<secret:kv/data/shared/domains~domain>
+  port: ingress
+
+homepage:
+  group: Media
+  icon: mdi-newspaper-variant
+  description: Spotnet index (Dutch Usenet)
